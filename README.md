@@ -34,10 +34,10 @@ Homey polling is not fuse protection, load balancing or an outage fail-safe. Kee
 
 ## Prerequisites
 
-- A local Homey installation. The manifest declares SDK 3, local platform only and Homey firmware `>=10.0.0`; this is a declared minimum, not a tested compatibility matrix.
+- A local Homey installation. The manifest declares SDK 3, local platform only and Homey firmware `>=12.0.0`; this is a declared minimum, not a tested compatibility matrix.
 - Sigenergy reachable from Homey over the LAN, with Modbus TCP read access enabled in mySigen and permitted by firmware/network configuration.
 - Verified register addresses, widths, scaling, word order and address-offset convention for your hardware. The current Sigenergy map derives from an [unofficial V2.5 protocol transcription](https://github.com/krzychdre/modbus-sigenergy/blob/main/Sigenergy_Modbus_Protocol_V2.5.md).
-- Git, Node.js and npm on the development computer. CI runs calculation tests on Node.js 22. For the current Homey CLI, follow the [official setup requirements](https://apps.developer.homey.app/the-basics/getting-started), which currently specify Node.js 24+ and Docker.
+- Git, Node.js and npm on the development computer. Use Node.js 24 (the CI version) and npm. The project requires Node.js 24+ and pins Homey CLI 4.6.3 in its development dependencies. Follow the [official setup requirements](https://apps.developer.homey.app/the-basics/getting-started) for Docker and local execution.
 - Optional: a Tibber API token/subscription with consumption prices, or a Nibe SMO S40 with Modbus TCP/IP enabled and its own register export checked.
 
 ## Local installation with Homey SDK v3
@@ -47,21 +47,22 @@ This is a source-based development installation; successful installation on a ph
 ```sh
 git clone https://github.com/Marza/homey-sigenergy.git
 cd homey-sigenergy
-npm install
+npm ci
 npm test
-npm install --global homey
-homey login
-homey select
-homey app run
+npm run validate
+npm run build:homey
+npx --no-install homey login
+npx --no-install homey select
+npx --no-install homey app run
 ```
 
 Use a development computer on the same network as Homey and start Docker when required by the CLI. Select your intended Homey when prompted. `homey app run` provides development logging; stopping it removes that development instance. To install without keeping the terminal session open, use:
 
 ```sh
-homey app install
+npx --no-install homey app install
 ```
 
-See the [official Homey CLI reference](https://apps.developer.homey.app/the-basics/getting-started/homey-cli) for validation, runtime options and troubleshooting. The repository's `homey` development dependency is distinct from the globally installed CLI.
+See the [official Homey CLI reference](https://apps.developer.homey.app/the-basics/getting-started/homey-cli) for validation, runtime options and troubleshooting. The commands above use the repository's locked CLI; a global installation is unnecessary. Validation uses the `debug` level for local development, not App Store certification. The battery device class requires Homey 12.0.0 or newer; the declared minimum is not proof of physical compatibility. See [installation verification](docs/installation-verification.md) for observed results and the pending hardware checklist.
 
 Pair **Sigenergy plant**, then open the device's advanced settings and replace the example host before relying on readings. Pairing does not discover an inverter; it returns one fixed plant identity.
 
@@ -131,14 +132,16 @@ Developer entry points in [app.js](app.js) include `getPricePlan(currentSoc)`, `
 ## Development and testing
 
 ```sh
-npm install
+npm ci
 npm test
-node -e "const a=require('./app.json'); const p=require('./package.json'); if(a.version!==p.version) process.exit(1)"
+npm run check:versions
+npm run validate
+npm run build:homey
 ```
 
 `npm test` runs the built-in Node.js test runner. Tests cover charging plans, solar allocation, Tibber normalization/refresh, history, advisory backup logic, mocked Nibe/EVDC reads, telemetry validation, diagnostics, replay, demand charges and marginal costs. They do not validate physical registers, Homey installation, widget packaging, actual API contracts or safety behavior on hardware.
 
-[GitHub Actions](.github/workflows/ci.yml) runs dependency installation, tests and matching manifest/package version checks on pushes and pull requests using Node.js 22. It does not run Homey packaging or hardware tests.
+[GitHub Actions](.github/workflows/ci.yml) uses Node.js 24 and `npm ci` with the committed lockfile. It runs tests, matching manifest/package version checks, local-development Homey validation and a build including production dependencies on pushes and pull requests. Tests are limited to `test/*.test.js` so generated build copies are not run twice. `.homeyignore` excludes tests and development documentation from the app bundle. CI does not install on physical Homey or certify App Store readiness.
 
 | Path | Purpose |
 | --- | --- |
@@ -158,3 +161,4 @@ Keep Modbus operations read-only. Any future control work requires documented re
 ## License
 
 Released under the [MIT License](LICENSE). This is a community project; no vendor certification or affiliation is claimed.
+

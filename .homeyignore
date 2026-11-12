@@ -1,0 +1,6 @@
+test/
+docs/
+README.md
+CONTRIBUTING.md
+SECURITY.md
+package-lock.json
