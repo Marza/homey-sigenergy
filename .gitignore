@@ -1,0 +1,11 @@
+node_modules/
+.homeybuild/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+coverage/
+*.zip
+*.tgz
+.nyc_output/

@@ -1,0 +1,149 @@
+'use strict';
+const Homey = require('homey');
+const { diagnostics } = require('./lib/diagnostics');
+const { temperatureContext } = require('./lib/optimization/temperature');
+const { DEFAULT_OPERATION, resolveOperation } = require('./lib/operation-mode');
+const { DEFAULT_OPTIMIZER, simulate, effectiveBatteryConfig } = require('./lib/optimization/simulator');
+const { compareScenarios } = require('./lib/optimization/advanced-simulator');
+const { recommend } = require('./lib/optimization/recommendation');
+const { evaluateTariffScenarios } = require('./lib/optimization/tariff-optimizer');
+const { HistoryStore } = require('./lib/history');
+const { calculateDemandCharge, validateTariff } = require('./lib/demand-tariff');
+const { SmoS40Reader } = require('./lib/nibe/smo-s40');
+const { heatPumpPolicy } = require('./lib/backup/heat-pump-policy');
+const { DEFAULTS, planCharging } = require('./lib/charging/planner');
+const { fetchTibberPrices } = require('./lib/pricing/tibber');
+const { shouldRefreshPrices, hasTomorrowPrices } = require('./lib/pricing/refresh-policy');
+module.exports = class SigenergyApp extends Homey.App {
+  async onInit() {
+    // Read-only is enforced in code, not only through a UI toggle.
+    this.homey.settings.set('operationMode', resolveOperation(this.homey.settings.get('operationMode') || DEFAULT_OPERATION));
+    if (this.homey.settings.get('autoBatteryValues') === null) this.homey.settings.set('autoBatteryValues', true);
+    if (!this.homey.settings.get('optimizerConfig')) this.homey.settings.set('optimizerConfig', { ...DEFAULT_OPTIMIZER });
+    this.history = new HistoryStore(this.homey.settings);
+    this.recommendationTimer = this.homey.setInterval(() => this.refreshRecommendation(), 15 * 60 * 1000);
+    this.refreshRecommendation();
+    this.historyTimer = this.homey.setInterval(() => {
+      try { this.history.flush(); } catch (e) { this.error('History flush:', e.message); }
+    }, 60 * 1000);
+    if (!this.homey.settings.get('chargingConfig')) this.homey.settings.set('chargingConfig', JSON.parse(JSON.stringify(DEFAULTS)));
+    this.nibePolling = false;
+    this.nibeTimer = this.homey.setInterval(() => this.pollNibe().catch(e => this.error('Nibe:', e.message)), 30000);
+    this.pollNibe().catch(e => this.log('Nibe monitoring:', e.message));
+    this.priceRefreshing = false;
+    this.priceTimer = this.homey.setInterval(() => {
+      if (shouldRefreshPrices({ cache: this.homey.settings.get('priceCache'), lastAttemptAt: this.homey.settings.get('priceLastAttemptAt') })) {
+        this.refreshPrices().catch(e => this.error('Tibber refresh:', e.message));
+      }
+    }, 5 * 60 * 1000);
+    await this.refreshPrices().catch(e => this.log('Price cache not refreshed:', e.message));
+    this.log('Sigenergy v0.14 initialized; read-only, no Modbus writes');
+  }
+  async pollNibe() {
+    const host = this.homey.settings.get('nibeHost');
+    if (!host || this.nibePolling) return;
+    this.nibePolling = true;
+    const reader = new SmoS40Reader({
+      host, port: Number(this.homey.settings.get('nibePort')) || 502,
+      unitId: Number(this.homey.settings.get('nibeUnitId')) || 1,
+      addressOffset: Number(this.homey.settings.get('nibeAddressOffset')) || 0,
+    });
+    try {
+      const readings = await reader.snapshot();
+      const backup = this.homey.settings.get('backupStatus');
+      const policy = heatPumpPolicy({
+        gridMode: backup?.mode || 'unknown', batterySoc: backup?.soc,
+        // Do not infer tariff hours: Nibe's existing local schedule stays authoritative.
+        tariffActive: false,
+      });
+      this.homey.settings.set('nibeStatus', {
+        readings, policy, readAt: new Date().toISOString(), controlApplied: false,
+      });
+      this.homey.settings.set('nibeError', null);
+    } catch (e) {
+      this.homey.settings.set('nibeError', String(e.message));
+      throw e;
+    } finally { reader.close(); this.nibePolling = false; }
+  }
+  async refreshPrices() {
+    if (this.priceRefreshing) return;
+    const token = this.homey.settings.get('tibberToken');
+    if (!token) return;
+    this.priceRefreshing = true;
+    this.homey.settings.set('priceLastAttemptAt', new Date().toISOString());
+    try {
+      const result = await fetchTibberPrices({ token, homeId: this.homey.settings.get('tibberHomeId') || undefined });
+      this.homey.settings.set('priceCache', result);
+      this.homey.settings.set('priceTomorrowAvailable', hasTomorrowPrices(result));
+      this.homey.settings.set('priceError', null);
+    } catch (e) {
+      this.homey.settings.set('priceError', String(e.message));
+      throw e;
+    } finally { this.priceRefreshing = false; }
+  }
+  refreshRecommendation() {
+    try {
+      const config = effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'),
+        this.homey.settings.get('batteryTelemetry'),
+        { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false });
+      this.homey.settings.set('optimizationRecommendation',
+        recommend(this.homey.settings.get('historySlots') || [], config));
+      this.refreshDemandEstimate();
+      const tariff = this.homey.settings.get('demandTariff');
+      if (tariff) {
+        const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit' }).format(new Date());
+        this.homey.settings.set('tariffOptimization', evaluateTariffScenarios(
+          this.homey.settings.get('historySlots') || [], config, tariff, month));
+      } else {
+        this.homey.settings.set('tariffOptimization', { status: 'not-configured', advisoryOnly: true });
+      }
+    } catch (error) {
+      this.homey.settings.set('tariffOptimization', { status: 'error', advisoryOnly: true, reason: String(error.message) });
+      this.homey.settings.set('optimizationRecommendation',
+        { status: 'error', reason: String(error.message), advisoryOnly: true, updatedAt: new Date().toISOString() });
+    }
+  }
+  refreshDemandEstimate() {
+    try {
+      const tariff = this.homey.settings.get('demandTariff');
+      if (!tariff) { this.homey.settings.set('demandEstimate', { status: 'not-configured' }); return; }
+      const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit' }).format(new Date());
+      this.homey.settings.set('demandEstimate', this.getDemandCharge(month));
+    } catch (error) {
+      this.homey.settings.set('demandEstimate', { status: 'error', reason: String(error.message) });
+    }
+  }
+  getDiagnostics() { return diagnostics(this.homey.settings); }
+  getTemperatureContext() {
+    const nibe = this.homey.settings.get('nibeStatus');
+    const telemetry = this.homey.settings.get('batteryTelemetry');
+    const v = telemetry?.values || {};
+    return temperatureContext({
+      outdoorC: nibe && Date.now() - Date.parse(nibe.readAt) < 90000 ? nibe.readings?.outdoorC : undefined,
+      batteryC: v.batteryTemperatureC, chargeLimitKW: v.chargePowerLimitKW,
+      dischargeLimitKW: v.dischargePowerLimitKW, observedAt: telemetry?.readAt,
+    });
+  }
+  getOptimizationPreview() {
+    return simulate(this.homey.settings.get('historySlots') || [], effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'), { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false }));
+  }
+  getAdvancedOptimizationPreview(options = {}) {
+    return compareScenarios(this.homey.settings.get('historySlots') || [],
+      effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'),
+        { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false }), options);
+  }
+  getDemandCharge(month) {
+    const tariff = this.homey.settings.get('demandTariff');
+    if (!tariff) return { status: 'not-configured' };
+    validateTariff(tariff);
+    return calculateDemandCharge(this.homey.settings.get('historySlots') || [], tariff, month);
+  }
+  getPricePlan(currentSoc, now = new Date()) {
+    const cache = this.homey.settings.get('priceCache');
+    if (!cache?.prices?.length) return { status: 'no-prices' };
+    const prices = cache.prices.filter(p => Date.parse(p.end) > now.getTime());
+    if (!prices.length) return { status: 'expired-prices' };
+    return { status: 'simulation', fetchedAt: cache.fetchedAt, ...planCharging({ now, currentSoc, config: this.homey.settings.get('chargingConfig'), prices }) };
+  }
+  async onUninit() { if (this.recommendationTimer) this.homey.clearInterval(this.recommendationTimer); if (this.historyTimer) this.homey.clearInterval(this.historyTimer); if (this.history) this.history.flush(); if (this.priceTimer) this.homey.clearInterval(this.priceTimer); if (this.nibeTimer) this.homey.clearInterval(this.nibeTimer); }
+};

@@ -1,0 +1,6 @@
+{
+  "name": { "en": "Energy overview", "sv": "Energiöversikt" },
+  "description": { "en": "Read-only SigEnergy snapshot", "sv": "Läsbaserad SigEnergy-översikt" },
+  "height": 2,
+  "settings": []
+}

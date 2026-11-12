@@ -1,0 +1,243 @@
+{
+  "id": "com.local.sigenergy.optimizer",
+  "version": "0.17.0",
+  "sdk": 3,
+  "compatibility": ">=10.0.0",
+  "name": {
+    "en": "Sigenergy Local Monitor",
+    "sv": "Sigenergy lokal övervakning"
+  },
+  "description": {
+    "en": "Local read-only Sigenergy and optional Nibe SMO S40 monitoring, outage advisory, Tibber and EV planning",
+    "sv": "Lokal övervakning och inlärningsläge med optimeringssimulering utan skrivstyrning"
+  },
+  "category": "energy",
+  "permissions": [],
+  "platforms": [
+    "local"
+  ],
+  "capabilities": {
+    "measure_grid_power": {
+      "type": "number",
+      "title": {
+        "en": "Grid power",
+        "sv": "Näteffekt"
+      },
+      "units": {
+        "en": "W"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 0
+    },
+    "measure_ess_power": {
+      "type": "number",
+      "title": {
+        "en": "Battery power",
+        "sv": "Batterieffekt"
+      },
+      "units": {
+        "en": "W"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 0
+    },
+    "measure_pv_power": {
+      "type": "number",
+      "title": {
+        "en": "Solar power",
+        "sv": "Soleffekt"
+      },
+      "units": {
+        "en": "W"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 0
+    },
+    "measure_ess_capacity": {
+      "type": "number",
+      "title": {
+        "en": "Battery capacity",
+        "sv": "Batterikapacitet"
+      },
+      "units": {
+        "en": "kWh"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 1
+    },
+    "measure_ev_soc": {
+      "type": "number",
+      "title": {
+        "en": "EV state of charge",
+        "sv": "Bilens laddniva"
+      },
+      "units": {
+        "en": "%"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 0
+    },
+    "measure_ev_power": {
+      "type": "number",
+      "title": {
+        "en": "EV charging power",
+        "sv": "Bilens laddeffekt"
+      },
+      "units": {
+        "en": "W"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 0
+    }
+  },
+  "drivers": [
+    {
+      "id": "sigenergy",
+      "name": {
+        "en": "Sigenergy plant",
+        "sv": "Sigenergy-anläggning"
+      },
+      "class": "battery",
+      "capabilities": [
+        "measure_battery",
+        "measure_grid_power",
+        "measure_ess_power",
+        "measure_pv_power",
+        "measure_ess_capacity",
+        "measure_ev_soc",
+        "measure_ev_power"
+      ],
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices"
+        }
+      ],
+      "settings": [
+        {
+          "id": "host",
+          "type": "text",
+          "label": {
+            "en": "Modbus host/IP"
+          },
+          "value": "192.168.1.100"
+        },
+        {
+          "id": "port",
+          "type": "number",
+          "label": {
+            "en": "Modbus port"
+          },
+          "value": 502
+        },
+        {
+          "id": "unitId",
+          "type": "number",
+          "label": {
+            "en": "Plant unit ID"
+          },
+          "value": 247
+        },
+        {
+          "id": "addressOffset",
+          "type": "number",
+          "label": {
+            "en": "Address offset (0 or -1)"
+          },
+          "value": 0
+        },
+        {
+          "id": "pollSeconds",
+          "type": "number",
+          "label": {
+            "en": "Poll interval seconds"
+          },
+          "value": 10
+        },
+        {
+          "id": "evdcEnabled",
+          "type": "checkbox",
+          "label": {
+            "en": "Experimental EVDC read (verify firmware/register map first)"
+          },
+          "value": false
+        },
+        {
+          "id": "evdcPowerAddress",
+          "type": "number",
+          "label": {
+            "en": "EVDC power register"
+          },
+          "value": 31502
+        },
+        {
+          "id": "evdcSocAddress",
+          "type": "number",
+          "label": {
+            "en": "EVDC SoC register"
+          },
+          "value": 31504
+        },
+        {
+          "id": "evdcPowerScale",
+          "type": "number",
+          "label": {
+            "en": "EVDC power divisor"
+          },
+          "value": 1
+        },
+        {
+          "id": "evdcSocScale",
+          "type": "number",
+          "label": {
+            "en": "EVDC SoC divisor"
+          },
+          "value": 1
+        }
+      ]
+    }
+  ],
+  "flow": {
+    "triggers": [
+      {
+        "id": "backup_mode_changed",
+        "title": {
+          "en": "Backup mode changed",
+          "sv": "Reservkraftsläge ändrades"
+        },
+        "tokens": [
+          {
+            "name": "mode",
+            "type": "string",
+            "title": {
+              "en": "Grid mode",
+              "sv": "Nätläge"
+            }
+          },
+          {
+            "name": "ev_stop_requested",
+            "type": "boolean",
+            "title": {
+              "en": "EV stop requested",
+              "sv": "Begärt laddstopp"
+            }
+          },
+          {
+            "name": "nibe_mode",
+            "type": "string",
+            "title": {
+              "en": "Nibe mode requested",
+              "sv": "Begärt Nibe-läge"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
