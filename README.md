@@ -1,258 +1,160 @@
-# v0.12 – diagnostik och temperaturunderlag
+# Sigenergy Local Monitor for Homey
 
-- Ny diagnostikflik i Homeys appinställningar för SigEnergy, batteritelemetri, Nibe, Tibber och EVDC. Visar fel, saknade och inaktuella data.
-- Temperaturunderlag: Nibe BT1 och aktuella BMS-effektgränser; ingen påhittad temperaturkurva eller automatisk styrning.
-- Batteritemperatur kräver verifierat register och visas därför inte som uppmätt innan det finns.
-- Inlärningsläge förblir strikt läsbaserat; inga Modbus-skrivningar.
-- Kräver verifiering på riktig Homey och registerprofil innan operativ användning.
+Experimental Homey SDK v3 app for local, read-only Sigenergy monitoring, optional Nibe SMO S40 temperature readings, and advisory energy planning.
 
-# Sigenergy Local Monitor — v0.1.0 (read-only)
+**Version 0.17.0 · Learning mode only · MIT licensed**
 
-For Homey Pro 2023 and SigenStor EC 17.0 TP. This is an initial SDK v3 app scaffold, not a production-certified controller. **No Modbus writes.**
+The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. It has **not been verified on physical Homey, Sigenergy, EVDC or Nibe hardware**. Register mappings, installation and runtime compatibility still require validation. Unit tests do not establish hardware compatibility or safe operation.
 
-## Install
+## Features and implementation status
 
-1. Install Node.js and Homey CLI on your development Mac (`npm install -g homey`).
-2. `npm install` in this folder.
-3. Log in with `homey login`, then `homey app run` to test on Homey Pro.
-4. Pair the Sigenergy plant device, then change advanced settings to the actual inverter LAN IP and Modbus port 502. Default unit ID is 247.
-5. Confirm grid power sign, PV power, SoC and capacity against mySigen.
+| Area | Implemented in source | Status and limits |
+| --- | --- | --- |
+| Sigenergy monitoring | Battery SoC and capacity, grid/PV/battery power, grid mode; Homey device capabilities | Local Modbus TCP reads; one plant per Homey through a fixed pairing identity |
+| Battery telemetry | Optional power limits, available energy, nominal power, SoC cutoffs and SoH | Probed about every five minutes; individual failures do not invalidate the main snapshot; registers and scaling unverified |
+| EVDC monitoring | Optional charging power and vehicle SoC reads | Experimental and disabled by default; no charger control |
+| Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Optional local reads every 30 seconds; no separate Homey device and no heat-pump control |
+| Backup advisory | Grid/island/unknown state and a “Backup mode changed” Flow trigger | EV-stop and Nibe-mode tokens are requests, never confirmation of an action |
+| Local history | Quarter-hour aggregates, daily summaries, backup-mode events and JSON export | Stored in Homey app settings, not a dedicated database |
+| Tibber prices and EV planning | Cached consumption prices and a price-based charging planner | Internet needed for refresh; planning only; no automatic execution |
+| Peak shaving | Historical replay, configurable caps/reserves, stored advisory recommendations | Illustrative scenarios, not a forecast or guaranteed power limit |
+| Demand charges | Configurable hourly peak selection and historical tariff scenarios | Provisional; no verified Telge Nät tariff supplied |
+| Dashboard | Energy overview widget candidate with history, recommendations and demand estimates | Packaging and Dashboard runtime unverified; history is not live telemetry |
+| Marginal energy costs | Separate import/export, tax, grid-fee and battery-wear calculations | Standalone tested module; not connected to production prices, Dashboard or runtime scenario ranking |
 
-## Important
+The app settings page is primarily Swedish. It includes **Översikt** (overview), **Elpriser** (prices), **Historik** (history), **Optimering** (optimization), **Diagnostik** (diagnostics) and **Inställningar** (settings).
 
-- Enable Modbus TCP in mySigen. LAN connection and firmware must permit read access.
-- Register addresses are based on an unofficial Markdown transcription of Sigenergy Modbus V2.5. Address-offset conventions vary: default 0; try -1 only if confirmed necessary.
-- Grid power positive = import, negative = export. ESS positive = charge, negative = discharge.
-- EVDC 25kW Modbus monitoring/control is **not implemented**. Its protocol and safe local control path must be validated first.
-- 3x25A is about 17.3kW total at 400V for balanced three-phase loading. Protection must use phase currents and native load balancing, not this app.
-- Next milestones: tariff engine, rolling demand-window peak tracking, EV charging adapter, optimizer dry-run, verified failsafe, then controlled writes.
-- App pairing uses a fixed device identity. This scaffold supports one plant per Homey.
+## Read-only safety boundary
 
-Source: https://github.com/krzychdre/modbus-sigenergy/blob/main/Sigenergy_Modbus_Protocol_V2.5.md
+There are no Modbus write calls or automatic battery, EVDC or Nibe control adapters in this build. Operation mode is forced to learning mode with `allowHardwareWrites: false`; changing settings cannot enable hardware writes.
 
-## v0.2: Local EV charge schedule (planning only)
+Backup logic interprets input register 30009 as 0 = grid, 1/2 = island, anything else = unknown. Grid restoration requires five minutes of successful grid readings, including after app startup. Communication failure returns the advisory state to unknown. Island or unknown state requests EV stop and a restricted Nibe mode; below 25% battery SoC it requests critical mode. **No stop, auxiliary-heat block or restart is executed.** Verify the register mapping against your firmware.
 
-Open **App settings** to configure a minimum vehicle SoC (default **30%**) due by
-**07:00 Europe/Stockholm** and optional individual day-of-week departure targets.
-The default vehicle model assumes **75 kWh usable** and **92% charging efficiency**;
-these are adjustable estimates, not verified Tesla specifications.
+Homey polling is not fuse protection, load balancing or an outage fail-safe. Keep native inverter/charger protections and Nibe frost protection and existing local schedules active. Do not switch heat-pump mains with a smart relay as a substitute for a validated control interface. Homey and networking must remain powered for monitoring during an outage.
 
-`lib/charging/planner.js` exports `planCharging({ now, currentSoc, config, prices, maxPowerKW })`.
-Each price is `{ start: ISO8601, end: ISO8601, price: number }` in currency/kWh.
-The planner selects cheaper intervals before each SoC deadline and returns a
-read-only plan, estimated energy cost, and any unmet targets. Example:
+## Prerequisites
 
-```js
-const { DEFAULTS, planCharging } = require('./lib/charging/planner');
-const result = planCharging({
-  now: new Date(), currentSoc: 25, config: DEFAULTS,
-  prices: [ /* fetched quarter-hour Tibber prices */ ],
-});
+- A local Homey installation. The manifest declares SDK 3, local platform only and Homey firmware `>=10.0.0`; this is a declared minimum, not a tested compatibility matrix.
+- Sigenergy reachable from Homey over the LAN, with Modbus TCP read access enabled in mySigen and permitted by firmware/network configuration.
+- Verified register addresses, widths, scaling, word order and address-offset convention for your hardware. The current Sigenergy map derives from an [unofficial V2.5 protocol transcription](https://github.com/krzychdre/modbus-sigenergy/blob/main/Sigenergy_Modbus_Protocol_V2.5.md).
+- Git, Node.js and npm on the development computer. CI runs calculation tests on Node.js 22. For the current Homey CLI, follow the [official setup requirements](https://apps.developer.homey.app/the-basics/getting-started), which currently specify Node.js 24+ and Docker.
+- Optional: a Tibber API token/subscription with consumption prices, or a Nibe SMO S40 with Modbus TCP/IP enabled and its own register export checked.
+
+## Local installation with Homey SDK v3
+
+This is a source-based development installation; successful installation on a physical Homey has not yet been established.
+
+```sh
+git clone https://github.com/Marza/homey-sigenergy.git
+cd homey-sigenergy
+npm install
+npm test
+npm install --global homey
+homey login
+homey select
+homey app run
 ```
 
-**Important limitations:** This version does NOT retrieve Tibber prices, read
-EVDC SoC, command EVDC, account for Telge Nat demand tariffs, model household
-load/solar/storage, or execute the plan. The scheduler is a preliminary
-cost-minimizing charging planner, not a complete EMS. It assumes the car remains
-connected and charging power is fixed. Price gaps and insufficient power are
-reported as unreachable goals. Real-time planning must use current EVDC SoC,
-verified available charger power, grid/phase limits and price coverage. Homey
-must not replace hardware-level fuse protection or charger load balancing.
+Use a development computer on the same network as Homey and start Docker when required by the CLI. Select your intended Homey when prompted. `homey app run` provides development logging; stopping it removes that development instance. To install without keeping the terminal session open, use:
 
-Run `npm test` to verify the planning logic. All Modbus operations remain read-only.
-
-## v0.3: Solar allocation simulator (read-only)
-
-`lib/charging/dispatch.js` adds a discrete, power-dependent solar surplus
-allocator for the EV, home battery and grid export. It supports EV connection,
-EV solar SoC cap, full home battery, configurable minimum/maximum charging power,
-export opportunity value and an optional external power headroom constraint.
-It compares **marginal value per stored kWh** rather than blindly charging the
-home battery first. Run `npm test` to validate.
-
-Example:
-
-```js
-const { allocateSolar } = require('./lib/charging/dispatch');
-const decision = allocateSolar({
-  surplusKW: 6, evConnected: true, evSoc: 45, homeSoc: 80,
-  evValuePerKWh: 1.5, homeValuePerKWh: 1.1, exportPricePerKWh: 0.4,
-});
+```sh
+homey app install
 ```
 
-**Not yet integrated into the Homey runtime:** this is an independently tested
-planning module. It does not read EVDC registers, fetch Tibber prices, calculate
-Telge Nat tariffs, learn efficiency curves, or issue Modbus writes. Efficiency
-curves are *illustrative placeholders*, NOT measured SigenStor or EVDC values.
-`gridHeadroomKW` is a planning input, NOT a fuse-protection mechanism; per-phase
-protection must remain with certified local hardware. The EV's minimum 30% by
-07:00 and optional weekday departure targets remain in the separate v0.2
-charging planner. Full combined time-horizon optimization is future work.
+See the [official Homey CLI reference](https://apps.developer.homey.app/the-basics/getting-started/homey-cli) for validation, runtime options and troubleshooting. The repository's `homey` development dependency is distinct from the globally installed CLI.
 
-## v0.4 — Tibber price cache and experimental EVDC monitoring
+Pair **Sigenergy plant**, then open the device's advanced settings and replace the example host before relying on readings. Pairing does not discover an inverter; it returns one fixed plant identity.
 
-- Tibber GraphQL prices fetched on startup and every 30 minutes (when a token is configured), stored in Homey settings. Internet is required for refresh, not for using cached slots. **No guarantee of 48-hour coverage**; depends on publication time and provider.
-- Add Tibber API token in App settings; if multiple Tibber homes, specify the exact home ID. Token stays in Homey settings and is sent only to Tibber. Price cache excludes token.
-- Prices are read-only; app does **not** automatically execute plans. `this.homey.app.getPricePlan(currentSoc)` computes a dry-run plan from cached prices. No tariff/solar/battery dispatch coupling yet.
-- EVDC probing is **disabled by default**. Enable it in the device settings only after checking the exact Modbus register layout for your firmware. Defaults are experimental 31502 (2 registers, unsigned W), 31504 (1 register, percent); wrong widths/scaling can yield invalid data. EVDC errors are logged separately and do not disable the main plant monitoring.
-- No Modbus writes, no active EV control, no guarantee of hardware fuse protection. Hardware-level load balancing remains mandatory for 3x25A.
-- Price cache can become stale; check `priceCache.fetchedAt`, and never plan against missing future intervals.
+## Configuration
 
+### Sigenergy device settings
 
-## v0.5 – Backup mode (read-only / advisory)
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `host` | `192.168.1.100` | Example only; replace with the inverter LAN address |
+| `port` | `502` | Modbus TCP port |
+| `unitId` | `247` | Plant unit ID |
+| `addressOffset` | `0` | Register address adjustment; use -1 only if verified necessary |
+| `pollSeconds` | `10` | Main polling interval, clamped to at least five seconds |
+| `evdcEnabled` | `false` | Enable experimental EVDC reads only after register verification |
 
-- Modbus input register **30009** (one 16-bit register) is polled with the existing plant snapshot. 0 = grid, 1/2 = island, all other values = unknown. Verify mapping against installed firmware.
-- Island mode immediately suspends economic decisions and requests EV stop; SoC <25% requests critical Nibe mode. Requests are **not hardware commands**.
-- Returning to grid requires five minutes of continuous successful readings. Modbus failures result in `unknown`, not a false grid-connected state.
-- Homey Flow trigger `Backup mode changed` exposes `mode`, `ev_stop_requested`, `nibe_mode` tokens. These are advisory: no EVDC write registers or Nibe controls are wired.
-- Status is persisted in Homey settings as `backupStatus`, with `controlApplied:false`. This is not proof that the car has stopped.
-- Nibe F2120-16 is an outdoor unit; identify its VVM/SMO indoor controller before choosing a safe local heat-pump interface. myUplink requires internet and is not reliable as an outage safety mechanism. Do not cut mains to the heat pump with a smart relay.
-- Homey and networking equipment must remain powered in island mode. EVDC must have an independently validated local fail-safe; Homey polling is not a safety-rated protective mechanism.
-- On app restart, status begins as `unknown` until successful reads and restoration delay; automatic EV restart is not implemented.
+Compare SoC, capacity, grid power and PV power against mySigen. The code assumes **positive grid power = import**, negative = export; **positive battery power = charging**, negative = discharging.
 
-## v0.6 — Optional local Nibe SMO S40 read-only monitoring
+EVDC defaults are power register `31502` (two unsigned 16-bit words) and SoC register `31504` (one word), with divisors `evdcPowerScale = 1` and `evdcSocScale = 1`. Addresses and divisors are device settings; widths are fixed in the reader. Do not enable probing until all of these match your firmware. EVDC errors are recorded separately from plant monitoring.
 
-SMO S40 is the controller for the F2120-16. Enable Modbus TCP/IP on SMO S40, then configure the Homey **app settings** key `nibeHost` with the controller's local IP. Optional settings keys: `nibePort` (default 502), `nibeUnitId` (default 1), `nibeAddressOffset` (default 0). These keys can be entered through Homey developer settings; a dedicated Nibe settings UI is not yet provided. Polling occurs every 30 seconds only when `nibeHost` is set.
+### App settings
 
-Reads input register IDs 1 (outdoor BT1), 8 (hot water BT7), 39 (supply BT25), 88 (return BT71), each assumed signed 16-bit /10. **Verify these addresses, scale, Modbus address offset and presence against the register export from your own SMO S40 before enabling.** Missing sensors can cause snapshot failure. Values are stored as `nibeStatus`, failures as `nibeError` in Homey settings. This does not create a separate Nibe device or capabilities.
+- **Nibe:** Enter host, port (502), unit ID (1) and address offset (0). An empty host disables polling. The profile assumes signed 16-bit input registers divided by 10: 1 = BT1/outdoor, 8 = BT7/hot water, 39 = BT25/supply, 88 = BT71/return. Verify all four against your SMO S40 register export; a missing sensor can fail the snapshot. The runtime does not calculate Nibe tariff windows or replace its local schedule.
+- **EV schedule:** Default minimum 30% by 07:00 Europe/Stockholm, with optional weekday departure targets. The model assumes 75 kWh usable capacity, 92% efficiency and 10 kW maximum charging power. These are estimates, not verified vehicle specifications. The UI exposes capacity, power and targets; efficiency is held in `chargingConfig`.
+- **Peak-shaving simulation:** Configure the cap range/step, battery capacity, initial SoC, charge/discharge limits, reserves, efficiency and wear estimate. Defaults are illustrative. Automatic battery values use telemetry no older than ten minutes, otherwise manual values apply; observed power limits can only lower simulated power. Current BMS limits are not historical or future capability guarantees. No measured battery-temperature register is implemented.
+- **Tariff:** Enter confirmed contract values as described below. Saving a form does not verify the tariff.
 
-`heat-pump-policy.js` computes *advisory* auxiliary-heat block reasons: demand tariff, grid limit, island/unknown. It never writes Nibe registers. `pollNibe` does not calculate tariff windows: your existing local Nibe tariff schedule stays in force. Island-mode actions remain unverified requests, not actual EVDC stop or heat pump control. Nibe's built-in frost protection and heater protection must not be bypassed. Never disable your existing schedule on the strength of this release.
+### Tibber prices and pricing caveats
 
-This version adds NO Modbus writes and NO automatic load shedding. The outage detection uses the previously configured Sigenergy grid-mode register; verify its mapping on your firmware. Run `npm test` to validate the modules.
+Save the token and, for multiple homes, the exact Tibber Home ID in app settings. The token is stored in Homey settings and used in requests to `https://api.tibber.com/v1-beta/gql`. Price-cache objects and history exports exclude it. Do not share tokens or settings containing credentials.
 
+The runtime fetches on startup when configured and checks refresh eligibility every five minutes. Refresh is normally hourly; after 13:00 Europe/Stockholm it retries at 15-minute intervals while tomorrow's prices are missing. Failed requests keep the previous cache. The settings page's save message still mentions 30 minutes; the runtime policy above is authoritative. Restarting the app triggers a configured fetch.
 
-## v0.7: lokal historik (första implementation)
+The GraphQL query reads **consumption** `priceInfo.today/tomorrow.total`. Normalization accepts hourly or quarter-hour intervals inferred from adjacent start times. Tomorrow's availability and a continuous 48-hour horizon are not guaranteed. Inspect `priceCache.fetchedAt`, interval coverage and `priceError`; cached prices can remain usable offline only for the intervals they cover.
 
-- Historik lagras i Homeys beständiga appinställningar, inte i en verifierad databas.
-- 15-minutersaggregering av Sigenergy-effekt, SoC och valfri EVDC-data; 30 dagars retention.
-- Dagsaggregat upp till 730 dagar, beräknade från 15-minutersposter.
-- Ödriftslägesbyten loggas som händelser, maximalt 500 poster.
-- Exportera JSON via appens inställningssida; spara filen utanför Homey.
-- Energiberäkningar är approximativa trapezoidintegraler, inte debiteringsgrundande mätvärden.
-- Effektavgift enligt Telge Nät beräknas ännu inte: tariffmodell och mätperiod måste verifieras.
-- Ingen automatisk återimport och ingen säkerhetskopia utan användarens export.
-- Homeys settingslagring är inte lämplig för en stor tidsseriedatabas; faktisk prestanda och lagringsutrymme måste mätas på hårdvaran.
-- Ingen Modbus-skrivning har lagts till. Nibes befintliga effektavgiftsschema lämnas orört.
+The charging planner needs an explicitly supplied current vehicle SoC and assumes fixed available power and a connected vehicle. Missing coverage or insufficient energy can leave targets unmet. It does not enforce per-phase limits, couple household/solar/storage dispatch, or execute a plan. Its cost estimate uses the supplied consumption prices, not a verified all-in bill.
 
+The standalone [cost model](lib/pricing/cost-model.js) treats consumption input as VAT-inclusive, adds configurable tax and variable import-grid charges with VAT once, and takes a **separate signed export payout** plus export benefit/fee. Fixed subscription and demand charges are separate from marginal kWh prices. The app does not fetch actual Tibber production-contract payouts or wire this model into runtime ranking. Tax, fee and VAT inputs must come from the applicable contract; no current rates are supplied.
 
-## v0.8 – preliminär effektavgiftsberäkning
+## Telge Nät demand-tariff assumptions
 
-`lib/demand-tariff.js` beräknar månadens högsta 15-minutersmedeleffekter inom ett
-konfigurerat tidsfönster i tidszonen Europe/Stockholm. Antal toppar, krav på olika
-dagar, veckodagar och kr/kW anges i Homeys inställningar. **Inga Telge Nät-värden
-är förifyllda eller verifierade.** Inga styrkommandon skickas.
+This is a configurable estimator, **not a verified implementation of Telge Nät's current contract**. No tariff object or rate is installed by default. The form initially shows 07:00–19:00, weekdays, three peaks and distinct days; tests use five-peak examples and the widget has a five-peak label. None of these establishes your actual tariff.
 
-Beräkningen nås programmatiskt via `homey.app.getDemandCharge('2026-11')`.
-Status `insufficient-data` betyder att antalet godkända intervall inte räcker.
-Även status `provisional` är bara en uppskattning; full månadstäckning kontrolleras
-inte ännu. Befintliga v0.7-intervall saknar `coverageMs` och utesluts avsiktligt.
-`coverageMs` kräver minst 14 minuters sammanhängande observationer inom samma
-15-minutersperiod. Enheten för `gridW` måste kontrolleras så att positivt värde
-verkligen betyder import. För att undvika felaktiga energiberäkningar integreras
-inte längre mätavstånd över kvartalsgränser; denna enkla integration kan därför
-underskatta energi, och måste förbättras före fakturajämförelse.
+Configure `start`, `end`, `weekdays` (0 = Sunday), `peakCount`, `distinctDays` and `rateSekPerKw` from your confirmed price list. The calculation library also supports optional `months` (1–12); the settings form does not expose season selection and saving it does not preserve that field.
 
-Detta är en beräkningsmodul och inställningsformulär, inte en färdig graf eller
-fakturaverifierad tariffmotor.
+The estimator:
 
-## v0.9 – gränssnitt och fördröjd Tibber-publicering
+- Uses Europe/Stockholm calendar dates and full-hour windows within one day.
+- Requires four contiguous, aligned quarter-hour energy records per eligible hour, each with at least 14 minutes of coverage.
+- Sums signed `gridWh` for the hour, clamps net export to zero, selects the highest configured number of hourly values (optionally from distinct days), and multiplies their mean kW by the configured SEK/kW rate.
+- Returns `insufficient-data` until enough eligible peaks exist; otherwise the estimate remains `provisional`.
 
-Inställningssidan har nu flikarna **Översikt**, **Elpriser**, **Historik** och **Inställningar**.
-Översikten visar senast sparade 15-minutersmedelvärden (inte live-data), Nibes BT1,
-reservkraftsstatus och ett enkelt diagram. Saknade data visas som streck, inte som noll.
-Prisvyn visar cache-status och om morgondagens priser har publicerats.
+Holiday exclusions are not implemented, full-month completeness is not guaranteed, and older records without coverage cannot qualify. Thirty-day detailed retention can omit part of a 31-day month. Verify seasonal rules, import/export treatment, peak selection, VAT basis and rate against your contract. Displayed savings are historical scenarios, not billing-accurate or future savings.
 
-Tibber-kontrollen sker var 15:e minut efter 13:00 svensk tid om morgondagens
-priser saknas, annars högst en gång i timmen. Misslyckad hämtning behåller
-senast lyckade cache. Publiceringstidpunkten är inte garanterad.
+## History, diagnostics and simulations
 
-Gränssnittet ligger i Homeys **appinställningar**, inte i en Homey Dashboard-widget.
-All styrning är fortfarande read-only/simulering. Tariffparametrar är inte
-verifierade mot Telge Nät. Vyn är inte testad på fysisk Homey Pro.
+History is retained in Homey settings for up to 30 days of quarter-hour records, 730 daily summaries and 500 events. Power integration requires adjacent observations no more than 60 seconds apart within the same slot; gaps are not filled. Daily summaries use UTC dates, whereas tariffs use Stockholm time.
 
+Export JSON manually from app settings. Export excludes the Tibber token but still contains private usage patterns; keep it private or sanitize it before sharing. There is no guaranteed backup or reimport workflow.
 
-## v0.10 – inlärningsläge och gränssnitt
-- Inlärningsläge är **alltid aktivt** i denna version. Ingen kodväg för Modbus-skrivning finns; UI kan inte aktivera styrning.
-- Inställningssidan har fliken **Optimering**, ett konservativt peak shaving-scenario och inställningar för batteri, effekt och reserv.
-- Nibe TCP-värd, port, Unit ID och registeroffset går att ställa in i UI. SigEnergy-IP, port och EVDC-register konfigureras i enhetens inställningar.
-- Simulatorn uppskattar underliggande last med `gridWh + essWh` (positiv ESS = laddning) och antar **ingen återladdning**. Den kan därför inte påstå sig finna ett ekonomiskt optimum eller lova att en effekttopp undviks. Historisk batteridrift och okända laster begränsar precisionen.
-- Befintligt Nibe-tariffs schema förblir oförändrat. EVDC-stopp och Nibe-blockering vid ödrift är enbart begärda åtgärder i logiken, **inte utförda**.
-- Lagring sker i Homey settings, inte i en extern databas. Gör manuella exporter; ingen garanterad backup eller återimport ännu.
-- Tariffvärden måste verifieras med Telge Nät.
+Diagnostics show source errors and freshness. The overview and widget use saved history rather than live device capabilities. The widget refreshes every 30 seconds and flags history older than 30 minutes; recommendations older than 35 minutes are hidden. Its packaging and behavior still need physical Homey verification.
 
-## v0.11 – batteritelemetri och 0,1 kW
+The settings-page simulator assumes no recharge. Advanced replay accepts explicitly supplied unused solar surplus and timestamp-matched prices; it does not infer surplus from PV production. Runtime recommendations refresh every 15 minutes. Tariff scenarios compare the same hourly model for baseline and replay; without complete matching energy-price inputs, runtime results concern demand charges only, not total economic savings.
 
-- Simulatorns standardsteg för effekttak är 0,1 kW; inställningsformuläret accepterar 0,1 kW.
-- Kapacitet och SoC hämtas från befintlig plant-snapshot. Valfria Modbus-register för effektgränser, SoC-cutoffs, SoH och tillgänglig energi avläses var femte minut. Fel i valfria register hindrar inte basavläsningen.
-- Inställningen **Använd aktuella batterivärden** väljer automatiska värden med högst tio minuters ålder, annars manuella parametrar. Batteriets effektgränser kan endast sänka simulerad maximal effekt.
-- **Varning:** Registerstorlek, skalning och firmwarestöd för valfria register är ännu inte verifierade mot fysisk utrustning. Resultaten är endast rådgivande. Inga Modbus-skrivningar finns.
-- Optimeringen är fortfarande en förenklad simulering utan återladdning, temperaturprognos eller verifierad Telge Nät-tariff.
+Developer entry points in [app.js](app.js) include `getPricePlan(currentSoc)`, `getOptimizationPreview()`, `getAdvancedOptimizationPreview(options)` and `getDemandCharge(month)`. These are app methods, not published HTTP endpoints. Solar allocation in [lib/charging/dispatch.js](lib/charging/dispatch.js) is a separate simulator with illustrative efficiency curves and is not wired into runtime dispatch.
 
-## v0.13 – Dashboard widget and advanced advisory replay
-
-- `widgets/energy-overview/` contains a **Homey Dashboard widget candidate** (2x height) showing grid, solar, SoC and Nibe outdoor temperature from read-only local settings. Widget packaging and Homey Dashboard runtime compatibility **have not been verified on a Homey**. It uses the last completed 15-minute history slot, **not live telemetry**, and marks stale data.
-- `lib/optimization/advanced-simulator.js` adds an isolated **advisory-only** counterfactual replay with explicit optional surplus charging, max charge/discharge power, SoC floor, battery wear estimate, and optional timestamp-matched electricity prices. Exposed through `app.getAdvancedOptimizationPreview(options)` for future UI/API wiring. The settings page still runs the older conservative no-recharge simulator; the advanced model is **not yet connected to the UI**.
-- No PV surplus is inferred from production history: measured production is not equivalent to *unused* PV energy. No automatic battery recharging or market arbitrage is invented. Prices are not silently replaced with zero if missing. No official Telge Nat tariff has been validated.
-- All modes remain read-only. No Modbus writes or autonomous dispatch.
-- Run `npm test` to execute the Node test suite. Homey installation and physical hardware tests are still required.
-
-## v0.14 – Dashboard-rekommendationer
-Widgeten visar ett preliminärt effekttak (0,1 kW) och en batterireserv från den läsbaserade 15-minuterssimulatorn. Resultatet sparas i Homey settings var 15:e minut, och visas inte om det är äldre än 35 minuter. Vid otillräckliga data visas inga rekommenderade siffror. Detta är **inte** en verifierad optimering av Telge Näts fem högsta timtoppar; tariffens exakta regler återstår att verifiera. Inga styrkommandon skickas.
-
-
-## v0.15 – Five-peak hourly tariff estimate
-
-Dashboard shows provisional monthly five-peak hourly mean and estimated fee when a manually verified tariff is configured. Requires four complete quarter-hour energy integrals per clock hour; supports distinct-day selection and optional months. No savings estimate until a matching counterfactual hourly model is available. No control writes. Tariff holiday exclusions, official pricing and full-month coverage remain unverified.
-
-
-## v0.16 — femtoppsoptimering (preliminär)
-
-- Samma timbaserade femtoppsmodell används för historisk baslinje och kontrafaktisk simulering.
-- Dashboard visar simulerad effektavgift och möjlig besparing på effektdelen när fem kompletta timmar finns.
-- Rangordnar genomförbara scenarier efter möjlig effektbesparing; full ekonomisk rangordning kräver kompletta matchade elpriser och energibaslinje.
-- Ingen automatisk styrning. Resultat är preliminära och inte fakturakorrekt eller framtidsprognos.
-- Modellen behöver fortfarande verifierade tariffregler, inklusive olika dagar och helgdagar, och faktisk driftdata.
-
-
-## v0.17: marginalkostnadsmodell (endast beräkning)
-
-`lib/pricing/cost-model.js` ger separata marginalpriser för Tibber-inköp
-(inklusive moms) och Tibber-försäljning (ersättning), med konfigurerbar
-energiskatt, rörlig nätöverföring, nätnytta och eventuell exportavgift.
-Modellen kan beräkna kostnad/intäkt från signerade nätenergivärden och
-lägga till femtoppsavgift och batterislitage utan dubbelräkning.
-
-**Integrationsstatus:** Kostnadsmodellen är en separat, testad modul. Den
-är ännu INTE ansluten till Tibbers faktiska produktionspriser, Homey
-Dashboard eller scenariorankningen. Tibbers befintliga GraphQL-fråga
-hämtar enbart inköpspriser. Det finns ingen verifierad API-åtkomst till
-försäljningsavtalets faktiska ersättning. Tills båda prisserierna är
-verifierade ska ingen fullständig ekonomisk rekommendation visas.
-
-Inga skatte-/tariffvärden hårdkodas som gällande: alla värden måste
-konfigureras från aktuellt avtal och prislista. Effektavgift och fasta
-avgifter ska inte ingå i marginalpris per kWh. Fortsatt läsläge.
-
-## Open-source development status
-
-**Experimental / learning mode only.** This release has not been verified on a
-physical Homey Pro, Sigenergy inverter, EVDC charger, or Nibe heat pump.
-Modbus addresses and scaling must be verified against hardware and current
-vendor documentation. No automated control should be assumed safe or supported.
-The Telge Nät five-peak tariff and energy price components require verification
-against the actual contract and current price lists. Do not rely on estimated
-savings as billing-accurate.
-
-### Development
+## Development and testing
 
 ```sh
 npm install
 npm test
+node -e "const a=require('./app.json'); const p=require('./package.json'); if(a.version!==p.version) process.exit(1)"
 ```
 
-The CI workflow runs unit tests and checks that `app.json` and `package.json`
-versions match. Do not commit Tibber API tokens, private telemetry or local
-configuration exports.
+`npm test` runs the built-in Node.js test runner. Tests cover charging plans, solar allocation, Tibber normalization/refresh, history, advisory backup logic, mocked Nibe/EVDC reads, telemetry validation, diagnostics, replay, demand charges and marginal costs. They do not validate physical registers, Homey installation, widget packaging, actual API contracts or safety behavior on hardware.
 
-Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md).
-Licensed under the [MIT License](LICENSE).
+[GitHub Actions](.github/workflows/ci.yml) runs dependency installation, tests and matching manifest/package version checks on pushes and pull requests using Node.js 22. It does not run Homey packaging or hardware tests.
+
+| Path | Purpose |
+| --- | --- |
+| `app.json`, `package.json` | Manifest, capabilities, device settings and dependencies |
+| `app.js` | Runtime polling, caches and advisory calculations |
+| `drivers/sigenergy/` | Fixed-identity pairing and plant polling |
+| `settings/`, `widgets/` | App settings UI and Dashboard widget candidate |
+| `lib/` | Readers, history, pricing and planning modules |
+| `test/` | Automated calculation and mocked-reader tests |
+
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Open an issue, make a focused branch, test changed calculations and open a pull request describing safety implications. Hardware reports should identify firmware, verified register source, widths/scaling and observed results, clearly separated from simulation.
+
+Keep Modbus operations read-only. Any future control work requires documented registers, safety review, explicit opt-in and hardware validation. Never commit API tokens, private network details, credentials or identifiable telemetry. Follow [SECURITY.md](SECURITY.md) for private vulnerability reporting when available.
+
+## License
+
+Released under the [MIT License](LICENSE). This is a community project; no vendor certification or affiliation is claimed.
