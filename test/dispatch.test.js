@@ -2,11 +2,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { allocateSolar, efficiencyAt, DEFAULT_PROFILE } = require('../lib/charging/dispatch');
-const base = { surplusKW: 6, evConnected: true, evSoc: 40, homeSoc: 50,
-  evValuePerKWh: 2, homeValuePerKWh: 1, exportPricePerKWh: 0 };
+const base = {
+  surplusKW: 6,
+  evConnected: true,
+  evSoc: 40,
+  homeSoc: 50,
+  evValuePerKWh: 2,
+  homeValuePerKWh: 1,
+  exportPricePerKWh: 0,
+};
 test('interpolates power dependent efficiency', () => {
   assert.equal(efficiencyAt(DEFAULT_PROFILE.ev.points, 7), 0.92);
-  assert.ok(efficiencyAt(DEFAULT_PROFILE.ev.points, 3) < efficiencyAt(DEFAULT_PROFILE.ev.points, 7));
+  assert.ok(
+    efficiencyAt(DEFAULT_PROFILE.ev.points, 3) < efficiencyAt(DEFAULT_PROFILE.ev.points, 7),
+  );
 });
 test('prioritizes car when its stored energy is more valuable', () => {
   const result = allocateSolar(base);

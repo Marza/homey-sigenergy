@@ -14,7 +14,22 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: npm test
+      - name: Lint JavaScript and inline view scripts
+        run: npm run lint
+      - name: Check formatting
+        run: npm run format:check
+      - name: Test and enforce runtime coverage
+        run: npm run test:coverage
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            coverage/
+            !coverage/tmp/**
+          if-no-files-found: warn
+          retention-days: 14
       - name: Check matching versions
         run: npm run check:versions
       - name: Validate local development manifest and assets

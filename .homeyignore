@@ -6,3 +6,5 @@ SECURITY.md
 package-lock.json
 scripts/
 dist/
+coverage/
+eslint.config.cjs

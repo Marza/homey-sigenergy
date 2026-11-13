@@ -1,0 +1,18 @@
+{
+  "all": true,
+  "include": ["app.js", "api.js", "drivers/**/*.js", "lib/**/*.js"],
+  "exclude": [
+    "node_modules/**",
+    ".homeybuild/**",
+    "test/**",
+    "scripts/**",
+    "coverage/**",
+    "dist/**"
+  ],
+  "reporter": ["text", "html", "lcovonly", "json-summary"],
+  "check-coverage": true,
+  "lines": 90,
+  "statements": 90,
+  "functions": 90,
+  "branches": 85
+}

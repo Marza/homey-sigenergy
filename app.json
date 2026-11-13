@@ -16,12 +16,14 @@
   "permissions": [],
   "api": {
     "exportHistory": { "method": "GET", "path": "/history/export", "public": false },
-    "previewHistoryImport": { "method": "POST", "path": "/history/import/preview", "public": false },
+    "previewHistoryImport": {
+      "method": "POST",
+      "path": "/history/import/preview",
+      "public": false
+    },
     "importHistory": { "method": "POST", "path": "/history/import", "public": false }
   },
-  "platforms": [
-    "local"
-  ],
+  "platforms": ["local"],
   "capabilities": {
     "measure_grid_power": {
       "type": "number",
@@ -253,4 +255,3 @@
     ]
   }
 }
-
