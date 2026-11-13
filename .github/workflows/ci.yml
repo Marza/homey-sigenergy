@@ -24,3 +24,61 @@ jobs:
       - name: Load packaged Modbus dependency
         run: node -e "require('./.homeybuild/node_modules/modbus-serial')"
 
+      - name: Package and verify the downloadable release
+        run: |
+          node scripts/package-release.js
+          node scripts/verify-release.js
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release-main
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      HOMEY_SKIP_STARTUP_NOTIFIERS: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Select SemVer and stamp release manifests
+        id: version
+        run: node scripts/release-version.js
+      - run: npm run check:versions
+      - run: npm test
+      - run: npm run build:homey
+      - name: Package production build and checksum
+        run: node scripts/package-release.js
+      - name: Verify installation from the extracted release
+        run: node scripts/verify-release.js
+      - name: Tag and publish GitHub release
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git rev-parse "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$GITHUB_SHA"
+          else
+            git tag "$RELEASE_TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$RELEASE_TAG"
+          fi
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > "$RUNNER_TEMP/release-draft"; then
+            if test "$(cat "$RUNNER_TEMP/release-draft")" = false; then
+              echo 'Release already published; keeping existing assets.'
+              exit 0
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "$RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false
