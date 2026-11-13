@@ -20,6 +20,12 @@ const { SmoS40Reader } = require('./lib/nibe/smo-s40');
 const { heatPumpPolicy } = require('./lib/backup/heat-pump-policy');
 const { createChargingPreview } = require('./lib/charging/preview');
 const { DEFAULTS, planCharging } = require('./lib/charging/planner');
+const {
+  readArchive,
+  replaceMonth,
+  monthKey,
+  shiftMonth,
+} = require('./lib/pricing/consumption-archive');
 const { fetchConsumption, shouldSync } = require('./lib/pricing/consumption-sync');
 const { fetchTibberPrices } = require('./lib/pricing/tibber');
 const { shouldRefreshPrices, hasTomorrowPrices } = require('./lib/pricing/refresh-policy');
@@ -61,7 +67,8 @@ module.exports = class SigenergyApp extends Homey.App {
       if (['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'].includes(key))
         this.resetNibeSource();
       if (['tibberToken', 'tibberHomeId'].includes(key)) this.configurePrices();
-      if (key === 'tibberConsumptionHistory') this.refreshDemandEstimate();
+      if (['tibberConsumptionHistory', 'tibberConsumptionArchive'].includes(key))
+        this.refreshDemandEstimate();
       if (key === 'demandTariff') {
         this.refreshDemandEstimate();
         this.homey.settings.set('tariffOptimization', {
@@ -326,14 +333,34 @@ module.exports = class SigenergyApp extends Homey.App {
     };
     try {
       settings.set('tibberConsumptionSync', sync);
-      const state = await fetchConsumption({ token, homeId, configRevision: revision, now });
+      let failed = false;
+      let fetchedCurrent = false;
+      for (const month of [monthKey(now), shiftMonth(monthKey(now), -1)]) {
+        try {
+          const state = await fetchConsumption({
+            token,
+            homeId,
+            configRevision: revision,
+            now,
+            month,
+          });
+          if (!current()) return;
+          if (state) {
+            // Read at commit time so a concurrent restore cannot lose other archived months.
+            const archive = replaceMonth(readArchive(settings, now), state, now);
+            settings.set('tibberConsumptionArchive', archive);
+            if (month === monthKey(now)) fetchedCurrent = true;
+          }
+        } catch {
+          if (!current()) return;
+          failed = true;
+        }
+      }
       if (!current()) return;
-      // Full current-month snapshots intentionally accept upstream corrections; never blend with inverter history.
-      if (state) settings.set('tibberConsumptionHistory', state);
       settings.set('tibberConsumptionSync', {
         ...sync,
-        status: state ? 'ok' : 'waiting',
-        lastSuccessAt: state ? now.toISOString() : sync.lastSuccessAt,
+        status: failed ? 'error' : fetchedCurrent ? 'ok' : 'waiting',
+        lastSuccessAt: !failed && fetchedCurrent ? now.toISOString() : sync.lastSuccessAt,
       });
       this.refreshDemandEstimate();
     } catch {
@@ -418,7 +445,12 @@ module.exports = class SigenergyApp extends Homey.App {
     };
   }
   getMeterDemandCharge(month) {
-    const state = this.homey.settings.get('tibberConsumptionHistory');
+    let state;
+    try {
+      state = readArchive(this.homey.settings)?.months.find((e) => e.month === month)?.state;
+    } catch {
+      return { status: 'invalid-meter-history' };
+    }
     const revision = this.homey.settings.get('sourceConfig')?.tibber?.revision;
     const tariff = this.homey.settings.get('demandTariff');
     if (!tariff) return { status: 'not-configured' };

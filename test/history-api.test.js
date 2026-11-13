@@ -15,10 +15,11 @@ test('all history routes are authenticated and delegate to the same validated st
   const history = new HistoryStore(settings, () => now);
   history.append({ gridW: 3600 }, now - 10000);
   history.append({ gridW: 3600 }, now);
-  const homey = { app: { history } };
+  const homey = { settings, app: { history } };
   const file = await api.exportHistory({ homey });
-  assert.deepEqual(file, history.export());
-  assert.equal(file.schema, 3);
+  assert.deepEqual(file.history, history.export());
+  assert.equal(file.schema, 1);
+  assert.equal(file.meter, null);
   assert.equal(JSON.stringify(file).includes('must-not-export'), false);
   for (const name of Object.keys(api)) assert.equal(manifest.api[name].public, false);
   const preview = await api.previewHistoryImport({ homey, body: file });
@@ -26,7 +27,7 @@ test('all history routes are authenticated and delegate to the same validated st
   const before = structuredClone(values.get('historyState'));
   await assert.rejects(
     api.importHistory({ homey, body: { ...file, tibberToken: 'secret' } }),
-    /Unknown field/,
+    /Invalid backup/,
   );
   assert.deepEqual(values.get('historyState'), before);
   const result = await api.importHistory({ homey, body: file });

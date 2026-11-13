@@ -138,3 +138,16 @@ test('invalid homes, pages, upstream errors and credentials fail without leaking
       (e) => !e.message.includes('secret-token'),
     );
 });
+
+test('explicit previous month fetch paginates all 745 October hours without duplicate DST intervals', async () => {
+  const m = mock();
+  const state = await fetchConsumption({ ...opts, ...m, month: '2026-10' });
+  assert.equal(state.hours.length, 745);
+  assert.equal(m.calls.length, 3);
+  assert.deepEqual(
+    m.calls.slice(1).map((c) => c.variables.last),
+    [744, 1],
+  );
+  assert.equal(new Set(state.hours.map((h) => h.t)).size, 745);
+  await assert.rejects(fetchConsumption({ ...opts, ...mock(), month: '2026-12' }), /Future/);
+});

@@ -92,7 +92,7 @@ function getOverview({ homey }, now) {
     .reduce((last, row) => (!last || row.t > last.t ? row : last), null);
   const tariff = read('demandTariff'),
     optimization = read('tariffOptimization');
-  const meterState = read('tibberConsumptionHistory');
+  const meterState = read('tibberConsumptionArchive') || read('tibberConsumptionHistory');
   const meterEstimate = read('meterDemandEstimate');
   const consumptionSync = read('tibberConsumptionSync');
   const sync =

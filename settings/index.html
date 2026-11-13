@@ -523,6 +523,10 @@
         <input id="importHistoryFile" type="file" accept="application/json,.json"
       /></label>
       <p id="importHistoryPreview" role="status"></p>
+      <label id="meterBindingLabel" hidden
+        ><input id="confirmMeterBinding" type="checkbox" />Jag bekräftar att mätarreferenserna i
+        filen gäller det Tibberhem som nu är konfigurerat.</label
+      >
       <button id="restoreHistory" type="button" disabled>Slå ihop historik</button>
       <p class="sub">
         Befintliga mätintervall behålls vid överlapp. Historiken ersätts inte och
@@ -978,7 +982,7 @@
             return;
           }
           const url = URL.createObjectURL(
-            new Blob([JSON.stringify(history, null, 2)], { type: 'application/json' }),
+            new Blob([JSON.stringify(history)], { type: 'application/json' }),
           );
           const link = document.createElement('a');
           link.href = url;
@@ -986,21 +990,30 @@
           link.click();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
           document.getElementById('historyMessage').textContent =
-            'Historiken exporterad. Spara filen privat.';
+            'Historik och tillgängliga Tibbermätarreferenser exporterade. Spara filen privat.';
         });
       }
       function bindHistoryImport(Homey) {
         const fileInput = document.getElementById('importHistoryFile'),
           button = document.getElementById('restoreHistory'),
-          message = document.getElementById('importHistoryPreview');
+          message = document.getElementById('importHistoryPreview'),
+          binding = document.getElementById('confirmMeterBinding'),
+          bindingLabel = document.getElementById('meterBindingLabel');
         let payload = null,
           generation = 0,
-          importing = false;
+          importing = false,
+          bindingRequired = false;
+        binding.onchange = () => {
+          button.disabled = !payload || importing || (bindingRequired && !binding.checked);
+        };
         button.disabled = true;
         fileInput.onchange = async () => {
           if (importing) return;
           const selected = ++generation;
           payload = null;
+          bindingRequired = false;
+          binding.checked = false;
+          bindingLabel.hidden = true;
           button.disabled = true;
           message.textContent = '';
           const file = fileInput.files?.[0];
@@ -1018,8 +1031,10 @@
                 return;
               }
               payload = parsed;
-              button.disabled = false;
-              message.textContent = `Efter sammanslagning: ${result.slots} kvartsvärden, ${result.daily} dagssammanställningar. Befintliga värden behålls för ${result.conflictingSlots} överlappande intervall.`;
+              bindingRequired = !!result.meterBindingRequired;
+              bindingLabel.hidden = !bindingRequired;
+              button.disabled = bindingRequired;
+              message.textContent = `Efter sammanslagning: ${result.slots} kvartsvärden, ${result.daily} dagssammanställningar. Befintliga värden behålls för ${result.conflictingSlots} överlappande intervall. Mätarreferenser: ${result.meterMonths || 0} månader, ${result.meterHours || 0} timmar; ${result.meterConflicts || 0} befintliga timvärden behålls.`;
             });
           } catch (error) {
             if (selected === generation)
@@ -1027,24 +1042,31 @@
           }
         };
         button.onclick = () => {
-          if (importing || !payload) return;
+          if (importing || !payload || (bindingRequired && !binding.checked)) return;
           importing = true;
           button.disabled = true;
           fileInput.disabled = true;
-          Homey.api('POST', '/history/import', payload, (error) => {
-            importing = false;
-            fileInput.disabled = false;
-            if (error) {
-              button.disabled = false;
-              message.textContent = 'Återläsningen kunde inte bekräftas: ' + error.message;
-              return;
-            }
-            payload = null;
-            generation++;
-            fileInput.value = '';
-            message.textContent = 'Historiken sammanslagen. Befintliga värden har behållits.';
-            loadOverview(Homey);
-          });
+          Homey.api(
+            'POST',
+            '/history/import',
+            bindingRequired ? { backup: payload, confirmMeterBinding: binding.checked } : payload,
+            (error) => {
+              importing = false;
+              fileInput.disabled = false;
+              if (error) {
+                button.disabled = bindingRequired && !binding.checked;
+                message.textContent = 'Återläsningen kunde inte bekräftas: ' + error.message;
+                return;
+              }
+              payload = null;
+              binding.checked = false;
+              bindingLabel.hidden = true;
+              generation++;
+              fileInput.value = '';
+              message.textContent = 'Historiken sammanslagen. Befintliga värden har behållits.';
+              loadOverview(Homey);
+            },
+          );
         };
       }
 
