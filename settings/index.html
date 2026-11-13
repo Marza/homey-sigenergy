@@ -500,6 +500,15 @@
           <option value="false">Flera toppar från samma dag tillåts</option>
         </select></label
       >
+      <label
+        >Helgdagsregel
+        <select id="tariffCalendar">
+          <option value="none">Generisk: inga helgdagsundantag</option>
+          <option value="se-telge">
+            Telge: svenska helgdagar, julafton och nyårsafton undantas
+          </option>
+        </select>
+      </label>
       <fieldset>
         <legend>Månader då tariffen gäller</legend>
         <label><input id="tariffAllYear" type="checkbox" /> Hela året</label>
@@ -523,7 +532,8 @@
       </fieldset>
       <p class="sub">
         Välj månader eller Hela året. Tider måste vara hela timmar inom samma dygn. Avtalsregler,
-        helgdagar och pris är ännu inte verifierade av appen.
+        pris och import/export måste verifieras mot ditt avtal. Välj Telges helgdagsregel för
+        Telge-tariff.
       </p>
       <p id="tariffConfigStatus" role="status">Läser sparad tariff…</p>
       <button id="saveTariff" type="button">Spara tariffparametrar</button>
@@ -942,6 +952,9 @@
               TariffConfig.peakLabel(tariff) +
               ` · ${tariff.start}–${tariff.end} · veckodagar ${tariff.weekdays.join(', ')} · ` +
               (tariff.months ? 'månader ' + tariff.months.join(', ') : 'hela året') +
+              (tariff.calendar === 'se-telge'
+                ? ' · Telges helgdagsundantag'
+                : ' · Inga helgdagsundantag') +
               ` · ${tariff.rateSekPerKw.toLocaleString('sv-SE')} kr/kW · Ej verifierad mot nätbolagets avtal.`;
           } catch (invalid) {
             text = 'Ogiltig sparad tariff: ' + invalid.message;
@@ -981,6 +994,7 @@
               : '';
             input('tariffDistinctDays').value =
               typeof tariff.distinctDays === 'boolean' ? String(tariff.distinctDays) : '';
+            input('tariffCalendar').value = tariff.calendar || 'none';
             input('tariffAllYear').checked = tariff.months === undefined;
             months.forEach((month) => {
               input('tariffMonth' + month).checked =
@@ -1001,6 +1015,7 @@
               peakCount: input('tariffPeakCount').value,
               rateSekPerKw: input('tariffRate').value,
               distinctDays: input('tariffDistinctDays').value,
+              calendar: input('tariffCalendar').value,
               allYear: input('tariffAllYear').checked,
               months: months.filter((month) => input('tariffMonth' + month).checked),
             });

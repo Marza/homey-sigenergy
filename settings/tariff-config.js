@@ -33,6 +33,8 @@
       throw new Error('Välj om topparna ska komma från olika dagar.');
     if (tariff.months !== undefined)
       selection(tariff.months, 1, 12, 'Välj unika månader 1–12 eller Hela året.');
+    if (tariff.calendar !== undefined && !['none', 'se-telge'].includes(tariff.calendar))
+      throw new Error('Välj en giltig helgdagskalender.');
     return { from, to };
   }
   function parseTariffForm(raw) {
@@ -55,6 +57,7 @@
       distinctDays:
         raw.distinctDays === 'true' ? true : raw.distinctDays === 'false' ? false : null,
     };
+    if (raw.calendar && raw.calendar !== 'none') tariff.calendar = raw.calendar;
     if (!raw.allYear) tariff.months = raw.months;
     validateTariff(tariff);
     return tariff;
@@ -68,6 +71,7 @@
       tariff.peakCount,
       tariff.rateSekPerKw,
       tariff.distinctDays,
+      tariff.calendar || 'none',
       [...(tariff.months || Array.from({ length: 12 }, (_, i) => i + 1))].sort((a, b) => a - b),
     ]);
   }

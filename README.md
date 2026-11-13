@@ -18,7 +18,7 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | Local history | Quarter-hour aggregates, daily summaries, backup-mode events and JSON export | Stored in Homey app settings, not a dedicated database |
 | Tibber prices and EV planning | Cached consumption prices and a price-based charging planner | Internet needed for refresh; planning only; no automatic execution |
 | Peak shaving | Historical replay, configurable caps/reserves, stored advisory recommendations | Illustrative scenarios, not a forecast or guaranteed power limit |
-| Demand charges | Configurable hourly peak selection and historical tariff scenarios | Provisional; no verified Telge Nät tariff supplied |
+| Demand charges | Configurable hourly peak selection and historical tariff scenarios | Provisional; dated Telge rules documented, billing comparison pending |
 | Dashboard | Energy overview widget candidate with history, recommendations and demand estimates | Packaging and Dashboard runtime unverified; history is not live telemetry |
 | Marginal energy costs | Separate import/export, tax, grid-fee and battery-wear calculations | Standalone tested module; not connected to production prices, Dashboard or runtime scenario ranking |
 
@@ -108,7 +108,7 @@ The standalone [cost model](lib/pricing/cost-model.js) treats consumption input 
 
 ## Telge Nät demand-tariff assumptions
 
-This is a configurable estimator, **not a verified implementation of Telge Nät's current contract**. No tariff object or rate is installed by default. The form starts without times, weekdays, peak count, rate, day-selection rule or season assumptions. Existing settings are loaded explicitly. Example tariffs in tests do not establish your contract.
+This is a configurable estimator, **not a verified implementation of Telge Nät's current contract**. No tariff object or rate is installed by default. The form starts without times, weekdays, peak count, rate, day-selection rule or season assumptions. Holiday exclusions are an explicit opt-in. Existing settings are loaded explicitly. Example tariffs in tests do not establish your contract.
 
 Configure `start`, `end`, `weekdays` (0 = Sunday), `peakCount`, `distinctDays` and `rateSekPerKw` from your confirmed price list. Select active `months` (1–12) or explicitly choose **Hela året** (all year). Existing seasonal selections survive edits; all-year tariffs omit `months`. UI and backend share the same validation: full-hour times within one day, unique valid weekdays/months, an integer peak count of 1–31, a non-negative finite rate and an explicit day-selection rule. Empty fields are not treated as zero or a default contract.
 
@@ -121,7 +121,11 @@ The estimator:
 - Sums signed `gridWh` for the hour, clamps net export to zero, selects the highest configured number of hourly values (optionally from distinct days), and multiplies their mean kW by the configured SEK/kW rate.
 - Returns `insufficient-data` until enough eligible peaks exist; otherwise the estimate remains `provisional`.
 
-Holiday exclusions are not implemented, full-month completeness is not guaranteed, and older records without coverage cannot qualify. The 32-day detailed window can retain the full current calendar month, including a 31-day month with a DST transition; this is a storage bound, not proof that every interval was observed. Verify seasonal rules, import/export treatment, peak selection, VAT basis and rate against your contract. Displayed savings are historical scenarios, not billing-accurate or future savings.
+Select **Telge: svenska helgdagar, julafton och nyårsafton undantas** (`calendar: "se-telge"`) to exclude Swedish public holidays plus Christmas Eve and New Year’s Eve. Omitted `calendar` or `"none"` retains the generic weekday-only calculation; existing tariffs are not silently migrated. The selected calendar is part of result identity, so changing it hides old results until recalculation.
+
+The result includes `coverage`: expected eligible hours in the full Stockholm calendar month, elapsed closed hours, complete observed hours, missing elapsed hours, remaining hours and `complete`/`partial` coverage. Completely absent hours count as missing. Future/open hours cannot qualify. Duplicate quarter records invalidate that hour. Real UTC hours are enumerated separately across DST, then filtered by local dates. The widget shows measured/expected, missing and remaining hours for both the estimate and historical scenario. A sufficient set of observed peaks still yields a **provisional estimate for observed hours**, not a complete-month bill. Replay uses the same calculation time and eligible-hour model, and explicitly reports `scope: "observed-hours"`. Unobserved loads cannot be simulated.
+
+See [dated Telge rules and validation gaps](docs/telge-tariff.md) for the public 2026 tariff reference, reproducible synthetic example and remaining billing checks. Older records without coverage cannot qualify. The 32-day detailed window can retain the full current calendar month, including a 31-day month with a DST transition; this is a storage bound, not proof that every interval was observed. Verify seasonal rules, import/export treatment, peak selection, VAT basis and rate against your contract. Displayed savings are historical scenarios, not billing-accurate or future savings.
 
 ## History, diagnostics and simulations
 
