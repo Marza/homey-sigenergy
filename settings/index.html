@@ -17,7 +17,7 @@ h1{font-size:25px;margin:0}h2{font-size:20px;margin:0 0 12px}h3{margin:22px 0 8p
 <div class="section"><div class="statusline"><strong>Senaste nätmätning</strong><span class="sub" id="historyUpdated">–</span></div><svg class="chart" id="overviewChart" viewBox="0 0 680 155" role="img" aria-label="Nätimport senaste 15-minutersintervallen"><text x="20" y="80" fill="currentColor" opacity=".7">Ingen historik ännu</text></svg><div class="legend"><span><span class="dot" style="background:#3586b5"></span>Nätimport, 15-minutersmedel</span></div></div>
 </section>
 <section class="panel" id="panel-prices" hidden><div class="section"><div class="statusline"><strong>Morgondagens elpriser</strong><span id="tomorrowStatus" class="status empty">Kontrollerar…</span></div><p id="priceFreshness" class="sub">Väntar på Tibber-data.</p><p class="note">Efter kl. 13 kontrolleras Tibber var 15:e minut tills morgondagens priser finns. Tidigare kända priser behålls vid nätfel.</p></div><div class="section"><strong>Kommande priser</strong><svg class="chart" id="priceChart" viewBox="0 0 680 155" role="img" aria-label="Kommande elpriser"><text x="20" y="80" fill="currentColor" opacity=".7">Inga priser i cache</text></svg><p id="priceRange" class="sub">–</p></div></section>
-<section class="panel" id="panel-history" hidden><div class="section"><strong>Lokal energihistorik</strong><p id="historySummary">Läser historik…</p><p class="sub">15-minutersvärden upp till 30 dagar, dagssammanställningar upp till 730 dagar.</p><button type="button" id="exportHistoryTop" class="primary">Exportera historik (JSON)</button></div><div class="section"><strong>Effektavgift</strong><p id="tariffStatus">Ingen verifierad tariff inlagd.</p><p class="note">Effektavgiftsberäkningen är preliminär tills Telge Näts tariff och mätperiod verifierats.</p></div></section>
+<section class="panel" id="panel-history" hidden><div class="section"><strong>Lokal energihistorik</strong><p id="historySummary">Läser historik…</p><p class="sub">15-minutersvärden upp till 32 dagar, dagssammanställningar upp till 732 dagar.</p><button type="button" id="exportHistoryTop" class="primary">Exportera historik (JSON)</button></div><div class="section"><strong>Effektavgift</strong><p id="tariffStatus">Ingen verifierad tariff inlagd.</p><p class="note">Effektavgiftsberäkningen är preliminär tills Telge Näts tariff och mätperiod verifierats.</p></div></section>
 <section class="panel" id="panel-optimizer" hidden><h2>Peak shaving – inlärning</h2>
 <p class="note">Detta är en förenklad kontrafaktisk simulering, inte en tariffprognos. Den antar ingen framtida uppladdning och kan inte garantera ett effekttak.</p>
 <div class="section"><button id="runSimulation" type="button" class="primary">Beräkna med sparad historik</button><p id="simulationStatus" role="status">Ingen simulering utförd.</p><div style="overflow-x:auto"><table><thead><tr><th>Tak</th><th>Reserv</th><th>Simulerad maximport</th><th>Energi som ej kapats</th><th>Datatäckning</th></tr></thead><tbody id="simulationRows"></tbody></table></div></div></section>
@@ -49,7 +49,7 @@ h1{font-size:25px;margin:0}h2{font-size:20px;margin:0 0 12px}h3{margin:22px 0 8p
 <label>Registeroffset <input id="nibeAddressOffset" type="number" min="-1" max="1" value="0"></label>
 <button type="button" id="saveNibe">Spara Nibe-anslutning</button><p id="nibeMessage" role="status"></p>
 </div>
-<h3>Laddschema för elbil</h3><h3>Lokal energihistorik</h3><p>15-minutersvärden sparas i högst 30 dagar och dagliga sammanställningar i högst 730 dagar. Exporten innehåller inte Tibber-token.</p><button id="exportHistory" type="button">Exportera historik (JSON)</button><p id="historyMessage" role="status"></p><h3>Effektavgift (konfigurerbar)</h3>
+<h3>Laddschema för elbil</h3><h3>Lokal energihistorik</h3><p>15-minutersvärden sparas i högst 32 dagar och dagliga sammanställningar i högst 732 dagar. Exporten innehåller inte Tibber-token.</p><button id="exportHistory" type="button">Exportera historik (JSON)</button><p id="historyMessage" role="status"></p><label>Välj en tidigare historikexport <input id="importHistoryFile" type="file" accept="application/json,.json"></label><p id="importHistoryPreview" role="status"></p><button id="restoreHistory" type="button" disabled>Slå ihop historik</button><p class="sub">Befintliga mätintervall behålls vid överlapp. Historiken ersätts inte och anslutningsinställningar ändras inte.</p><h3>Effektavgift (konfigurerbar)</h3>
 <p>Fyll i bekräftade uppgifter från Telge Näts aktuella prislista. Ingen tariff är förifylld. Beräkningen är preliminär och äldre historik saknar täckningsdata.</p>
 <label>Starttid <input id="tariffStart" type="time" value="07:00"></label>
 <label>Sluttid <input id="tariffEnd" type="time" value="19:00"></label>
@@ -83,6 +83,24 @@ document.querySelectorAll('.tab').forEach(el=>el.addEventListener('click',()=>sh
 const localTime=iso=>{if(!iso)return '–';const d=new Date(iso);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat('sv-SE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Stockholm'}).format(d):'–';};
 const localDate=iso=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
 const formatKW=w=>Number.isFinite(Number(w))?(Number(w)/1000).toLocaleString('sv-SE',{maximumFractionDigits:2})+' kW':'–';
+function readHistory(Homey,callback){
+ Homey.get('historyState',(error,state)=>{
+  if(error){callback(error);return;}
+  if(state!==null&&state!==undefined){
+   if(state.schema!==3||!['slots','daily','events','legacyDaily'].every(k=>Array.isArray(state[k]))){callback(new Error('Historiken kunde inte läsas.'));return;}
+   callback(null,state);return;
+  }
+  const history={slots:[],daily:[],events:[],legacyDaily:[]};let remaining=3,failed=false;
+  for(const [key,target] of [['historySlots','slots'],['historyDaily','daily'],['historyEvents','events']]){
+   Homey.get(key,(err,value)=>{
+    if(failed)return;
+    if(err){failed=true;callback(err);return;}
+    history[target]=Array.isArray(value)?value:[];
+    if(--remaining===0)callback(null,history);
+   });
+  }
+ });
+}
 function historyAverage(row,key){
  const count=row?.counts?.[key],sum=row?.sum?.[key];
  return Number.isInteger(count)&&count>0&&Number.isFinite(sum)?sum/count:null;
@@ -95,7 +113,9 @@ function drawBars(id, values, color){
 }
 function loadOverview(Homey){
  const get=(key,cb)=>Homey.get(key,(err,val)=>{if(!err)cb(val);});
- get('historySlots',slots=>{
+ readHistory(Homey,(error,history)=>{
+  if(error){document.getElementById('historySummary').textContent=error.message;return;}
+  const slots=history.slots;
   const recent=(Array.isArray(slots)?slots:[]).slice(-32);
   const vals=recent.map(x=>{const w=historyAverage(x,'gridW');return Number.isFinite(w)?Math.max(0,w/1000):null;}).filter(x=>x!==null);
   drawBars('overviewChart',vals,'#3586b5');
@@ -105,9 +125,8 @@ function loadOverview(Homey){
   document.getElementById('pvPower').textContent=Number.isFinite(pv)?formatKW(pv):'–';
   document.getElementById('batterySoc').textContent=Number.isFinite(soc)?soc.toFixed(0)+' %':'–';
   document.getElementById('historyUpdated').textContent=recent.length?'Senaste registrerade intervall: '+recent.length:'Ingen historik';
-  document.getElementById('historySummary').textContent=`${(slots||[]).length} sparade 15-minutersintervall`;
+  document.getElementById('historySummary').textContent=`${slots.length} sparade 15-minutersintervall · ${history.daily.length} dagssammanställningar · ${history.legacyDaily.length} äldre dagsposter`;
  });
- get('historyDaily',daily=>document.getElementById('historySummary').textContent+=' · '+(daily||[]).length+' dagssammanställningar');
  get('backupStatus',s=>{
   if(!s)return;
   const mode=s.mode||'unknown';document.getElementById('islandMode').textContent=mode;
@@ -131,6 +150,46 @@ function loadOverview(Homey){
   document.getElementById('priceRange').textContent=prices.length?`Visar ${Math.min(96,prices.length)} av ${prices.length} kommande prisintervall. Pris i kr/kWh, inklusive Tibbers rapporterade komponenter.`:'Inga priser tillgängliga.';
  });
  get('demandTariff',tariff=>document.getElementById('tariffStatus').textContent=tariff?'Tariff konfigurerad men inte verifierad mot nätbolaget.':'Ingen tariff konfigurerad.');
+}
+
+function exportHistory(Homey){
+ Homey.api('GET','/history/export',null,(error,history)=>{
+  if(error){document.getElementById('historyMessage').textContent='Export misslyckades: '+error.message;return;}
+  const url=URL.createObjectURL(new Blob([JSON.stringify(history,null,2)],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='sigenergy-history-'+new Date().toISOString().slice(0,10)+'.json';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  document.getElementById('historyMessage').textContent='Historiken exporterad. Spara filen privat.';
+ });
+}
+function bindHistoryImport(Homey){
+ const fileInput=document.getElementById('importHistoryFile'),button=document.getElementById('restoreHistory'),message=document.getElementById('importHistoryPreview');
+ let payload=null,generation=0,importing=false;
+ button.disabled=true;
+ fileInput.onchange=async()=>{
+  if(importing)return;
+  const selected=++generation;payload=null;button.disabled=true;message.textContent='';
+  const file=fileInput.files?.[0];if(!file)return;
+  if(file.size>8*1024*1024){message.textContent='Filen är för stor (högst 8 MB).';return;}
+  try{
+   const parsed=JSON.parse(await file.text());
+   Homey.api('POST','/history/import/preview',parsed,(error,result)=>{
+    if(selected!==generation)return;
+    if(error){message.textContent='Filen kunde inte användas: '+error.message;return;}
+    payload=parsed;button.disabled=false;
+    message.textContent=`Efter sammanslagning: ${result.slots} kvartsvärden, ${result.daily} dagssammanställningar. Befintliga värden behålls för ${result.conflictingSlots} överlappande intervall.`;
+   });
+  }catch(error){if(selected===generation)message.textContent='Filen kunde inte läsas: '+error.message;}
+ };
+ button.onclick=()=>{
+  if(importing||!payload)return;
+  importing=true;button.disabled=true;fileInput.disabled=true;
+  Homey.api('POST','/history/import',payload,(error)=>{
+   importing=false;fileInput.disabled=false;
+   if(error){button.disabled=false;message.textContent='Återläsningen kunde inte bekräftas: '+error.message;return;}
+   payload=null;generation++;fileInput.value='';message.textContent='Historiken sammanslagen. Befintliga värden har behållits.';
+   loadOverview(Homey);
+  });
+ };
 }
 
 function onHomeyReady(Homey){
@@ -181,7 +240,8 @@ function onHomeyReady(Homey){
   }));
  };
  document.getElementById('runSimulation').onclick=()=>{
-  Homey.get('historySlots',(err,slots)=>{
+  readHistory(Homey,(err,history)=>{
+   const slots=history?.slots;
    if(err){document.getElementById('simulationStatus').textContent=err.message;return;}
    Homey.get('optimizerConfig',(e,c)=>{
     if(e||!c){document.getElementById('simulationStatus').textContent='Spara simuleringsparametrarna först.';return;}
@@ -222,22 +282,8 @@ function onHomeyReady(Homey){
 
  loadOverview(Homey);
  document.getElementById('exportHistoryTop').onclick=()=>document.getElementById('exportHistory').click();
- document.getElementById('exportHistory').onclick=()=>{
-  const keys=['historySlots','historyDaily','historyEvents'];
-  const result={schema:2,exportedAt:new Date().toISOString()};
-  let remaining=keys.length;
-  keys.forEach(key=>Homey.get(key,(err,value)=>{
-   if(err){document.getElementById('historyMessage').textContent='Export misslyckades: '+err.message;return;}
-   result[key]=value||[];
-   if(--remaining===0){
-    const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download='sigenergy-history-'+new Date().toISOString().slice(0,10)+'.json';a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
-    document.getElementById('historyMessage').textContent='Historiken exporterad.';
-   }
-  }));
- };
+ document.getElementById('exportHistory').onclick=()=>exportHistory(Homey);
+ bindHistoryImport(Homey);
 
  Homey.get('demandTariff',(err,value)=>{
   if(err||!value)return;

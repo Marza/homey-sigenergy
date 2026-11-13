@@ -13,18 +13,18 @@ test('stores aggregated samples and integrates adjacent power readings', () => {
   history.append({ gridW: 1000, soc: 50 }, t);
   history.append({ gridW: 2000, soc: 52 }, t + 10000);
   history.flush();
-  const rows = settings.get('historySlots');
+  const rows = settings.get('historyState')?.slots;
   assert.equal(rows.length, 1);
   assert.equal(rows[0].n, 2);
   assert.equal(rows[0].max.gridW, 2000);
   assert.ok(Math.abs(rows[0].gridWh - (1500 * 10 / 3600)) < 0.001);
-  assert.equal(settings.get('historyDaily').length, 1);
+  assert.equal(settings.get('historyState')?.daily.length, 1);
 });
 test('flush is idempotent', () => {
   const { history, settings } = setup();
   history.append({ gridW: 100 }, 1800000000000);
   history.flush(); history.flush();
-  assert.equal(settings.get('historySlots')[0].n, 1);
+  assert.equal(settings.get('historyState')?.slots[0].n, 1);
 });
 test('retention removes old slots', () => {
   const now = 1800000000000;
@@ -32,27 +32,27 @@ test('retention removes old slots', () => {
   history.append({ gridW: 100 }, now - (SLOT_RETENTION + 5) * SLOT_MS);
   history.append({ gridW: 200 }, now);
   history.flush();
-  assert.equal(settings.get('historySlots').length, 1);
+  assert.equal(settings.get('historyState')?.slots.length, 1);
 });
 test('events bounded and sensitive properties excluded', () => {
   const { history, settings } = setup();
-  for (let i = 0; i < 510; i++) history.event('backup-mode', { mode: 'off-grid', token: 'secret' });
-  assert.equal(settings.get('historyEvents').length, 500);
-  assert.equal(settings.get('historyEvents')[0].token, undefined);
+  for (let i = 0; i < 510; i++) history.event('backup-mode', { mode: 'off-grid', token: 'secret' }, 1800000000000 + i);
+  assert.equal(settings.get('historyState')?.events.length, 500);
+  assert.equal(settings.get('historyState')?.events[0].token, undefined);
 });
 test('export contains no configuration secrets', () => {
   const { history, settings } = setup();
   settings.set('tibberToken', 'secret');
   history.append({ gridW: 100 }, 1800000000000);
   const exported = history.export();
-  assert.equal(exported.schema, 2);
+  assert.equal(exported.schema, 3);
   assert.equal(JSON.stringify(exported).includes('secret'), false);
 });
 test('invalid values are ignored', () => {
   const { history, settings } = setup();
   history.append({ gridW: NaN, pvW: Infinity }, 1800000000000);
   history.flush();
-  assert.equal(settings.get('historySlots'), undefined);
+  assert.equal(settings.get('historyState')?.slots, undefined);
 });
 
 const T = 1800000000000; // Aligned quarter-hour boundary.
@@ -68,8 +68,8 @@ test('interleaved plant and EVDC samples preserve plant energy, coverage and per
     // Flushing between polls must not break either stream's continuity.
     combined.history.flush(); plantOnly.history.flush();
   }
-  const row = combined.settings.get('historySlots')[0];
-  const baseline = plantOnly.settings.get('historySlots')[0];
+  const row = combined.settings.get('historyState')?.slots[0];
+  const baseline = plantOnly.settings.get('historyState')?.slots[0];
   assert.equal(row.schema, 2);
   assert.equal(row.n, 6);
   assert.deepEqual(row.counts, { gridW: 3, pvW: 3, essW: 3, soc: 3, evW: 3, evSoc: 3 });
@@ -91,7 +91,7 @@ test('an EVDC outage cannot interrupt plant coverage or bridge a long EV gap', (
     }
   }
   history.flush();
-  const row = settings.get('historySlots')[0];
+  const row = settings.get('historyState')?.slots[0];
   assert.equal(row.coverageMs, 80000);
   near(row.gridWh, 80);
   near(row.essWh, -40);
@@ -106,7 +106,7 @@ test('splits a linearly changing signed power interval at a quarter boundary exa
   history.flush();
   history.append({ gridW: 3600, essW: 1800 }, T + SLOT_MS + 10000);
   history.flush();
-  const [before, after] = settings.get('historySlots');
+  const [before, after] = settings.get('historyState')?.slots;
   assert.equal(before.coverageMs, 10000);
   assert.equal(after.coverageMs, 10000);
   near(before.gridWh, -5); near(after.gridWh, 5);
@@ -115,7 +115,7 @@ test('splits a linearly changing signed power interval at a quarter boundary exa
   assert.equal(before.counts.gridW, 1);
   assert.equal(after.counts.gridW, 1);
   history.flush();
-  assert.deepEqual(settings.get('historySlots'), [before, after]);
+  assert.deepEqual(settings.get('historyState')?.slots, [before, after]);
 });
 
 test('sample on the exact boundary ends the previous quarter without inventing new coverage', () => {
@@ -123,7 +123,7 @@ test('sample on the exact boundary ends the previous quarter without inventing n
   history.append({ gridW: 3600 }, T + SLOT_MS - 10000);
   history.append({ gridW: 3600 }, T + SLOT_MS);
   history.flush();
-  const [before, after] = settings.get('historySlots');
+  const [before, after] = settings.get('historyState')?.slots;
   near(before.gridWh, 10);
   assert.equal(before.coverageMs, 10000);
   assert.equal(after.coverageMs, 0);
@@ -138,7 +138,7 @@ test('rejects duplicate/backward observations per field but accepts complementar
   history.append({ gridW: 9000, evW: 7200 }, T + 10000);
   history.append({ gridW: 5000, evW: 7200 }, T + 20000);
   history.flush();
-  const row = settings.get('historySlots')[0];
+  const row = settings.get('historyState')?.slots[0];
   assert.deepEqual(row.counts, { gridW: 3, evW: 2 });
   assert.equal(row.sum.gridW, 9000);
   assert.equal(row.coverageMs, 20000);
@@ -153,7 +153,7 @@ test('invalid values break only their own continuity and never count as zero', (
   history.append({ gridW: 3000, evW: 3600 }, T + 20000);
   history.append({ gridW: 4000 }, T + 30000);
   history.flush();
-  const row = settings.get('historySlots')[0];
+  const row = settings.get('historyState')?.slots[0];
   assert.equal(row.counts.gridW, 3);
   assert.equal(row.sum.gridW, 8000);
   assert.equal(row.coverageMs, 10000);
@@ -166,7 +166,7 @@ test('long gaps do not create energy or coverage even across a boundary', () => 
   history.append({ gridW: 3600 }, T + SLOT_MS - 1);
   history.append({ gridW: 3600 }, T + SLOT_MS + 60000);
   history.flush();
-  for (const row of settings.get('historySlots')) {
+  for (const row of settings.get('historyState')?.slots) {
     assert.equal(row.coverageMs, 0);
     assert.equal(row.gridWh, undefined);
   }
@@ -181,7 +181,7 @@ test('restart preserves counts and energy but does not integrate across the rest
   restarted.append({ gridW: 7200 }, T + 20000);
   restarted.append({ gridW: 7200 }, T + 30000);
   restarted.flush();
-  const row = settings.get('historySlots')[0];
+  const row = settings.get('historyState')?.slots[0];
   assert.equal(row.counts.gridW, 4);
   assert.equal(row.sum.gridW, 21600);
   assert.equal(row.coverageMs, 20000);
@@ -196,7 +196,7 @@ test('legacy history is preserved without attributing its unknown counts or cove
   history.append({ gridW: 3600 }, T);
   history.append({ gridW: 3600 }, T + 10000);
   history.flush();
-  const [preserved, current] = settings.get('historySlots');
+  const [preserved, current] = settings.get('historyState')?.slots;
   assert.deepEqual(preserved, old);
   assert.deepEqual(current.legacy, active);
   assert.equal(current.schema, 2);
@@ -205,13 +205,13 @@ test('legacy history is preserved without attributing its unknown counts or cove
   near(current.gridWh, 10);
   history.append({ gridW: 3600 }, T + 20000);
   history.flush();
-  assert.deepEqual(settings.get('historySlots')[1].legacy, active);
+  assert.deepEqual(settings.get('historyState')?.slots[1].legacy, active);
 });
 
 test('a failed slot write can be retried without losing or duplicating pending energy', () => {
   const map = new Map(); let fail = true;
   const settings = { get: k => map.get(k), set(k, v) {
-    if (k === 'historySlots' && fail) { fail = false; throw new Error('storage failure'); }
+    if (k === 'historyState' && fail) { fail = false; throw new Error('storage failure'); }
     map.set(k, structuredClone(v));
   } };
   const history = new HistoryStore(settings, () => T + 10000);
@@ -219,7 +219,7 @@ test('a failed slot write can be retried without losing or duplicating pending e
   history.append({ gridW: 3600 }, T + 10000);
   assert.throws(() => history.flush(), /storage failure/);
   history.flush(); history.flush();
-  const row = settings.get('historySlots')[0];
+  const row = settings.get('historyState')?.slots[0];
   assert.equal(row.counts.gridW, 2);
   assert.equal(row.coverageMs, 10000);
   near(row.gridWh, 10);
@@ -235,7 +235,7 @@ test('a full hour of interleaved observations supplies four complete quarters to
     if (seconds % 60 === 0) history.flush();
   }
   history.flush();
-  const hours = settings.get('historySlots').filter(row => row.t < t + 3600000);
+  const hours = settings.get('historyState')?.slots.filter(row => row.t < t + 3600000);
   assert.equal(hours.length, 4);
   for (const row of hours) {
     assert.equal(row.coverageMs, SLOT_MS);
@@ -259,7 +259,7 @@ test('the supported one-minute boundary interval is integrated while invalid tim
   history.append({ gridW: 3600 }, T + SLOT_MS - 30000);
   history.append({ gridW: 3600 }, T + SLOT_MS + 30000);
   history.flush();
-  const rows = settings.get('historySlots');
+  const rows = settings.get('historyState')?.slots;
   assert.equal(rows.length, 2);
   for (const row of rows) {
     assert.equal(row.coverageMs, 30000);
