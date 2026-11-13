@@ -112,7 +112,7 @@ This is a configurable estimator, **not a verified implementation of Telge Nät'
 
 Configure `start`, `end`, `weekdays` (0 = Sunday), `peakCount`, `distinctDays` and `rateSekPerKw` from your confirmed price list. Select active `months` (1–12) or explicitly choose **Hela året** (all year). Existing seasonal selections survive edits; all-year tariffs omit `months`. UI and backend share the same validation: full-hour times within one day, unique valid weekdays/months, an integer peak count of 1–31, a non-negative finite rate and an explicit day-selection rule. Empty fields are not treated as zero or a default contract.
 
-Widget labels follow the configured peak count. Tariff edits refresh estimates immediately; cached results with a different tariff configuration or calendar month are hidden until recalculated. Months outside the configured season are labelled inactive. These checks establish configuration consistency, not that the tariff matches Telge Nät’s contract.
+Widget labels follow the configured peak count. Tariff edits refresh the demand estimate immediately. Historical scenario replays keep their periodic schedule; cached results with a different tariff configuration or calendar month are hidden until recalculated. Months outside the configured season are labelled inactive. These checks establish configuration consistency, not that the tariff matches Telge Nät’s contract.
 
 The estimator:
 

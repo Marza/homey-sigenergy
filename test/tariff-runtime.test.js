@@ -20,7 +20,7 @@ class Settings extends EventEmitter {
     this.emit('set', key);
   }
 }
-test('tariff edits immediately refresh keyed estimates without waiting for the periodic timer', async () => {
+test('tariff edits refresh the demand estimate without triggering expensive scenario replay', async () => {
   const file = path.join(__dirname, '../app.js'),
     requireApp = createRequire(file),
     module = { exports: {} };
@@ -42,6 +42,12 @@ test('tariff edits immediately refresh keyed estimates without waiting for the p
   app.homey = { settings, setInterval: () => 1, clearInterval() {} };
   app.log = app.error = () => {};
   app.pollNibe = app.refreshPrices = async () => {};
+  let scenarioCalls = 0;
+  const periodic = app.refreshRecommendation.bind(app);
+  app.refreshRecommendation = () => {
+    scenarioCalls++;
+    return periodic();
+  };
   await app.onInit();
   const history = app.history;
   app.history = {
@@ -72,11 +78,19 @@ test('tariff edits immediately refresh keyed estimates without waiting for the p
   settings.set('demandTariff', edited);
   assert.equal(settings.get('demandEstimate').averageKw, 5);
   assert.equal(settings.get('demandEstimate').tariffKey, tariffKey(edited));
+  assert.equal(scenarioCalls, 1);
+  assert.equal(settings.get('tariffOptimization').status, 'pending');
+  app.refreshRecommendation();
   assert.equal(settings.get('tariffOptimization').baseline.tariffKey, tariffKey(edited));
   settings.set('demandTariff', { ...edited, rateSekPerKw: 0 });
   assert.equal(settings.get('demandEstimate').estimatedSek, 0);
   settings.set('demandTariff', { ...edited, months: [] });
   assert.equal(settings.get('demandEstimate').status, 'error');
+  app.refreshRecommendation();
+  assert.equal(settings.get('tariffOptimization').status, 'error');
+  settings.set('demandTariff', null);
+  assert.equal(settings.get('demandEstimate').status, 'not-configured');
+  assert.equal(settings.get('tariffOptimization').status, 'not-configured');
   assert.equal(settings.get('operationMode').allowHardwareWrites, false);
   await app.onUninit();
   assert.equal(settings.listenerCount('set'), 0);
