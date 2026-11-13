@@ -2,7 +2,8 @@
   "id": "com.local.sigenergy.optimizer",
   "version": "0.17.0",
   "sdk": 3,
-  "compatibility": ">=10.0.0",
+  "author": { "name": "Marza" },
+  "compatibility": ">=12.0.0",
   "name": {
     "en": "Sigenergy Local Monitor",
     "sv": "Sigenergy lokal övervakning"
@@ -116,7 +117,13 @@
       "pair": [
         {
           "id": "list_devices",
-          "template": "list_devices"
+          "template": "list_devices",
+          "navigation": { "next": "add_devices" },
+          "options": { "singular": true }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
         }
       ],
       "settings": [
@@ -241,3 +248,4 @@
     ]
   }
 }
+

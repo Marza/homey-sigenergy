@@ -11,10 +11,9 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.polling = false;
     this.startReader();
   }
-  startReader() {
+  startReader(settings = this.getSettings()) {
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();
-    const settings = this.getSettings();
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
     this.timer = this.homey.setInterval(() => { this.poll().catch(error => this.error(error)); }, seconds * 1000);
@@ -89,7 +88,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     const card = this.homey.flow.getTriggerCard('backup_mode_changed');
     await card.trigger({ mode: backup.mode, ev_stop_requested: backup.evStopRequested, nibe_mode: backup.nibeModeRequested }).catch(e => this.error('Backup flow:', e));
   }
-  async onSettings() { this.startReader(); }
+  async onSettings({ newSettings }) { this.startReader(newSettings); }
   async onUninit() {
     this.stopped = true;
     if (this.timer) this.homey.clearInterval(this.timer);

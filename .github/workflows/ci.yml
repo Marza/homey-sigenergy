@@ -11,8 +11,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - run: npm install --no-audit --no-fund
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
       - run: npm test
       - name: Check matching versions
-        run: node -e "const a=require('./app.json');const p=require('./package.json');if(a.version!==p.version)process.exit(1)"
+        run: npm run check:versions
+      - name: Validate local development manifest and assets
+        run: npm run validate
+      - name: Build Homey app with production dependencies
+        run: npm run build:homey
+      - name: Load packaged Modbus dependency
+        run: node -e "require('./.homeybuild/node_modules/modbus-serial')"
+
