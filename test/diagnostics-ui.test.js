@@ -1,4 +1,5 @@
 'use strict';
+const { attachWidgetApi } = require('./widget-helper');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -75,6 +76,7 @@ function view(file) {
     },
     ready() {},
   };
+  if (file.startsWith('widgets/')) attachWidgetApi(Homey, Clock);
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const browserCopy = path.join(path.dirname(file), 'source-status.js');
   assert.match(html, /<script src="source-status.js"><\/script>/);
@@ -90,6 +92,8 @@ function view(file) {
     document,
     Homey,
     Date: Clock,
+    setTimeout: () => 0,
+    clearTimeout() {},
     setInterval: (callback) => timers.push(callback),
   });
   vm.runInContext(script, context);

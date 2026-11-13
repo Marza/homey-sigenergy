@@ -1,4 +1,5 @@
 'use strict';
+const { attachWidgetApi } = require('./widget-helper');
 const test = require('node:test'),
   assert = require('node:assert/strict');
 const fs = require('node:fs'),
@@ -71,8 +72,11 @@ function view(file, initial = {}) {
     Homey,
     document,
     Date: Clock,
+    setTimeout: () => 0,
+    clearTimeout() {},
     setInterval: (callback) => timers.push(callback),
   });
+  if (file.startsWith('widgets/')) attachWidgetApi(Homey, Clock);
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   for (const match of html.matchAll(/<script src="([^"]+)"><\/script>/g))
     if (!match[1].startsWith('/'))

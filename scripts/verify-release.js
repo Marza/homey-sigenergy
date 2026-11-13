@@ -22,6 +22,7 @@ try {
   if (manifest.version !== app.version || provenance.version !== app.version)
     throw new Error('Archive version mismatch');
   require(path.join(directory, 'node_modules/modbus-serial'));
+  require('./verify-widget').verifyWidget(directory);
   // The normal install command performs this same build before uploading to Homey.
   execFileSync(
     process.execPath,

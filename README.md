@@ -19,7 +19,7 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | Tibber prices and EV planning | Cached consumption prices and a price-based charging planner | Internet needed for refresh; planning only; no automatic execution |
 | Peak shaving | Historical replay, configurable caps/reserves, stored advisory recommendations | Illustrative scenarios, not a forecast or guaranteed power limit |
 | Demand charges | Configurable hourly peak selection and historical tariff scenarios | Provisional; dated Telge rules documented, billing comparison pending |
-| Dashboard | Energy overview widget candidate with history, recommendations and demand estimates | Packaging and Dashboard runtime unverified; history is not live telemetry |
+| Dashboard | Energy overview widget with history, outdoor temperature, recommendations and demand estimates | Registered and package-checked; physical Dashboard testing pending; history is not live telemetry |
 | Marginal energy costs | Separate import/export, tax, grid-fee and battery-wear calculations | Standalone tested module; not connected to production prices, Dashboard or runtime scenario ranking |
 
 The app settings page is primarily Swedish. It includes **Översikt** (overview), **Elpriser** (prices), **Historik** (history), **Optimering** (optimization), **Diagnostik** (diagnostics) and **Inställningar** (settings).
@@ -34,7 +34,7 @@ Homey polling is not fuse protection, load balancing or an outage fail-safe. Kee
 
 ## Prerequisites
 
-- A local Homey installation. The manifest declares SDK 3, local platform only and Homey firmware `>=12.0.0`; this is a declared minimum, not a tested compatibility matrix.
+- A local Homey installation. The manifest declares SDK 3, local platform only and Homey firmware `>=12.3.0`; this is a declared minimum, not a tested compatibility matrix.
 - Sigenergy reachable from Homey over the LAN, with Modbus TCP read access enabled in mySigen and permitted by firmware/network configuration.
 - Verified register addresses, widths, scaling, word order and address-offset convention for your hardware. The current Sigenergy map derives from an [unofficial V2.5 protocol transcription](https://github.com/krzychdre/modbus-sigenergy/blob/main/Sigenergy_Modbus_Protocol_V2.5.md).
 - Git, Node.js and npm on the development computer. Use Node.js 24 (the CI version) and npm. The project requires Node.js 24+ and pins Homey CLI 4.6.3 in its development dependencies. Follow the [official setup requirements](https://apps.developer.homey.app/the-basics/getting-started) for Docker and local execution.
@@ -66,7 +66,7 @@ Use a development computer on the same network as Homey and start Docker when re
 npx --no-install homey app install
 ```
 
-See the [official Homey CLI reference](https://apps.developer.homey.app/the-basics/getting-started/homey-cli) for validation, runtime options and troubleshooting. The commands above use the repository's locked CLI; a global installation is unnecessary. Validation uses the `debug` level for local development, not App Store certification. The battery device class requires Homey 12.0.0 or newer; the declared minimum is not proof of physical compatibility. See [installation verification](docs/installation-verification.md) for observed results and the pending hardware checklist.
+See the [official Homey CLI reference](https://apps.developer.homey.app/the-basics/getting-started/homey-cli) for validation, runtime options and troubleshooting. The commands above use the repository's locked CLI; a global installation is unnecessary. Validation uses the `debug` level for local development, not App Store certification. The widget raises the app minimum to Homey 12.3.0; the declared minimum is not proof of physical compatibility. See [installation verification](docs/installation-verification.md) for observed results and the pending hardware checklist.
 
 Pair **Sigenergy plant**, then open the device's advanced settings and replace the example host before relying on readings. Pairing does not discover an inverter; it returns one fixed plant identity.
 
@@ -139,7 +139,7 @@ Diagnostics use the same source-status rules in the backend, settings and widget
 
 The settings page refreshes every 15 seconds and the widget every 30 seconds. Failed, disabled, stale or future-dated sources hide their overview readings and temperature/BMS context. Changing Nibe connection settings clears its old snapshot and ignores in-flight results from the earlier configuration. Re-enabling a source requires a new reading. Automatic battery inputs reject failed, stale and future-dated telemetry and exclude failed fields; otherwise manual simulation values apply. Sigenergy status expires after at least 30 seconds (or three configured polling intervals), Nibe/EVDC after 90 seconds (EVDC also allows three polling intervals), and optional battery data after ten minutes. These are software freshness limits, not guarantees of sensor accuracy.
 
-The overview and widget use saved quarter-hour averages rather than live device capabilities and label them as history. Historical charts remain available with their timestamps; overview cards clear on missing/failed history or intervals older than 30 minutes. Recommendations older than 35 minutes or dated in the future are hidden. Its packaging and behavior still need physical Homey verification.
+The overview and widget use saved quarter-hour averages rather than live device capabilities and label them as history. Historical charts remain available with their timestamps; overview cards clear on missing/failed history or intervals older than 30 minutes. Recommendations older than 35 minutes or dated in the future are hidden. The widget uses its scoped read-only API and is checked in the built app and extracted release archive. Local synthetic light/dark browser previews are available; add/remove and runtime behavior on physical Homey remain unverified. See [Dashboard verification](docs/dashboard-widget.md).
 
 The settings page and runtime use the same [shared simulation engine](lib/optimization/simulator.js), including validation, chronological interval handling, battery limits and minimum-data checks. The settings-page simulator assumes no recharge. Advanced replay accepts explicitly supplied unused solar surplus and timestamp-matched prices; it does not infer surplus from PV production. Runtime recommendations refresh every 15 minutes. Tariff scenarios compare the same hourly model for baseline and replay; without complete matching energy-price inputs, runtime results concern demand charges only, not total economic savings.
 
@@ -160,7 +160,7 @@ npm run build:homey
 
 `npm run check` enforces ESLint correctness rules (including inline view scripts), Prettier formatting and runtime coverage gates: 90% lines/statements, 90% functions and 85% branches. Coverage reports are available as CI artifacts. See [contributing](CONTRIBUTING.md#code-quality-and-formatting) for commands, scope and limitations.
 
-`npm test` runs the built-in Node.js test runner. Tests cover charging plans, solar allocation, Tibber normalization/refresh, history, advisory backup logic, mocked Nibe/EVDC reads, device connection-setting changes, telemetry validation, diagnostics, replay, demand charges and marginal costs. They do not validate physical registers, Homey installation, widget packaging, actual API contracts or safety behavior on hardware.
+`npm test` runs the built-in Node.js test runner. Tests cover charging plans, solar allocation, Tibber normalization/refresh, history, advisory backup logic, mocked Nibe/EVDC reads, device connection-setting changes, telemetry validation, diagnostics, replay, demand charges and marginal costs. Widget registration, API projection, error recovery and packaged files also have automated checks. These checks do not validate physical registers, Homey installation, actual Dashboard compatibility or safety behavior on hardware.
 
 [GitHub Actions](.github/workflows/ci.yml) uses Node.js 24 and `npm ci` with the committed lockfile. It runs lint/format checks, the full test suite with coverage thresholds, matching manifest/package version checks, local-development Homey validation and a build including production dependencies on pushes and pull requests. Tests are limited to `test/*.test.js` so generated build copies are not run twice. `.homeyignore` excludes tests and development documentation from the app bundle. CI does not install on physical Homey or certify App Store readiness.
 

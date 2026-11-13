@@ -35,7 +35,7 @@ jobs:
       - name: Validate local development manifest and assets
         run: npm run validate
       - name: Build Homey app with production dependencies
-        run: npm run build:homey
+        run: npm run build:homey && node scripts/verify-widget.js
       - name: Load packaged Modbus dependency
         run: node -e "require('./.homeybuild/node_modules/modbus-serial')"
 

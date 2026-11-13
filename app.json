@@ -2,8 +2,10 @@
   "id": "com.local.sigenergy.optimizer",
   "version": "0.17.0",
   "sdk": 3,
-  "author": { "name": "Marza" },
-  "compatibility": ">=12.0.0",
+  "author": {
+    "name": "Marza"
+  },
+  "compatibility": ">=12.3.0",
   "name": {
     "en": "Sigenergy Local Monitor",
     "sv": "Sigenergy lokal övervakning"
@@ -15,13 +17,21 @@
   "category": "energy",
   "permissions": [],
   "api": {
-    "exportHistory": { "method": "GET", "path": "/history/export", "public": false },
+    "exportHistory": {
+      "method": "GET",
+      "path": "/history/export",
+      "public": false
+    },
     "previewHistoryImport": {
       "method": "POST",
       "path": "/history/import/preview",
       "public": false
     },
-    "importHistory": { "method": "POST", "path": "/history/import", "public": false }
+    "importHistory": {
+      "method": "POST",
+      "path": "/history/import",
+      "public": false
+    }
   },
   "platforms": ["local"],
   "capabilities": {
@@ -125,8 +135,12 @@
         {
           "id": "list_devices",
           "template": "list_devices",
-          "navigation": { "next": "add_devices" },
-          "options": { "singular": true }
+          "navigation": {
+            "next": "add_devices"
+          },
+          "options": {
+            "singular": true
+          }
         },
         {
           "id": "add_devices",
@@ -253,5 +267,25 @@
         ]
       }
     ]
+  },
+  "widgets": {
+    "energy-overview": {
+      "id": "energy-overview",
+      "name": {
+        "en": "Energy overview",
+        "sv": "Energiöversikt"
+      },
+      "description": {
+        "en": "Read-only SigEnergy snapshot",
+        "sv": "Läsbaserad SigEnergy-översikt"
+      },
+      "settings": [],
+      "api": {
+        "getOverview": {
+          "method": "GET",
+          "path": "/"
+        }
+      }
+    }
   }
 }
