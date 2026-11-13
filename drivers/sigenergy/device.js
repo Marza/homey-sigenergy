@@ -22,30 +22,62 @@ module.exports = class SigenergyDevice extends Homey.Device {
     const since = new Date().toISOString();
     const configured = !!String(settings.host || '').trim();
     this.updateSources({
-      sigenergy: { configured, enabled: configured, since, maxAgeMs: Math.max(30000, seconds * 3000) },
-      evdc: { configured, enabled: configured && !!settings.evdcEnabled, since, maxAgeMs: Math.max(90000, seconds * 3000) },
+      sigenergy: {
+        configured,
+        enabled: configured,
+        since,
+        maxAgeMs: Math.max(30000, seconds * 3000),
+      },
+      evdc: {
+        configured,
+        enabled: configured && !!settings.evdcEnabled,
+        since,
+        maxAgeMs: Math.max(90000, seconds * 3000),
+      },
     });
-    for (const key of ['sigenergyStatus','batteryTelemetry','lastEvdc','sigenergyError','batteryTelemetryError','evdcError']) this.homey.settings.set(key, null);
+    for (const key of [
+      'sigenergyStatus',
+      'batteryTelemetry',
+      'lastEvdc',
+      'sigenergyError',
+      'batteryTelemetryError',
+      'evdcError',
+    ])
+      this.homey.settings.set(key, null);
     const cleared = this.clearEvdc();
-    this.timer = this.homey.setInterval(() => { this.poll().catch(error => this.error(error)); }, seconds * 1000);
-    cleared.then(() => this.poll()).catch(error => this.error(error));
+    this.timer = this.homey.setInterval(() => {
+      this.poll().catch((error) => this.error(error));
+    }, seconds * 1000);
+    cleared.then(() => this.poll()).catch((error) => this.error(error));
   }
   updateSources(sources) {
-    this.homey.settings.set('sourceConfig', { ...this.homey.settings.get('sourceConfig'), ...sources });
+    this.homey.settings.set('sourceConfig', {
+      ...this.homey.settings.get('sourceConfig'),
+      ...sources,
+    });
   }
   async clearEvdc() {
-    await Promise.all(['measure_ev_soc','measure_ev_power'].map(id => this.setCapabilityValue(id, null).catch(e => this.error(e))));
+    await Promise.all(
+      ['measure_ev_soc', 'measure_ev_power'].map((id) =>
+        this.setCapabilityValue(id, null).catch((e) => this.error(e)),
+      ),
+    );
   }
   async poll() {
     if (this.polling || this.stopped) return;
     this.polling = true;
-    const reader = this.reader, generation = this.generation, settings = this.activeSettings;
+    const reader = this.reader,
+      generation = this.generation,
+      settings = this.activeSettings;
     const current = () => !this.stopped && generation === this.generation;
     try {
       const data = await reader.snapshot();
       if (!current()) return;
       const backup = this.island.update(data.gridMode, data.soc);
-      this.homey.settings.set('sigenergyStatus', { readAt: new Date().toISOString(), gridMode: data.gridMode });
+      this.homey.settings.set('sigenergyStatus', {
+        readAt: new Date().toISOString(),
+        gridMode: data.gridMode,
+      });
       this.homey.settings.set('sigenergyError', null);
       // Optional telemetry is deliberately decoupled from the fast polling loop.
       const now = Date.now();
@@ -56,16 +88,28 @@ module.exports = class SigenergyDevice extends Homey.Device {
           if (!current()) return;
           this.homey.settings.set('batteryTelemetryError', null);
           this.homey.settings.set('batteryTelemetry', {
-            ...optional, values: { ...optional.values, capacityKWh: data.capacityKWh, soc: data.soc },
+            ...optional,
+            values: { ...optional.values, capacityKWh: data.capacityKWh, soc: data.soc },
           });
-        } catch (error) { if (!current()) return; this.homey.settings.set('batteryTelemetryError', error.message); this.error('Optional battery probe:', error.message); }
+        } catch (error) {
+          if (!current()) return;
+          this.homey.settings.set('batteryTelemetryError', error.message);
+          this.error('Optional battery probe:', error.message);
+        }
       } else {
         const previous = this.homey.settings.get('batteryTelemetry');
-        if (previous) this.homey.settings.set('batteryTelemetry', {
-          ...previous, values: { ...previous.values, capacityKWh: data.capacityKWh, soc: data.soc },
-        });
+        if (previous)
+          this.homey.settings.set('batteryTelemetry', {
+            ...previous,
+            values: { ...previous.values, capacityKWh: data.capacityKWh, soc: data.soc },
+          });
       }
-      this.homey.app.history?.append({ gridW: data.gridW, pvW: data.pvW, essW: data.essW, soc: data.soc });
+      this.homey.app.history?.append({
+        gridW: data.gridW,
+        pvW: data.pvW,
+        essW: data.essW,
+        soc: data.soc,
+      });
       await this.publishBackup(backup);
       if (!current()) return;
       await Promise.all([
@@ -108,25 +152,45 @@ module.exports = class SigenergyDevice extends Homey.Device {
       this.homey.settings.set('sigenergyError', String(error.message));
       await this.publishBackup(this.island.communicationLost());
       await this.setUnavailable(`Modbus read failed: ${error.message}`);
-    } finally { this.polling = false; }
+    } finally {
+      this.polling = false;
+    }
   }
   async publishBackup(backup) {
     this.homey.settings.set('backupStatus', { ...backup, observedAt: new Date().toISOString() });
     if (backup.mode === this.lastBackupState) return;
     this.lastBackupState = backup.mode;
-    this.homey.app.history?.event('backup-mode', { mode: backup.mode, observed: backup.observed, requested: backup.nibeModeRequested, controlApplied: false });
+    this.homey.app.history?.event('backup-mode', {
+      mode: backup.mode,
+      observed: backup.observed,
+      requested: backup.nibeModeRequested,
+      controlApplied: false,
+    });
     this.log('Backup state:', backup.mode, 'EV stop requested:', backup.evStopRequested);
     // Flow trigger is advisory. It does not confirm an EVDC stop or Nibe change.
     const card = this.homey.flow.getTriggerCard('backup_mode_changed');
-    await card.trigger({ mode: backup.mode, ev_stop_requested: backup.evStopRequested, nibe_mode: backup.nibeModeRequested }).catch(e => this.error('Backup flow:', e));
+    await card
+      .trigger({
+        mode: backup.mode,
+        ev_stop_requested: backup.evStopRequested,
+        nibe_mode: backup.nibeModeRequested,
+      })
+      .catch((e) => this.error('Backup flow:', e));
   }
-  async onSettings({ newSettings }) { this.startReader(newSettings); }
-  async onDeleted() { await this.onUninit(); }
+  async onSettings({ newSettings }) {
+    this.startReader(newSettings);
+  }
+  async onDeleted() {
+    await this.onUninit();
+  }
   async onUninit() {
     this.stopped = true;
     this.generation = (this.generation || 0) + 1;
     const config = this.homey.settings.get('sourceConfig') || {};
-    this.updateSources({ sigenergy: { ...config.sigenergy, enabled: false }, evdc: { ...config.evdc, enabled: false } });
+    this.updateSources({
+      sigenergy: { ...config.sigenergy, enabled: false },
+      evdc: { ...config.evdc, enabled: false },
+    });
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();
   }
