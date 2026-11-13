@@ -242,3 +242,36 @@ test('widget clears missing/invalid/read-error/off-season and old-month estimate
   assert.match(v.element('demandState').textContent, /kunde inte läsas/);
   assert.equal(v.element('demandPeakLabel').textContent, 'Medel av timtoppar');
 });
+
+test('Telge holiday calendar survives settings edits and invalidates old widget results', () => {
+  const tariff = { ...base(), calendar: 'se-telge' };
+  const v = settings({ demandTariff: tariff });
+  v.run('bindTariffSettings(Homey)');
+  assert.equal(v.element('tariffCalendar').value, 'se-telge');
+  v.element('saveTariff').onclick();
+  assert.equal(v.values.demandTariff.calendar, 'se-telge');
+  assert.match(v.element('tariffConfigStatus').textContent, /Telges helgdagsundantag/);
+  const result = {
+    ...estimate(tariff),
+    coverage: { expectedHours: 260, completeHours: 5, missingHours: 100, pendingHours: 155 },
+  };
+  const widget = view('widgets/energy-overview/public/index.html', {
+    demandTariff: tariff,
+    demandEstimate: result,
+    tariffOptimization: {
+      status: 'provisional',
+      baseline: result,
+      best: { simulatedDemandSek: 100, demandSavingSek: 20 },
+    },
+  });
+  widget.run('onHomeyReady(Homey)');
+  assert.match(
+    widget.element('demandState').textContent,
+    /5\/260 mättimmar.*100 saknade.*155 återstående/,
+  );
+  assert.match(widget.element('savingState').textContent, /observerade timmar.*100 saknade/);
+  widget.values.demandTariff = base();
+  widget.refresh();
+  assert.equal(widget.element('demandKw').textContent, '–');
+  assert.equal(widget.element('simSaving').textContent, '–');
+});

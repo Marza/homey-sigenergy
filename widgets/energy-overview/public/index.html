@@ -210,6 +210,10 @@
                     : r?.reason || 'Otillräcklig historik',
               );
             });
+            const coverageText = (coverage) =>
+              coverage
+                ? ` · ${coverage.completeHours}/${coverage.expectedHours} mättimmar · ${coverage.missingHours} saknade · ${coverage.pendingHours} återstående`
+                : ' · Månadstäckning okänd';
             get('demandTariff', (tariffError, tariff) => {
               const clear = (message) => {
                 for (const id of ['demandKw', 'demandSek', 'simDemand', 'simSaving']) set(id, '–');
@@ -260,12 +264,16 @@
                   valid
                     ? 'Preliminär · ' +
                         tariff.peakCount +
-                        ' kompletta timtoppar · Ej verifierad tariff'
+                        ' kompletta timtoppar · Ej verifierad tariff' +
+                        coverageText(r.coverage)
                     : error
                       ? 'Beräkningen kunde inte läsas'
                       : !matches
                         ? 'Inväntar beräkning för sparad tariff och aktuell månad'
-                        : 'Otillräcklig data för ' + tariff.peakCount + ' timtoppar',
+                        : 'Otillräcklig data för ' +
+                          tariff.peakCount +
+                          ' timtoppar' +
+                          coverageText(r?.coverage),
                 );
               });
               get('tariffOptimization', (error, r) => {
@@ -288,7 +296,8 @@
                 set(
                   'savingState',
                   valid
-                    ? 'Historiskt scenario · Endast effektavgift · Ej verifierad tariff'
+                    ? 'Historiskt scenario för observerade timmar · Endast effektavgift · Ej verifierad tariff' +
+                        coverageText(r.baseline?.coverage)
                     : 'Inväntar tillräckliga beräkningar för sparad tariff och aktuell månad · Ingen garanterad besparing',
                 );
               });
