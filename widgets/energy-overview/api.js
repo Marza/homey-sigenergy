@@ -17,7 +17,14 @@ function coverage(value) {
   ]);
 }
 function estimate(value) {
-  const result = pick(value, ['month', 'tariffKey', 'status', 'averageKw', 'estimatedSek']);
+  const result = pick(value, [
+    'month',
+    'tariffKey',
+    'status',
+    'averageKw',
+    'estimatedSek',
+    'fetchedAt',
+  ]);
   return result && { ...result, coverage: coverage(value.coverage) };
 }
 function publicStatus(status) {
@@ -85,12 +92,23 @@ function getOverview({ homey }, now) {
     optimization = read('tariffOptimization');
   const meterState = read('tibberConsumptionHistory');
   const meterEstimate = read('meterDemandEstimate');
+  const consumptionSync = read('tibberConsumptionSync');
+  const sync =
+    consumptionSync?.configRevision &&
+    consumptionSync.configRevision === sourceValues.sourceConfig?.tibber?.revision
+      ? pick(consumptionSync, ['status', 'lastAttemptAt', 'lastSuccessAt'])
+      : null;
   const values = {
     meterDemandEstimate:
       meterState?.configRevision &&
       meterState.configRevision === sourceValues.sourceConfig?.tibber?.revision
-        ? estimate(meterEstimate)
-        : null,
+        ? {
+            ...estimate(meterEstimate),
+            sync,
+          }
+        : sync
+          ? { status: 'no-meter-history', sync }
+          : null,
     historyState: {
       schema: 3,
       slots: latest

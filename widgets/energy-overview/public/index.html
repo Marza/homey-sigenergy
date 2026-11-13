@@ -136,9 +136,9 @@
           </div>
           <div class="tile">Preliminär effektavgift<strong id="meterSek">–</strong></div>
         </div>
-        <small id="meterState" role="status">Ingen importerad mätarhistorik</small>
+        <small id="meterState" role="status">Ingen mätarhistorik ännu</small>
         <small
-          >Engångsimport av timvis förbrukning. Ingen batteribesparing beräknas för dessa
+          >Daglig hämtning av timvis förbrukning. Ingen batteribesparing beräknas för dessa
           timmar.</small
         >
       </section>
@@ -268,6 +268,18 @@
               return;
             }
             get('meterDemandEstimate', (error, r) => {
+              const fetched = Date.parse(r?.fetchedAt);
+              const syncText =
+                r?.sync?.status === 'error'
+                  ? ' · Hämtningen misslyckades; nytt försök senare'
+                  : r?.sync?.status === 'updating'
+                    ? ' · Hämtar data…'
+                    : '';
+              const fetchedText = Number.isFinite(fetched)
+                ? ' · Hämtad ' +
+                  new Date(fetched).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' })
+                : '';
+
               const valid =
                 !error &&
                 TariffConfig.matchesResult(r, tariff) &&
@@ -287,8 +299,11 @@
               set(
                 'meterState',
                 valid
-                  ? 'Tibber timhistorik · Preliminär avgift' + coverageText(r.coverage)
-                  : 'Ingen tillräcklig importerad mätarhistorik för aktuell tariff/månad',
+                  ? 'Tibber timhistorik · Preliminär avgift' +
+                      coverageText(r.coverage) +
+                      fetchedText +
+                      syncText
+                  : 'Ingen tillräcklig mätarhistorik för aktuell tariff/månad' + syncText,
               );
             });
             get('demandEstimate', (error, r) => {

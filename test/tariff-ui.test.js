@@ -286,12 +286,23 @@ test('meter-import reference remains separate and hides after binding changes', 
     v = view('widgets/energy-overview/public/index.html', {
       sourceConfig: { tibber: { revision: 'r' } },
       tibberConsumptionHistory: { configRevision: 'r' },
-      meterDemandEstimate: { ...r, averageKw: 7, estimatedSek: 700 },
+      meterDemandEstimate: {
+        ...r,
+        averageKw: 7,
+        estimatedSek: 700,
+        fetchedAt: '2026-11-12T10:00Z',
+      },
+      tibberConsumptionSync: { configRevision: 'r', status: 'error' },
       demandTariff: tariff,
       demandEstimate: r,
     });
   v.run('onHomeyReady(Homey)');
   assert.equal(v.element('meterKw').textContent, '7 kW');
+  assert.match(v.element('meterState').textContent, /Hämtad/);
+  assert.match(v.element('meterState').textContent, /Hämtningen misslyckades/);
+  v.values.tibberConsumptionSync.status = 'ok';
+  v.refresh();
+  assert.doesNotMatch(v.element('meterState').textContent, /misslyckades/);
   assert.equal(v.element('demandKw').textContent, '4 kW');
   v.values.sourceConfig.tibber.revision = 'changed';
   v.refresh();
