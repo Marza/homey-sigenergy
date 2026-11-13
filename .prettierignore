@@ -10,3 +10,4 @@ widgets/energy-overview/public/price-coverage.js
 settings/tariff-config.js
 widgets/energy-overview/public/tariff-config.js
 settings/simulator.js
+settings/charging-planner.js
