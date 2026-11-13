@@ -1,0 +1,7 @@
+node_modules/
+.homeybuild/
+coverage/
+dist/
+package-lock.json
+settings/source-status.js
+widgets/energy-overview/public/source-status.js

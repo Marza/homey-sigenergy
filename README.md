@@ -143,15 +143,16 @@ Developer entry points in [app.js](app.js) include `getPricePlan(currentSoc)`, `
 
 ```sh
 npm ci
-npm test
-npm run check:versions
+npm run check
 npm run validate
 npm run build:homey
 ```
 
+`npm run check` enforces ESLint correctness rules (including inline view scripts), Prettier formatting and runtime coverage gates: 90% lines/statements, 90% functions and 85% branches. Coverage reports are available as CI artifacts. See [contributing](CONTRIBUTING.md#code-quality-and-formatting) for commands, scope and limitations.
+
 `npm test` runs the built-in Node.js test runner. Tests cover charging plans, solar allocation, Tibber normalization/refresh, history, advisory backup logic, mocked Nibe/EVDC reads, device connection-setting changes, telemetry validation, diagnostics, replay, demand charges and marginal costs. They do not validate physical registers, Homey installation, widget packaging, actual API contracts or safety behavior on hardware.
 
-[GitHub Actions](.github/workflows/ci.yml) uses Node.js 24 and `npm ci` with the committed lockfile. It runs tests, matching manifest/package version checks, local-development Homey validation and a build including production dependencies on pushes and pull requests. Tests are limited to `test/*.test.js` so generated build copies are not run twice. `.homeyignore` excludes tests and development documentation from the app bundle. CI does not install on physical Homey or certify App Store readiness.
+[GitHub Actions](.github/workflows/ci.yml) uses Node.js 24 and `npm ci` with the committed lockfile. It runs lint/format checks, the full test suite with coverage thresholds, matching manifest/package version checks, local-development Homey validation and a build including production dependencies on pushes and pull requests. Tests are limited to `test/*.test.js` so generated build copies are not run twice. `.homeyignore` excludes tests and development documentation from the app bundle. CI does not install on physical Homey or certify App Store readiness.
 
 | Path | Purpose |
 | --- | --- |
