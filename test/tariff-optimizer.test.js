@@ -54,3 +54,14 @@ test('incomplete replay does not invent a counterfactual peak', () => {
   const r = evaluateTariffScenarios(rows, config, tariff, '2026-01');
   assert.equal(r.status, 'insufficient-data');
 });
+
+test('scalar baseline cost and consumption prices never unlock financial replay ranking', () => {
+  const r = evaluateTariffScenarios(slots, config, tariff, '2026-01', {
+    baselineEnergySek: 10000,
+    pricesSekPerKWh: Object.fromEntries(slots.map((s) => [s.t, 1])),
+  });
+  assert.equal(r.financiallyComparable, false);
+  assert.equal(r.rankingBasis, 'demand-charge-only');
+  assert.equal(r.economicComparison.reason, 'replay-energy-basis-incomplete');
+  assert.ok(r.candidates.every((c) => c.netSavingSek === null && c.energyDeltaSek === null));
+});

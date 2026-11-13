@@ -297,3 +297,58 @@ test('meter-import reference remains separate and hides after binding changes', 
   v.refresh();
   assert.equal(v.element('meterKw').textContent, '–');
 });
+
+const costContract = () => ({
+  schema: 1,
+  currency: 'SEK',
+  source: 'Synthetic contract',
+  checkedOn: '2026-11-13',
+  importIncludesEnergyTax: true,
+  energyTaxExVatSekPerKWh: 0,
+  gridImportExVatSekPerKWh: 0.2,
+  gridExportBenefitSekPerKWh: 0.05,
+  gridExportFeeSekPerKWh: 0,
+  vatRate: 0.25,
+  batteryWearSekPerKWh: 0.1,
+});
+test('cost form preserves explicit contract values and validates blanks/tax basis before saving', () => {
+  const v = settings({ costContract: costContract() });
+  v.run('bindCostSettings(Homey)');
+  assert.equal(v.element('costImportIncludesEnergyTax').checked, true);
+  assert.equal(v.element('costVatRate').value, 0.25);
+  v.element('saveCostContract').onclick();
+  assert.deepEqual(v.values.costContract, costContract());
+  assert.match(v.element('costMessage').textContent, /Ingen styrning/);
+  const before = v.writes.length;
+  v.element('costVatRate').value = '';
+  v.element('saveCostContract').onclick();
+  assert.equal(v.writes.length, before);
+  assert.match(v.element('costMessage').textContent, /Fyll i/);
+  v.element('costVatRate').value = '0.25';
+  v.element('costEnergyTax').value = '0.4';
+  v.element('saveCostContract').onclick();
+  assert.equal(v.writes.length, before);
+  assert.match(v.element('costMessage').textContent, /ingår redan/);
+});
+test('cost form handles absent/invalid data and read/write failures without replacing a contract', () => {
+  const empty = settings();
+  empty.run('bindCostSettings(Homey)');
+  empty.element('saveCostContract').onclick();
+  assert.equal(empty.writes.length, 0);
+  const read = settings();
+  read.failedReads.add('costContract');
+  read.run('bindCostSettings(Homey)');
+  assert.equal(read.element('saveCostContract').disabled, true);
+  read.element('saveCostContract').onclick();
+  assert.equal(read.writes.length, 0);
+  const invalid = settings({ costContract: {} });
+  invalid.run('bindCostSettings(Homey)');
+  assert.match(invalid.element('costMessage').textContent, /Ogiltigt/);
+  const write = settings({ costContract: costContract() });
+  write.run('bindCostSettings(Homey)');
+  write.failWrites();
+  write.element('costVatRate').value = '0.2';
+  write.element('saveCostContract').onclick();
+  assert.equal(write.values.costContract.vatRate, 0.25);
+  assert.equal(write.element('costMessage').textContent, 'Write failed');
+});

@@ -17,6 +17,7 @@
   "category": "energy",
   "permissions": [],
   "api": {
+    "previewEconomics": { "method": "POST", "path": "/economics/preview", "public": false },
     "exportHistory": {
       "method": "GET",
       "path": "/history/export",

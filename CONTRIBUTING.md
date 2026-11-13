@@ -40,3 +40,5 @@ Widget definitions live in `widgets/energy-overview/widget.compose.json` and are
 The shared charging planner is `lib/charging/planner.js`; the same sync command updates `settings/charging-planner.js`. Keep input/timezone validation, DST resolution and preview UI tests aligned with the backend; never add charging commands to the preview route.
 
 Widget sizing/fit rules live in `lib/widget-layout.js`; the sync command updates `widgets/energy-overview/public/widget-layout.js`. Measure intrinsic content, preserve overflow when constrained, and avoid intercepting global touch/wheel gestures or accessing the Dashboard parent document.
+
+Cost contract validation is shared by Node and settings through `lib/pricing/cost-model.js`; the sync script generates `settings/cost-model.js`. Preserve explicit component provenance, tax inclusion, directional energy and matching battery boundaries. Economic-preview inputs are user-supplied, and must not unlock runtime financial ranking without a verified source and complete replay basis.

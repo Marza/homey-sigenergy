@@ -1,6 +1,10 @@
 'use strict';
 // Manifest routes are authenticated by Homey; none are public.
+const { compareEconomicScenarios } = require('./lib/pricing/economic-comparison');
 module.exports = {
+  async previewEconomics({ homey, body }) {
+    return compareEconomicScenarios(body, homey.settings.get('costContract'));
+  },
   async previewCharging({ homey, body }) {
     return homey.app.getChargingPreview(body);
   },

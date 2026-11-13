@@ -9,6 +9,7 @@
     <script src="simulator.js"></script>
     <script src="charging-planner.js"></script>
     <script src="tariff-config.js"></script>
+    <script src="cost-model.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -441,6 +442,58 @@
           Spara simuleringsparametrar
         </button>
         <p id="optimizerMessage" role="status"></p>
+      </div>
+      <div class="settingsGroup">
+        <h3>Ekonomiska jämförelser – avtalsunderlag</h3>
+        <p class="note">
+          Full ekonomisk rankning är inte tillgänglig för historikens nuvarande simulering. Den
+          saknar separata import-/exportflöden och jämförbar batterienergi. Effektavgiften redovisas
+          separat.
+        </p>
+        <p class="sub">
+          Ange endast rörliga tillägg som inte redan ingår i priset. Importpriset ska inkludera
+          moms. Exportersättningen är ett separat signerat belopp efter tillämplig moms. Inga
+          aktuella avtalspriser förifylls.
+        </p>
+        <label
+          >Avtalskälla / prisunderlag <input id="costSource" type="text" maxlength="300"
+        /></label>
+        <label>Kontrollerat datum <input id="costCheckedOn" type="date" /></label>
+        <label
+          ><input id="costImportIncludesEnergyTax" type="checkbox" /> Energiskatt ingår redan i
+          importpriset (tilläggsskatt ska vara 0)</label
+        >
+        <label
+          >Tillägg energiskatt exkl. moms (kr/kWh)
+          <input id="costEnergyTax" type="number" min="0" step="any"
+        /></label>
+        <label
+          >Tillägg rörlig importnätavgift exkl. moms (kr/kWh)
+          <input id="costGridImport" type="number" min="0" step="any"
+        /></label>
+        <label
+          >Exportnytta efter tillämplig moms (kr/kWh)
+          <input id="costExportBenefit" type="number" step="any"
+        /></label>
+        <label
+          >Exportavgift efter tillämplig moms (kr/kWh)
+          <input id="costExportFee" type="number" min="0" step="any"
+        /></label>
+        <label
+          >Momssats för tillägg (0–1)
+          <input id="costVatRate" type="number" min="0" max="1" step="any"
+        /></label>
+        <label
+          >Antaget batterislitage för kostnadsjämförelse (kr/kWh)
+          <input id="costBatteryWear" type="number" min="0" step="any"
+        /></label>
+        <p class="sub">
+          Slitagevärdet här används för kostnadsjämförelsen. Simuleringens slitageantagande sparas
+          separat ovan. Fasta avgifter ingår inte. Sparat underlag är användarangivet och verifieras
+          inte av appen.
+        </p>
+        <button type="button" id="saveCostContract">Spara kostnadsunderlag</button>
+        <p id="costMessage" role="status"></p>
       </div>
       <div class="settingsGroup">
         <h3>Nibe SMO S40 – lokal avläsning</h3>
@@ -1344,7 +1397,72 @@
           });
         };
       }
+      function bindCostSettings(Homey) {
+        const fields = {
+          energyTaxExVatSekPerKWh: 'costEnergyTax',
+          gridImportExVatSekPerKWh: 'costGridImport',
+          gridExportBenefitSekPerKWh: 'costExportBenefit',
+          gridExportFeeSekPerKWh: 'costExportFee',
+          vatRate: 'costVatRate',
+          batteryWearSekPerKWh: 'costBatteryWear',
+        };
+        const el = (id) => document.getElementById(id),
+          save = el('saveCostContract');
+        save.disabled = true;
+        Homey.get('costContract', (error, value) => {
+          if (error) {
+            el('costMessage').textContent = 'Kostnadsunderlaget kunde inte läsas.';
+            return;
+          }
+          save.disabled = false;
+          if (!value) {
+            el('costMessage').textContent = 'Inget kostnadsunderlag sparat.';
+            return;
+          }
+          try {
+            const c = CostModel.validateCostContract(value);
+            for (const [key, id] of Object.entries(fields)) el(id).value = c[key];
+            el('costSource').value = c.source;
+            el('costCheckedOn').value = c.checkedOn;
+            el('costImportIncludesEnergyTax').checked = c.importIncludesEnergyTax;
+            el('costMessage').textContent =
+              'Användarangivet underlag. Full jämförelse kräver matchande energi och separata import-/exportpriser.';
+          } catch {
+            el('costMessage').textContent =
+              'Ogiltigt sparat kostnadsunderlag. Kontrollera alla fält.';
+          }
+        });
+        save.onclick = () => {
+          if (save.disabled) return;
+          let c;
+          try {
+            if (Object.values(fields).some((id) => String(el(id).value).trim() === ''))
+              throw new Error('Fyll i alla kostnadsfält; ange 0 endast när tillägget saknas.');
+            c = CostModel.validateCostContract({
+              schema: 1,
+              currency: 'SEK',
+              source: el('costSource').value,
+              checkedOn: el('costCheckedOn').value,
+              importIncludesEnergyTax: el('costImportIncludesEnergyTax').checked,
+              ...Object.fromEntries(
+                Object.entries(fields).map(([key, id]) => [key, Number(el(id).value)]),
+              ),
+            });
+          } catch (error) {
+            el('costMessage').textContent = error.message;
+            return;
+          }
+          save.disabled = true;
+          Homey.set('costContract', c, (error) => {
+            save.disabled = false;
+            el('costMessage').textContent = error
+              ? error.message
+              : 'Kostnadsunderlag sparat. Ingen styrning eller full ekonomisk rankning aktiverad.';
+          });
+        };
+      }
       function onHomeyReady(Homey) {
+        bindCostSettings(Homey);
         refreshDiagnostics(Homey);
         setInterval(() => refreshDiagnostics(Homey), 15000);
         const optimizerKeys = [
