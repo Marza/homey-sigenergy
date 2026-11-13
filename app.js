@@ -54,6 +54,7 @@ module.exports = class SigenergyApp extends Homey.App {
       if (['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'].includes(key))
         this.resetNibeSource();
       if (['tibberToken', 'tibberHomeId'].includes(key)) this.configurePrices();
+      if (key === 'demandTariff') this.refreshRecommendation();
     };
     this.homey.settings.on('set', this.settingsChanged);
     this.homey.settings.on('unset', this.settingsChanged);

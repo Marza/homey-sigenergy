@@ -108,9 +108,11 @@ The standalone [cost model](lib/pricing/cost-model.js) treats consumption input 
 
 ## Telge Nät demand-tariff assumptions
 
-This is a configurable estimator, **not a verified implementation of Telge Nät's current contract**. No tariff object or rate is installed by default. The form initially shows 07:00–19:00, weekdays, three peaks and distinct days; tests use five-peak examples and the widget has a five-peak label. None of these establishes your actual tariff.
+This is a configurable estimator, **not a verified implementation of Telge Nät's current contract**. No tariff object or rate is installed by default. The form starts without times, weekdays, peak count, rate, day-selection rule or season assumptions. Existing settings are loaded explicitly. Example tariffs in tests do not establish your contract.
 
-Configure `start`, `end`, `weekdays` (0 = Sunday), `peakCount`, `distinctDays` and `rateSekPerKw` from your confirmed price list. The calculation library also supports optional `months` (1–12); the settings form does not expose season selection and saving it does not preserve that field.
+Configure `start`, `end`, `weekdays` (0 = Sunday), `peakCount`, `distinctDays` and `rateSekPerKw` from your confirmed price list. Select active `months` (1–12) or explicitly choose **Hela året** (all year). Existing seasonal selections survive edits; all-year tariffs omit `months`. UI and backend share the same validation: full-hour times within one day, unique valid weekdays/months, an integer peak count of 1–31, a non-negative finite rate and an explicit day-selection rule. Empty fields are not treated as zero or a default contract.
+
+Widget labels follow the configured peak count. Tariff edits refresh estimates immediately; cached results with a different tariff configuration or calendar month are hidden until recalculated. Months outside the configured season are labelled inactive. These checks establish configuration consistency, not that the tariff matches Telge Nät’s contract.
 
 The estimator:
 

@@ -19,7 +19,7 @@ credentials, exported history, or personally identifying telemetry.
 Clearly distinguish simulated results from values measured on physical devices.
 Do not claim hardware compatibility based solely on unit tests.
 
-Source-status rules live in `lib/source-status.js` and price coverage in `lib/pricing/coverage.js`. After editing them, run `node scripts/sync-source-status.js` to update the packaged browser copies in settings and the widget. Tests reject copies that differ from the shared module.
+Source-status rules live in `lib/source-status.js`, price coverage in `lib/pricing/coverage.js`, and tariff validation/form parsing in `lib/tariff-config.js`. After editing them, run `node scripts/sync-source-status.js` to update the packaged browser copies in settings and the widget. Tests reject copies that differ from the shared module.
 
 ## Code quality and formatting
 
