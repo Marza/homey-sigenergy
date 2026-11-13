@@ -142,6 +142,12 @@ test('widget exposes only matching reference summaries, never the imported house
     values = {
       sourceConfig: { tibber: { revision: 'revision' } },
       tibberConsumptionHistory: state,
+      tibberConsumptionSync: {
+        configRevision: 'revision',
+        status: 'error',
+        token: 'private-sync-token',
+        lastSuccessAt: '2026-11-12T10:00Z',
+      },
       meterDemandEstimate: {
         month: '2026-11',
         status: 'provisional',
@@ -155,6 +161,10 @@ test('widget exposes only matching reference summaries, never the imported house
   assert.equal(getOverview({ homey }).values.meterDemandEstimate.averageKw, 3);
   assert.ok(!JSON.stringify(getOverview({ homey })).includes('private'));
   assert.ok(!JSON.stringify(getOverview({ homey })).includes('importWh'));
+  assert.equal(getOverview({ homey }).values.meterDemandEstimate.sync.status, 'error');
+  assert.ok(!JSON.stringify(getOverview({ homey })).includes('private-sync-token'));
+  delete values.tibberConsumptionHistory;
+  assert.equal(getOverview({ homey }).values.meterDemandEstimate.sync.status, 'error');
   values.sourceConfig.tibber.revision = 'other';
   assert.equal(getOverview({ homey }).values.meterDemandEstimate, null);
 });

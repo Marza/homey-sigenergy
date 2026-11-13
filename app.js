@@ -20,6 +20,7 @@ const { SmoS40Reader } = require('./lib/nibe/smo-s40');
 const { heatPumpPolicy } = require('./lib/backup/heat-pump-policy');
 const { createChargingPreview } = require('./lib/charging/preview');
 const { DEFAULTS, planCharging } = require('./lib/charging/planner');
+const { fetchConsumption, shouldSync } = require('./lib/pricing/consumption-sync');
 const { fetchTibberPrices } = require('./lib/pricing/tibber');
 const { shouldRefreshPrices, hasTomorrowPrices } = require('./lib/pricing/refresh-policy');
 module.exports = class SigenergyApp extends Homey.App {
@@ -89,6 +90,11 @@ module.exports = class SigenergyApp extends Homey.App {
           this.refreshPrices().catch((e) => this.error('Tibber refresh:', e.message));
         }
       },
+      5 * 60 * 1000,
+    );
+    // Defer first consumption fetch to the timer; do not delay app startup on historical data.
+    this.consumptionTimer = this.homey.setInterval(
+      () => this.refreshConsumption().catch(() => this.error('Tibber consumption refresh failed')),
       5 * 60 * 1000,
     );
     await this.refreshPrices().catch((e) => this.log('Price cache not refreshed:', e.message));
@@ -298,6 +304,47 @@ module.exports = class SigenergyApp extends Homey.App {
       });
     }
   }
+  async refreshConsumption(now = new Date()) {
+    if (this.consumptionRefreshing || this.stopping) return;
+    const settings = this.homey.settings;
+    const token = settings.get('tibberToken');
+    const homeId = settings.get('tibberHomeId') || undefined;
+    const revision = settings.get('sourceConfig')?.tibber?.revision;
+    const previous = settings.get('tibberConsumptionSync');
+    if (!shouldSync({ now, token, revision, sync: previous })) return;
+    this.consumptionRefreshing = true;
+    const current = () =>
+      !this.stopping &&
+      settings.get('sourceConfig')?.tibber?.revision === revision &&
+      settings.get('tibberToken') === token &&
+      (settings.get('tibberHomeId') || undefined) === homeId;
+    const sync = {
+      configRevision: revision,
+      lastAttemptAt: now.toISOString(),
+      lastSuccessAt: previous?.configRevision === revision ? previous.lastSuccessAt : null,
+      status: 'updating',
+    };
+    try {
+      settings.set('tibberConsumptionSync', sync);
+      const state = await fetchConsumption({ token, homeId, configRevision: revision, now });
+      if (!current()) return;
+      // Full current-month snapshots intentionally accept upstream corrections; never blend with inverter history.
+      if (state) settings.set('tibberConsumptionHistory', state);
+      settings.set('tibberConsumptionSync', {
+        ...sync,
+        status: state ? 'ok' : 'waiting',
+        lastSuccessAt: state ? now.toISOString() : sync.lastSuccessAt,
+      });
+      this.refreshDemandEstimate();
+    } catch {
+      if (current()) {
+        settings.set('tibberConsumptionSync', { ...sync, status: 'error' });
+        this.refreshDemandEstimate();
+      }
+    } finally {
+      this.consumptionRefreshing = false;
+    }
+  }
   refreshDemandEstimate() {
     try {
       const tariff = this.homey.settings.get('demandTariff');
@@ -457,6 +504,7 @@ module.exports = class SigenergyApp extends Homey.App {
     if (this.recommendationTimer) this.homey.clearInterval(this.recommendationTimer);
     if (this.historyTimer) this.homey.clearInterval(this.historyTimer);
     if (this.priceTimer) this.homey.clearInterval(this.priceTimer);
+    if (this.consumptionTimer) this.homey.clearInterval(this.consumptionTimer);
     if (this.nibeTimer) this.homey.clearInterval(this.nibeTimer);
     if (this.history) this.history.flush();
   }
