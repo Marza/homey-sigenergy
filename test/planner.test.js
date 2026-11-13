@@ -52,3 +52,51 @@ test('rejects overlapping price slots', () => {
     /Overlapping/,
   );
 });
+
+test('uncovered deadlines are explicit even when known slots can meet the target', () => {
+  const plan = planCharging({ now, currentSoc: 29, config: config(), prices: slots() });
+  assert.equal(plan.status, 'partial-prices');
+  assert.ok(plan.priceCoverage.some((c) => !c.complete && c.gaps.length));
+  assert.ok(plan.estimatedCost > 0);
+});
+test('unknown, nonnumeric and malformed prices are never interpreted as zero or discarded', () => {
+  for (const price of [null, undefined, '', NaN, '0', Infinity])
+    assert.throws(
+      () =>
+        planCharging({ now, currentSoc: 29, config: config(), prices: [{ ...slots()[0], price }] }),
+      /Invalid price/,
+    );
+  for (const invalid of [null, 'bad-date'])
+    assert.throws(
+      () =>
+        planCharging({
+          now,
+          currentSoc: 29,
+          config: config(),
+          prices: [{ ...slots()[0], start: invalid }],
+        }),
+      /Invalid price/,
+    );
+  assert.throws(
+    () => planCharging({ now, currentSoc: 29, config: config(), prices: null }),
+    /Invalid price/,
+  );
+});
+test('negative prices remain negative and missing quarters cannot supply energy', () => {
+  const c = config();
+  c.maxChargingPowerKW = 1;
+  const prices = [{ ...slots()[0], price: -2 }];
+  const plan = planCharging({ now, currentSoc: 0, config: c, prices });
+  assert.equal(plan.status, 'unreachable');
+  assert.ok(plan.unmet.length);
+  assert.equal(plan.estimatedCost, -0.5);
+  assert.equal(plan.slots[0].inputKWh, 0.25);
+  assert.ok(plan.priceCoverage[0].gaps.length);
+});
+test('a deadline at now is a zero-length pricing window, not an exception', () => {
+  const c = config();
+  c.minimumDeadline = '21:00';
+  const plan = planCharging({ now, currentSoc: 0, config: c, prices: slots() });
+  assert.equal(plan.priceCoverage[0].expectedMs, 0);
+  assert.equal(plan.status, 'unreachable');
+});

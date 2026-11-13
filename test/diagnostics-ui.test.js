@@ -66,12 +66,21 @@ function view(file) {
     get(key, callback) {
       callback(failures.has(key) ? new Error('Read failed') : null, values[key]);
     },
+    set(key, value, callback) {
+      if (failures.has(key)) callback(new Error('Save failed'));
+      else {
+        values[key] = value;
+        callback(null);
+      }
+    },
     ready() {},
   };
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const browserCopy = path.join(path.dirname(file), 'source-status.js');
   assert.match(html, /<script src="source-status.js"><\/script>/);
   const script =
+    fs.readFileSync(path.join(__dirname, '../lib/pricing/coverage.js'), 'utf8') +
+    '\n' +
     fs.readFileSync(path.join(__dirname, '..', browserCopy), 'utf8') +
     '\n' +
     [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
@@ -92,6 +101,7 @@ function view(file) {
     values,
     failures,
     refresh,
+    run: (code) => vm.runInContext(code, context),
     text: (id) => element(id).textContent,
     element,
     advance: (ms) => {
@@ -188,4 +198,71 @@ test('settings exposes partial battery errors and omits failed limits from tempe
     .join('\n');
   assert.match(rows, /Batteri: Delvis tillgänglig/);
   assert.match(rows, /dischargePowerLimitKW: Unsupported register/);
+});
+
+test('price view distinguishes complete, partial, cached-after-error, expired and legacy coverage', () => {
+  const { calendar } = require('../lib/pricing/coverage');
+  const v = view('settings/index.html'),
+    now = Date.now(),
+    days = calendar(new Date(now));
+  const prices = Array.from(
+    { length: (days.tomorrow.end - days.today.start) / 900000 },
+    (_, i) => ({
+      start: new Date(days.today.start + i * 900000).toISOString(),
+      end: new Date(days.today.start + (i + 1) * 900000).toISOString(),
+      price: i % 2 ? -0.5 : 0.5,
+    }),
+  );
+  v.values.tibberToken = 'test';
+  v.values.tibberHomeId = 'fixture';
+  v.values.priceCache = {
+    schema: 2,
+    selectedHomeId: 'fixture',
+    homeId: 'fixture',
+    resolution: 'QUARTER_HOURLY',
+    currency: 'SEK',
+    fetchedAt: new Date(now - 1000).toISOString(),
+    prices,
+  };
+  v.refresh();
+  assert.equal(v.text('tomorrowStatus'), 'Komplett dygn');
+  assert.match(v.element('priceChart').innerHTML, /<rect/);
+  v.values.priceCache.prices = prices.filter(
+    (p) =>
+      Date.parse(p.start) < days.tomorrow.start + 900000 ||
+      Date.parse(p.start) >= days.tomorrow.start + 3600000,
+  );
+  v.refresh();
+  assert.equal(v.text('tomorrowStatus'), 'Delvis publicerat');
+  assert.match(v.text('priceRange'), /1 luckor/);
+  v.values.priceError = 'Tibber HTTP 503';
+  v.refresh();
+  assert.match(v.text('priceFreshness'), /Cachade|cachade/);
+  assert.match(v.element('priceChart').innerHTML, /<rect/);
+  v.values.priceError = null;
+  v.advance(49 * 3600000);
+  v.refresh();
+  assert.doesNotMatch(v.element('priceChart').innerHTML, /<rect/);
+  v.advance(-49 * 3600000);
+  v.values.priceCache.schema = 1;
+  v.refresh();
+  assert.match(v.text('priceFreshness'), /Äldre priscache/);
+  assert.doesNotMatch(v.element('priceChart').innerHTML, /<rect/);
+});
+test('saving Tibber explains actual refresh cadence, disablement and save failures', () => {
+  const v = view('settings/index.html');
+  v.run('bindTibberSettings(Homey)');
+  v.element('tibberToken').value = ' test ';
+  v.element('tibberHomeId').value = ' fixture ';
+  v.element('saveTibber').onclick();
+  assert.equal(v.values.tibberToken, 'test');
+  assert.equal(v.values.tibberHomeId, 'fixture');
+  assert.match(v.text('tibberMessage'), /fem minuter/);
+  assert.doesNotMatch(v.text('tibberMessage'), /30-minuters/);
+  v.element('tibberToken').value = '';
+  v.element('saveTibber').onclick();
+  assert.match(v.text('tibberMessage'), /avstängt/);
+  v.failures.add('tibberHomeId');
+  v.element('saveTibber').onclick();
+  assert.equal(v.text('tibberMessage'), 'Save failed');
 });

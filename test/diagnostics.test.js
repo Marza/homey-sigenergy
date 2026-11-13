@@ -185,3 +185,14 @@ test('browser copies are identical to the shared status implementation', () => {
       'Run node scripts/sync-source-status.js',
     );
 });
+
+test('price-coverage browser copies match the backend rules', () => {
+  const fs = require('node:fs'),
+    path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '../lib/pricing/coverage.js'), 'utf8');
+  for (const name of [
+    'settings/price-coverage.js',
+    'widgets/energy-overview/public/price-coverage.js',
+  ])
+    assert.equal(fs.readFileSync(path.join(__dirname, '..', name), 'utf8'), source);
+});

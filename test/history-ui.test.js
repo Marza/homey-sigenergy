@@ -34,6 +34,8 @@ function render(file, row, start, canonical = false) {
   };
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const script =
+    fs.readFileSync(path.join(__dirname, '../lib/pricing/coverage.js'), 'utf8') +
+    '\n' +
     fs.readFileSync(path.join(__dirname, '../lib/source-status.js'), 'utf8') +
     '\n' +
     [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');

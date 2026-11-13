@@ -4,28 +4,30 @@ const assert = require('node:assert/strict');
 const { normalizePrices, fetchTibberPrices } = require('../lib/pricing/tibber');
 const { validateEvdc, readEvdc } = require('../lib/charging/evdc');
 const rows = [
-  { startsAt: '2026-11-12T00:00:00Z', total: 0.3 },
-  { startsAt: '2026-11-12T00:15:00Z', total: 0.2 },
-  { startsAt: '2026-11-12T00:30:00Z', total: 0.4 },
+  { startsAt: '2026-11-12T00:00:00Z', total: 0.3, currency: 'SEK' },
+  { startsAt: '2026-11-12T00:15:00Z', total: 0.2, currency: 'SEK' },
+  { startsAt: '2026-11-12T00:30:00Z', total: 0.4, currency: 'SEK' },
 ];
 test('normalize Tibber prices into 15-min slots', () => {
   const slots = normalizePrices(
     { currentSubscription: { priceInfo: { today: rows, tomorrow: [] } } },
-    new Date('2026-11-11'),
+    new Date('2026-11-12T00:00:00Z'),
   );
   assert.equal(slots.length, 3);
   assert.equal(Date.parse(slots[0].end) - Date.parse(slots[0].start), 900000);
 });
-test('reject insufficient price data', () =>
-  assert.throws(
-    () => normalizePrices({ currentSubscription: { priceInfo: { today: rows.slice(0, 1) } } }),
-    /interval/,
-  ));
+test('one explicitly requested quarter has a fixed end, not an inferred neighbor', () => {
+  const slots = normalizePrices(
+    { currentSubscription: { priceInfo: { today: rows.slice(0, 1), tomorrow: [] } } },
+    new Date('2026-11-12T00:00:00Z'),
+  );
+  assert.equal(slots[0].end, '2026-11-12T00:15:00.000Z');
+});
 test('fetch prices and select home', async () => {
   const result = await fetchTibberPrices({
     token: 'test',
     homeId: 'abc',
-    now: new Date('2026-11-11'),
+    now: new Date('2026-11-12T00:00:00Z'),
     fetchImpl: async () => ({
       ok: true,
       json: async () => ({

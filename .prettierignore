@@ -5,3 +5,5 @@ dist/
 package-lock.json
 settings/source-status.js
 widgets/energy-overview/public/source-status.js
+settings/price-coverage.js
+widgets/energy-overview/public/price-coverage.js
