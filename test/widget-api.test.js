@@ -136,7 +136,13 @@ function view() {
   const document = {
     body: { scrollHeight: 720 },
     getElementById(id) {
-      if (!elements.has(id)) elements.set(id, { textContent: '' });
+      if (!elements.has(id))
+        elements.set(
+          id,
+          id === 'widget-content'
+            ? { getBoundingClientRect: () => ({ height: 720 }) }
+            : { textContent: '' },
+        );
       return elements.get(id);
     },
   };
@@ -146,8 +152,9 @@ function view() {
       assert.equal(url, '/');
       return new Promise((resolve, reject) => pending.push({ resolve, reject }));
     },
-    ready() {
+    ready(options) {
       ready++;
+      heights.push(options.height);
     },
     setHeight(height) {
       heights.push(height);
@@ -196,7 +203,7 @@ test('actual widget bridge needs no settings API, handles network failure/recove
   await flush();
   assert.equal(v.ready, 1);
   assert.equal(v.elements.get('state').textContent, 'Ingen historik');
-  assert.ok(v.heights.every((h) => h === 720));
+  assert.ok(v.heights.every((h) => h === 722));
   v.timers[0]();
   v.pending[2].resolve({ schema: 9 });
   await flush();

@@ -12,3 +12,5 @@ for (const [source, name] of [
 fs.copyFileSync('lib/optimization/simulator.js', 'settings/simulator.js');
 
 fs.copyFileSync('lib/charging/planner.js', 'settings/charging-planner.js');
+
+fs.copyFileSync('lib/widget-layout.js', 'widgets/energy-overview/public/widget-layout.js');

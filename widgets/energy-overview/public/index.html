@@ -7,16 +7,41 @@
     <script src="price-coverage.js"></script>
     <script src="source-status.js"></script>
     <script src="tariff-config.js"></script>
+    <script src="widget-layout.js"></script>
     <style>
       :root {
         color-scheme: light dark;
+      }
+      html,
+      body {
+        height: auto;
+        min-height: 0;
+        overflow: visible;
+        overscroll-behavior: auto;
+      }
+      /* Remove only empty internal scrollers. Keep a scrolling fallback if
+         Homey's frame is constrained or a zoomed viewport cannot fit the content. */
+      html[data-widget-fits='true'],
+      html[data-widget-fits='true'] body {
+        overflow-y: hidden;
+      }
+      @supports (overflow: clip) {
+        html[data-widget-fits='true'],
+        html[data-widget-fits='true'] body {
+          overflow-y: clip;
+        }
+      }
+      #widget-content {
+        display: flow-root;
+        box-sizing: border-box;
+        padding: 14px;
       }
       body {
         font:
           14px system-ui,
           sans-serif;
         margin: 0;
-        padding: 14px;
+        padding: 0;
         color: var(--homey-text-color, #202124);
         background: var(--homey-background-color, #fff);
         box-sizing: border-box;
@@ -70,55 +95,57 @@
     </style>
   </head>
   <body>
-    <header><b>SigEnergy</b><small id="updated">Läser data…</small></header>
-    <div class="grid">
-      <div class="tile">Nätimport<strong id="grid">–</strong></div>
-      <div class="tile">Sol<strong id="pv">–</strong></div>
-      <div class="tile">Batteri<strong id="soc">–</strong></div>
-      <div class="tile">
-        Utomhus<strong id="outdoor">–</strong><small id="outdoorState">Väntar på data</small>
-      </div>
-    </div>
-    <section class="recommend">
-      <b>Rekommenderade inställningar</b>
+    <main id="widget-content">
+      <header><b>SigEnergy</b><small id="updated">Läser data…</small></header>
       <div class="grid">
-        <div class="tile">Effekttak<strong id="cap">–</strong></div>
-        <div class="tile">Batterireserv<strong id="reserve">–</strong></div>
-      </div>
-      <small id="recommendState">Beräknas från historik</small>
-    </section>
-    <section class="recommend">
-      <b>Effektavgift – innevarande månad</b>
-      <div class="grid">
+        <div class="tile">Nätimport<strong id="grid">–</strong></div>
+        <div class="tile">Sol<strong id="pv">–</strong></div>
+        <div class="tile">Batteri<strong id="soc">–</strong></div>
         <div class="tile">
-          <span id="demandPeakLabel">Medel av timtoppar</span><strong id="demandKw">–</strong>
+          Utomhus<strong id="outdoor">–</strong><small id="outdoorState">Väntar på data</small>
         </div>
-        <div class="tile">Uppskattad avgift<strong id="demandSek">–</strong></div>
       </div>
-      <small id="demandState" role="status">Tariff och timdata kontrolleras</small>
-      <div class="grid">
-        <div class="tile">Simulerad effektavgift<strong id="simDemand">–</strong></div>
-        <div class="tile">Möjlig effektbesparing<strong id="simSaving">–</strong></div>
-      </div>
-      <small id="savingState">Historisk simulering, inte garanterad besparing.</small>
-    </section>
-    <section class="recommend">
-      <b>Tibber – mätarreferens för månaden</b>
-      <div class="grid">
-        <div class="tile">
-          <span id="meterPeakLabel">Medel av timtoppar</span><strong id="meterKw">–</strong>
+      <section class="recommend">
+        <b>Rekommenderade inställningar</b>
+        <div class="grid">
+          <div class="tile">Effekttak<strong id="cap">–</strong></div>
+          <div class="tile">Batterireserv<strong id="reserve">–</strong></div>
         </div>
-        <div class="tile">Preliminär effektavgift<strong id="meterSek">–</strong></div>
-      </div>
-      <small id="meterState" role="status">Ingen importerad mätarhistorik</small>
-      <small
-        >Engångsimport av timvis förbrukning. Ingen batteribesparing beräknas för dessa
-        timmar.</small
-      >
-    </section>
-    <footer>
-      Inlärningsläge · Ingen styrning · <span id="state" role="status">Väntar på mätdata</span>
-    </footer>
+        <small id="recommendState">Beräknas från historik</small>
+      </section>
+      <section class="recommend">
+        <b>Effektavgift – innevarande månad</b>
+        <div class="grid">
+          <div class="tile">
+            <span id="demandPeakLabel">Medel av timtoppar</span><strong id="demandKw">–</strong>
+          </div>
+          <div class="tile">Uppskattad avgift<strong id="demandSek">–</strong></div>
+        </div>
+        <small id="demandState" role="status">Tariff och timdata kontrolleras</small>
+        <div class="grid">
+          <div class="tile">Simulerad effektavgift<strong id="simDemand">–</strong></div>
+          <div class="tile">Möjlig effektbesparing<strong id="simSaving">–</strong></div>
+        </div>
+        <small id="savingState">Historisk simulering, inte garanterad besparing.</small>
+      </section>
+      <section class="recommend">
+        <b>Tibber – mätarreferens för månaden</b>
+        <div class="grid">
+          <div class="tile">
+            <span id="meterPeakLabel">Medel av timtoppar</span><strong id="meterKw">–</strong>
+          </div>
+          <div class="tile">Preliminär effektavgift<strong id="meterSek">–</strong></div>
+        </div>
+        <small id="meterState" role="status">Ingen importerad mätarhistorik</small>
+        <small
+          >Engångsimport av timvis förbrukning. Ingen batteribesparing beräknas för dessa
+          timmar.</small
+        >
+      </section>
+      <footer>
+        Inlärningsläge · Ingen styrning · <span id="state" role="status">Väntar på mätdata</span>
+      </footer>
+    </main>
     <script>
       function historyAverage(row, key) {
         const count = row?.counts?.[key],
@@ -334,20 +361,13 @@
         render();
       }
       function onHomeyReady(Homey) {
-        let request = 0,
-          ready = false;
+        let request = 0;
+        const layout = WidgetLayout.create(Homey, { document, view: globalThis });
+        globalThis.addEventListener?.('pagehide', (event) => {
+          if (!event.persisted) layout.dispose();
+        });
         const refresh = () => {
           const current = ++request;
-          const finish = () => {
-            if (!ready) {
-              Homey.ready();
-              ready = true;
-            }
-          };
-          const resize = () => {
-            if (Homey.setHeight)
-              Promise.resolve(Homey.setHeight(document.body.scrollHeight)).catch(() => {});
-          };
           const fail = () => {
             if (current !== request) return;
             request++;
@@ -377,8 +397,7 @@
             ])
               document.getElementById(id).textContent =
                 'Kunde inte läsa data. Försöker igen automatiskt.';
-            finish();
-            resize();
+            layout.refresh();
           };
           const timeout = setTimeout(fail, 10000);
           Homey.api('GET', '/')
@@ -394,8 +413,7 @@
               )
                 throw new Error('Invalid widget response');
               renderSnapshot(snapshot);
-              finish();
-              resize();
+              layout.refresh();
             })
             .catch(() => {
               clearTimeout(timeout);

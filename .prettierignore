@@ -11,3 +11,4 @@ settings/tariff-config.js
 widgets/energy-overview/public/tariff-config.js
 settings/simulator.js
 settings/charging-planner.js
+widgets/energy-overview/public/widget-layout.js
