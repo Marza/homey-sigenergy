@@ -119,7 +119,9 @@ Holiday exclusions are not implemented, full-month completeness is not guarantee
 
 ## History, diagnostics and simulations
 
-History is retained in Homey settings for up to 30 days of quarter-hour records, 730 daily summaries and 500 events. Power integration requires adjacent observations no more than 60 seconds apart within the same slot; gaps are not filled. Daily summaries use UTC dates, whereas tariffs use Stockholm time.
+History is retained in Homey settings for up to 30 days of quarter-hour records, 730 daily summaries and 500 events. Each field has independent observation counts and continuity, so optional EVDC samples cannot dilute plant averages or interrupt plant energy integration. Power integration requires valid observations no more than 60 seconds apart; short intervals crossing quarter boundaries are split using linear interpolation. Longer gaps and app-restart gaps are not filled. Daily summaries use UTC dates, whereas tariffs use Stockholm time.
+
+New records and JSON exports use schema 2. Older records remain available but are not retroactively repaired, and the UI does not invent per-field means from their shared sample count. If a new sample overlaps an older active quarter, its original data is preserved under `legacy` rather than merged into the new calculations. See [history format and migration](docs/history-format.md) for the record fields and limits.
 
 Export JSON manually from app settings. Export excludes the Tibber token but still contains private usage patterns; keep it private or sanitize it before sharing. There is no guaranteed backup or reimport workflow.
 
