@@ -49,7 +49,18 @@ test('tariff edits refresh the demand estimate without triggering expensive scen
     return periodic();
   };
   await app.onInit();
+  settings.set('sourceConfig', {
+    ...settings.get('sourceConfig'),
+    sigenergy: { configured: true, enabled: true },
+  });
+  settings.set('sigenergyStatus', { readAt: new Clock().toISOString() });
+  settings.set('backupStatus', {
+    mode: 'on-grid',
+    suspendEconomicOptimization: false,
+    observedAt: new Clock().toISOString(),
+  });
   const history = app.history;
+  const callsBeforeTariff = scenarioCalls;
   app.history = {
     getSlots: () =>
       [3, 4, 5, 6, 7].flatMap((kw, i) =>
@@ -78,7 +89,7 @@ test('tariff edits refresh the demand estimate without triggering expensive scen
   settings.set('demandTariff', edited);
   assert.equal(settings.get('demandEstimate').averageKw, 5);
   assert.equal(settings.get('demandEstimate').tariffKey, tariffKey(edited));
-  assert.equal(scenarioCalls, 1);
+  assert.equal(scenarioCalls, callsBeforeTariff);
   assert.equal(settings.get('tariffOptimization').status, 'pending');
   app.refreshRecommendation();
   assert.equal(settings.get('tariffOptimization').baseline.tariffKey, tariffKey(edited));

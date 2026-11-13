@@ -73,6 +73,16 @@ test('price refresh preserves usable cache after failure and across an offline r
   };
   const { app, settings } = appFixture(fetchPrices);
   await app.onInit();
+  settings.set('sourceConfig', {
+    ...settings.get('sourceConfig'),
+    sigenergy: { configured: true, enabled: true },
+  });
+  settings.set('sigenergyStatus', { readAt: new Date().toISOString() });
+  settings.set('backupStatus', {
+    mode: 'on-grid',
+    suspendEconomicOptimization: false,
+    observedAt: new Date().toISOString(),
+  });
   const before = settings.get('priceCache');
   assert.equal(app.getDiagnostics().tibber.usable, true);
   fail = true;
@@ -98,6 +108,16 @@ test('credentials changed during a request invalidate its result without publish
   let next = async () => cache();
   const { app, settings } = appFixture(() => next());
   await app.onInit();
+  settings.set('sourceConfig', {
+    ...settings.get('sourceConfig'),
+    sigenergy: { configured: true, enabled: true },
+  });
+  settings.set('sigenergyStatus', { readAt: new Date().toISOString() });
+  settings.set('backupStatus', {
+    mode: 'on-grid',
+    suspendEconomicOptimization: false,
+    observedAt: new Date().toISOString(),
+  });
   const before = settings.get('priceCache');
   let resolve;
   next = () =>
@@ -123,14 +143,28 @@ test('credentials changed during a request invalidate its result without publish
 test('legacy and expired caches cannot silently provide inferred prices to plans', async () => {
   const { app, settings } = appFixture(async () => cache());
   await app.onInit();
+  settings.set('sourceConfig', {
+    ...settings.get('sourceConfig'),
+    sigenergy: { configured: true, enabled: true },
+  });
+  settings.set('sigenergyStatus', { readAt: new Date().toISOString() });
+  settings.set('backupStatus', {
+    mode: 'on-grid',
+    suspendEconomicOptimization: false,
+    observedAt: new Date().toISOString(),
+  });
   const before = settings.get('priceCache');
   settings.set('priceCache', { ...before, schema: 1 });
   assert.equal(app.getPricePlan(10).status, 'no-prices');
   settings.set('priceCache', before);
-  assert.equal(
-    app.getPricePlan(10, new Date(Date.parse(before.prices.at(-1).end) + 1000)).status,
-    'expired-prices',
-  );
+  const expiredAt = new Date(Date.parse(before.prices.at(-1).end) + 1000);
+  settings.set('sigenergyStatus', { readAt: expiredAt.toISOString() });
+  settings.set('backupStatus', {
+    mode: 'on-grid',
+    suspendEconomicOptimization: false,
+    observedAt: expiredAt.toISOString(),
+  });
+  assert.equal(app.getPricePlan(10, expiredAt).status, 'expired-prices');
   await app.onUninit();
 });
 module.exports = {};

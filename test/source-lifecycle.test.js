@@ -32,6 +32,42 @@ function load(file, overrides) {
   return module.exports;
 }
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('backup Flow tokens are requests and publish before a pending optional probe; loss clears restoration', async () => {
+  let finishProbe,
+    fail = false;
+  const { device, settings } = deviceFixture({
+    snapshotRead: async () => {
+      if (fail) throw new Error('timeout');
+      return { ...snapshot, gridMode: 1, soc: 20 };
+    },
+    batteryRead: () =>
+      new Promise((resolve) => {
+        finishProbe = resolve;
+      }),
+  });
+  const tokens = [];
+  device.homey.flow.getTriggerCard = () => ({
+    trigger: async (value) => {
+      tokens.push(value);
+    },
+  });
+  await device.onInit();
+  await tick();
+  assert.equal(settings.get('backupStatus').mode, 'off-grid');
+  assert.equal(settings.get('backupStatus').controlApplied, false);
+  assert.equal(tokens[0].ev_stop_requested, true);
+  assert.equal(tokens[0].nibe_mode, 'critical');
+  assert.equal(tokens[0].mode, 'off-grid');
+  finishProbe({ values: {}, errors: {}, readAt: new Date().toISOString() });
+  await tick();
+  fail = true;
+  await device.poll();
+  assert.equal(settings.get('backupStatus').mode, 'unknown');
+  assert.equal(settings.get('backupStatus').suspendEconomicOptimization, true);
+  assert.equal(tokens.at(-1).nibe_mode, 'economy');
+  await device.onUninit();
+});
 const snapshot = { gridMode: 0, soc: 60, capacityKWh: 42, gridW: 2000, pvW: 1000, essW: 500 };
 function deviceFixture({
   snapshotRead = async () => snapshot,

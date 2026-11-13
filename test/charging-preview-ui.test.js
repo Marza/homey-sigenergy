@@ -191,3 +191,21 @@ test('blocked preview leaves coverage and unmet energy unknown rather than showi
   assert.equal(cells[2].textContent, 'Ej beräknad');
   assert.equal(cells[3].textContent, 'Ej beräknad');
 });
+
+test('backup restriction clears previously rendered charging instructions and explains why', () => {
+  const v = view();
+  v.fill();
+  v.element('previewCharging').onclick();
+  v.requests[0].callback(null, result());
+  assert.ok(v.element('chargingSlots').children.length);
+  v.element('previewCharging').onclick();
+  v.requests[1].callback(null, {
+    status: 'backup-restricted',
+    reason: 'Ekonomiska råd pausade. Ingen styrning utförs.',
+    slots: [],
+  });
+  assert.equal(v.element('chargingSlots').children.length, 0);
+  assert.equal(v.element('chargingDeadlines').children.length, 0);
+  assert.match(v.element('chargingPreviewStatus').textContent, /pausade/);
+  assert.equal(v.element('chargingPreviewSummary').textContent, '');
+});
