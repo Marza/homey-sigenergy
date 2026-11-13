@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function render(file, row, start) {
+function render(file, row, start, canonical = false) {
   const elements = new Map();
   const document = {
     querySelectorAll: () => [],
@@ -15,7 +15,10 @@ function render(file, row, start) {
     },
   };
   const Homey = {
-    get(key, callback) { callback(null, key === 'historySlots' ? [row] : undefined); },
+    get(key, callback) {
+      if (canonical && key === 'historyState') callback(null, { schema: 3, slots: [row], daily: [], events: [], legacyDaily: [] });
+      else callback(null, key === 'historySlots' ? [row] : undefined);
+    },
     ready() {},
   };
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
@@ -47,5 +50,9 @@ for (const [file, start, ids] of [
   test(`${file}: observed zeros remain distinguishable from missing fields`, () => {
     const text = render(file, { schema: 2, t: Date.now(), n: 1, counts: { gridW: 1 }, sum: { gridW: 0 } }, start);
     assert.deepEqual(ids.map(text), ['0 kW', '–', '–']);
+  });
+  test(`${file}: canonical history takes precedence over the frozen legacy keys`, () => {
+    const text = render(file, { schema: 2, t: Date.now(), n: 1, counts: { gridW: 1 }, sum: { gridW: 2000 } }, start, true);
+    assert.equal(text(ids[0]), '2 kW');
   });
 }

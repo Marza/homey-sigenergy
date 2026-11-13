@@ -1,6 +1,6 @@
 # History format and sampling
 
-The history fix for issue #5 writes quarter-hour records with `schema: 2`. Both JSON export paths also report top-level schema 2; existing export key names are unchanged. History remains bounded Homey app-settings storage, not a billing meter or a database.
+Quarter-hour records introduced by issue #5 retain `schema: 2`. Issue #6 stores them with daily summaries and events in a single `historyState` setting with schema 3. History remains bounded app-settings storage, not a billing meter or a database.
 
 ## Record fields
 
@@ -28,4 +28,63 @@ Flushing retains in-memory continuity; app restart does not. New observations af
 
 Older records have no reliable per-field counts, so settings and widget views do not derive means from their shared `n`. Earlier quarters remain unchanged. If new samples overlap an older active quarter, the original record is saved under `legacy` and a separate schema-2 record accumulates only the new observations. Its coverage therefore remains partial until genuinely observed; old coverage is not borrowed to qualify an hour for tariff calculation.
 
-This does not retroactively repair older energy integrals or daily totals. Older, non-overlapping records continue to be retained/exported and existing calculation modules may still use their recorded energy/coverage. Daily timezone, full-month retention, storage and restore improvements are tracked separately in issue #6. The fix does not validate tariffs, financial accuracy, hardware register profiles or the Dashboard runtime.
+This does not retroactively repair older energy integrals or daily totals. Older, non-overlapping records continue to be retained/exported and existing calculation modules may still use their recorded energy/coverage. The storage, daily aggregation and restore rules below implement the next stage of issue #6. The fix does not validate tariffs, financial accuracy, hardware register profiles or the Dashboard runtime.
+
+
+## Single snapshot and retention
+
+`historyState` contains schema 3, timezone, revision, updatedAt, slots, daily, events and legacyDaily. A normal flush performs one settings write for the whole snapshot, instead of independently saving quarters and daily totals. Pending samples are cleared only after success. A failed write leaves the previous committed snapshot available and pending samples retryable within the running process. An app restart retains committed data; it cannot recover samples that were never successfully saved. This is a single-key application commit, not a claim of power-loss-safe filesystem transactions.
+
+Detailed retention is 32 days, capped at 3,072 UTC-aligned quarters. This accommodates a full 31-day Stockholm calendar month, including the extra autumn DST hour. It does not retain all prior billing months indefinitely or manufacture missing intervals. Export completed periods if you need their raw detail later.
+
+Daily records use schema 3 and Europe/Stockholm dates. Each contains energy totals, observed slot count, grid coverage, expected day duration, observed peak, sourceFrom/sourceTo and legacySlots. A complete day requires all its quarters and full grid coverage with no legacy slots. A spring day expects 92 quarters, an autumn day 100. Other days and gaps remain partial. Recalculation must cover at least the old source range, observed slot count and coverage; a retained suffix or sparse subset cannot truncate an archived total. Days are retained by calendar date for 730 days.
+
+On first successful flush, the new state is built from the old history keys. Those keys are left untouched as migration evidence; runtime calculations and views prefer historyState thereafter. Old UTC daily records are kept in legacyDaily, not relabelled as Stockholm days. New local totals can be reconstructed only from raw records still available. Older energy/daily errors are not retroactively repaired. Downgrading to a version that only reads the frozen old keys is not a supported way to access newly collected history.
+
+Events remain capped at 500; identical events are deduplicated on timestamp, type and permitted details. Backup-mode events trigger an immediate history flush. Ordinary samples are flushed once per minute when there is pending data. Empty flushes do not write.
+
+## Export and restore
+
+Both app settings and `HistoryStore.export()` now use the same authenticated backend export, with these top-level fields:
+
+```json
+{
+  "format": "com.local.sigenergy.history",
+  "schema": 3,
+  "timezone": "Europe/Stockholm",
+  "exportedAt": "2026-11-13T00:00:00.000Z",
+  "slots": [],
+  "daily": [],
+  "events": [],
+  "legacyDaily": []
+}
+```
+
+The settings page selects a local JSON file, asks the server for a preview, then offers a separate merge action. No import is applied by selecting a file. Preview includes live pending data without writing it; apply recalculates against the current state. Existing quarters and archived days win conflicts, and overlapping energy is never summed. Raw records outside the retained window are not restored to that window, but valid daily summaries may remain within daily retention. Daily summaries are recalculated only when the available source is at least as complete as the archive.
+
+Legacy schema 1/2 exports are accepted in either the slots/daily/events form or the old settings-page historySlots/historyDaily/historyEvents form. All three collections are required. Unknown versions/fields, credential-bearing fields, malformed dates, future records, unaligned/duplicate quarters, inconsistent counts, impossible coverage, excessive counts and invalid nested legacy data are rejected before any write. UTC daily summaries from legacy files go to legacyDaily. Unknown fields are rejected rather than silently applied as settings.
+
+Restore only merges history; it never restores hosts, API tokens, charging configuration, operation mode or hardware controls. State writes use the same single-key commit. A failed apply can be retried without adding overlapping energy twice. The format records observed aggregates, not authenticity or meter calibration; an externally edited but structurally valid file is not verified hardware evidence.
+
+Routes in api.js are authenticated (`public: false`): GET /history/export, POST /history/import/preview and POST /history/import. They follow the [Homey App Web API](https://apps.developer.homey.app/advanced/web-api) and [settings-view API](https://apps.developer.homey.app/advanced/custom-views/app-settings) contracts.
+
+## Size budget and measurements
+
+The new snapshot has an explicit 4 MiB serialized-JSON budget. Import files are limited to 8 MiB, with stricter collection and final merged-state bounds. A budget error leaves committed history intact; no old data is silently deleted to make an oversized import fit. The frozen migration keys occupy additional space and are not included in the new snapshot budget. Manual exports contain private usage patterns and must be kept private.
+
+Measurements on the existing physical Homey Pro, firmware 13.5.4, on 2026-11-13 (metadata only; no usage values published):
+
+| Baseline | Observed |
+| --- | --- |
+| Quarter records | 4 records, 1,189–1,190 serialized bytes |
+| Largest observed quarter | 331 bytes |
+| Daily records | 1 record, 99 serialized bytes |
+| Events | 6 records, 744 serialized bytes |
+| Save observation | Four reads 20 seconds apart observed one changed quarter snapshot over 60 seconds, consistent with the configured one-minute flush |
+| Restart recovery | Previously committed history/settings survived the user-performed Homey reboot, as recorded in installation-verification.md |
+
+A synthetic 32-day fixture with all six fields produces 3,072 quarters and 32 daily summaries in 1,290,384 bytes (about 1.23 MiB), with one canonical write. A desktop run completed the import/aggregation in about 129 ms on Node.js 26.12.0; this is not a Homey performance measurement. Run `node scripts/benchmark-history.js` to repeat it without accessing Homey or private data.
+
+The budget is an application policy, not an established Homey storage ceiling. Tests inject write failures and restart the store against committed snapshots. Full-window storage latency, a new-format physical restart, browser/API transport of large exports, and physical preview/restore still require staged testing after review. Issue #6 remains open for that verification. [Homey's persistence documentation](https://apps.developer.homey.app/the-basics/app/persistent-storage) says app settings survive restarts and are deleted on uninstall; no database, automatic external backup or durability guarantee is inferred.
+
+A private local copy of the installation's existing backup was also migrated, exported and restored into an isolated in-memory store. Its quarter records, events and older UTC daily summary were preserved. This exercised real legacy shapes without changing the running Homey or publishing the backup.

@@ -13,6 +13,24 @@ strong{display:block;font-size:23px;margin-top:5px}.recommend{margin-top:14px}.r
 <section class="recommend"><b>Effektavgift – innevarande månad</b><div class="grid"><div class="tile">Femtoppsmedel<strong id="demandKw">–</strong></div><div class="tile">Uppskattad avgift<strong id="demandSek">–</strong></div></div><small id="demandState">Tariff och timdata kontrolleras</small><div class="grid"><div class="tile">Simulerad effektavgift<strong id="simDemand">–</strong></div><div class="tile">Möjlig effektbesparing<strong id="simSaving">–</strong></div></div><small id="savingState">Historisk simulering, inte garanterad besparing.</small></section>
 <footer>Inlärningsläge · Ingen styrning · <span id="state">Väntar på mätdata</span></footer>
 <script>
+function readHistory(Homey,callback){
+ Homey.get('historyState',(error,state)=>{
+  if(error){callback(error);return;}
+  if(state!==null&&state!==undefined){
+   if(state.schema!==3||!['slots','daily','events','legacyDaily'].every(k=>Array.isArray(state[k]))){callback(new Error('Historiken kunde inte läsas.'));return;}
+   callback(null,state);return;
+  }
+  const history={slots:[],daily:[],events:[],legacyDaily:[]};let remaining=3,failed=false;
+  for(const [key,target] of [['historySlots','slots'],['historyDaily','daily'],['historyEvents','events']]){
+   Homey.get(key,(err,value)=>{
+    if(failed)return;
+    if(err){failed=true;callback(err);return;}
+    history[target]=Array.isArray(value)?value:[];
+    if(--remaining===0)callback(null,history);
+   });
+  }
+ });
+}
 function historyAverage(row,key){
  const count=row?.counts?.[key],sum=row?.sum?.[key];
  return Number.isInteger(count)&&count>0&&Number.isFinite(sum)?sum/count:null;
@@ -20,7 +38,8 @@ function historyAverage(row,key){
 function onHomeyReady(Homey){
   const set=(id,value)=>{document.getElementById(id).textContent=value;};
   function refresh(){
-    Homey.get('historySlots',(error,rows)=>{
+    readHistory(Homey,(error,history)=>{
+      const rows=history?.slots;
       if(error||!Array.isArray(rows)||!rows.length){set('state','Ingen historik');return;}
       const r=rows.at(-1);const age=Date.now()-r.t;
       if(age>30*60*1000){set('state','Inaktuella mätvärden');return;}

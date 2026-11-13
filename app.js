@@ -87,13 +87,13 @@ module.exports = class SigenergyApp extends Homey.App {
         this.homey.settings.get('batteryTelemetry'),
         { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false });
       this.homey.settings.set('optimizationRecommendation',
-        recommend(this.homey.settings.get('historySlots') || [], config));
+        recommend(this.history.getSlots(), config));
       this.refreshDemandEstimate();
       const tariff = this.homey.settings.get('demandTariff');
       if (tariff) {
         const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit' }).format(new Date());
         this.homey.settings.set('tariffOptimization', evaluateTariffScenarios(
-          this.homey.settings.get('historySlots') || [], config, tariff, month));
+          this.history.getSlots(), config, tariff, month));
       } else {
         this.homey.settings.set('tariffOptimization', { status: 'not-configured', advisoryOnly: true });
       }
@@ -125,10 +125,10 @@ module.exports = class SigenergyApp extends Homey.App {
     });
   }
   getOptimizationPreview() {
-    return simulate(this.homey.settings.get('historySlots') || [], effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'), { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false }));
+    return simulate(this.history.getSlots(), effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'), { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false }));
   }
   getAdvancedOptimizationPreview(options = {}) {
-    return compareScenarios(this.homey.settings.get('historySlots') || [],
+    return compareScenarios(this.history.getSlots(),
       effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'),
         { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false }), options);
   }
@@ -136,7 +136,7 @@ module.exports = class SigenergyApp extends Homey.App {
     const tariff = this.homey.settings.get('demandTariff');
     if (!tariff) return { status: 'not-configured' };
     validateTariff(tariff);
-    return calculateDemandCharge(this.homey.settings.get('historySlots') || [], tariff, month);
+    return calculateDemandCharge(this.history.getSlots(), tariff, month);
   }
   getPricePlan(currentSoc, now = new Date()) {
     const cache = this.homey.settings.get('priceCache');
