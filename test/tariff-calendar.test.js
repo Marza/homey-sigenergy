@@ -185,11 +185,11 @@ test('baseline and replay carry identical observed-hour coverage', () => {
     '2026-01',
     past,
   );
-  assert.equal(result.status, 'provisional');
+  assert.equal(result.status, 'insufficient-data');
   assert.equal(result.scope, 'observed-hours');
   assert.deepEqual(result.coverage, result.baseline.coverage);
   assert.equal(result.coverage.status, 'partial');
-  assert.equal(result.best.eligibleHours, result.coverage.completeHours);
+  assert.equal(result.best, null); // Sparse peaks do not provide replay coverage.
 });
 
 test('an invalid duplicate also invalidates its otherwise complete hour', () => {

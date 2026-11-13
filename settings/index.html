@@ -6,6 +6,7 @@
     <script src="/homey.js" data-origin="settings"></script>
     <script src="price-coverage.js"></script>
     <script src="source-status.js"></script>
+    <script src="simulator.js"></script>
     <script src="tariff-config.js"></script>
     <style>
       :root {
@@ -1056,6 +1057,75 @@
           });
         };
       }
+      function runSimulation(Homey) {
+        const body = document.getElementById('simulationRows');
+        const status = document.getElementById('simulationStatus');
+        body.replaceChildren();
+        status.textContent = 'Läser simuleringsunderlag…';
+        readHistory(Homey, (historyError, history) => {
+          if (historyError) {
+            status.textContent = historyError.message;
+            return;
+          }
+          Homey.get('optimizerConfig', (error, config) => {
+            if (error || !config) {
+              status.textContent = 'Spara simuleringsparametrarna först.';
+              return;
+            }
+            SourceStatus.readSources(Homey, (sources, values) => {
+              Homey.get('autoBatteryValues', (autoError, auto) => {
+                if (autoError) {
+                  status.textContent = 'Batteriets indataval kunde inte läsas.';
+                  return;
+                }
+                try {
+                  const effective = Simulator.effectiveBatteryConfig(
+                    config,
+                    values.batteryTelemetry,
+                    {
+                      autoBatteryValues: auto !== false,
+                      status: sources.battery,
+                    },
+                  );
+                  const result = Simulator.simulate(history.slots || [], effective);
+                  const a = result.assumptions,
+                    coverage = result.coverage;
+                  const context = `Modell: ${result.model}. Start-SoC ${a.initialSocPercent} %, kapacitet ${a.batteryCapacityKWh} kWh. Reserv ${a.reserveMinPercent}–${a.reserveMaxPercent} %, reservkraft ${a.backupReservePercent} %. Historik ${coverage.validSlots}/${coverage.expectedSlots} kvartstimmar (${Math.round(coverage.coverageFraction * 100)} %), ${coverage.missingSlots} saknade, ${coverage.excludedSlots} ogiltiga poster. Ingen uppladdning eller priser tillförda. Start-SoC och aktuella batterigränser är antaganden för historiken. Luckor modelleras inte. Inga styrkommandon skickas.`;
+                  if (result.status !== 'illustrative') {
+                    status.textContent =
+                      'Otillräckligt underlag: minst ' +
+                      a.minValidSlots +
+                      ' giltiga kvartstimmar och ' +
+                      Math.round(a.minCoverageFraction * 100) +
+                      ' % täckning krävs. ' +
+                      context;
+                    return;
+                  }
+                  result.candidates.slice(0, 25).forEach((x) => {
+                    const tr = document.createElement('tr');
+                    [
+                      x.capKW.toFixed(3) + ' kW',
+                      x.reservePercent + ' %',
+                      x.peakKW.toFixed(2) + ' kW',
+                      x.unshavedKWh.toFixed(2) + ' kWh',
+                      x.validSlots + '/' + x.expectedSlots,
+                    ].forEach((text) => {
+                      const td = document.createElement('td');
+                      td.textContent = text;
+                      tr.appendChild(td);
+                    });
+                    body.appendChild(tr);
+                  });
+                  status.textContent =
+                    'Illustrativt historiskt scenario, ingen garanterad besparing. ' + context;
+                } catch (error) {
+                  status.textContent = error.message;
+                }
+              });
+            });
+          });
+        });
+      }
       function onHomeyReady(Homey) {
         refreshDiagnostics(Homey);
         setInterval(() => refreshDiagnostics(Homey), 15000);
@@ -1086,30 +1156,12 @@
           const c = Object.fromEntries(
             optimizerKeys.map((k) => [k, Number(document.getElementById(k).value)]),
           );
-          if (
-            optimizerKeys.some(
-              (k) => document.getElementById(k).value.trim() === '' || !Number.isFinite(c[k]),
-            ) ||
-            c.minCapKW < 0.5 ||
-            c.maxCapKW > 20 ||
-            c.minCapKW > c.maxCapKW ||
-            c.capStepKW <= 0 ||
-            c.reserveMinPercent < 0 ||
-            c.reserveMaxPercent > 100 ||
-            c.reserveMinPercent > c.reserveMaxPercent ||
-            c.reserveStepPercent <= 0 ||
-            c.backupReservePercent < 0 ||
-            c.backupReservePercent > 100 ||
-            c.initialSocPercent < 0 ||
-            c.initialSocPercent > 100 ||
-            c.batteryCapacityKWh <= 0 ||
-            c.maxDischargeKW <= 0 ||
-            c.maxChargeKW <= 0 ||
-            c.roundTripEfficiency <= 0 ||
-            c.roundTripEfficiency > 1 ||
-            c.batteryWearSekPerKWh < 0
-          ) {
-            document.getElementById('optimizerMessage').textContent = 'Ogiltiga parametrar.';
+          try {
+            if (optimizerKeys.some((key) => document.getElementById(key).value.trim() === ''))
+              throw new Error('Fyll i alla simuleringsparametrar.');
+            Simulator.validateOptimizer(c);
+          } catch (error) {
+            document.getElementById('optimizerMessage').textContent = error.message;
             return;
           }
           Homey.set(
@@ -1164,96 +1216,7 @@
             }),
           );
         };
-        document.getElementById('runSimulation').onclick = () => {
-          readHistory(Homey, (err, history) => {
-            const slots = history?.slots;
-            if (err) {
-              document.getElementById('simulationStatus').textContent = err.message;
-              return;
-            }
-            Homey.get('optimizerConfig', (e, c) => {
-              if (e || !c) {
-                document.getElementById('simulationStatus').textContent =
-                  'Spara simuleringsparametrarna först.';
-                return;
-              }
-              SourceStatus.readSources(Homey, (sources, values) => {
-                Homey.get('autoBatteryValues', (autoError, auto) => {
-                  c = { ...c };
-                  if (!autoError && auto !== false) {
-                    const v = SourceStatus.batteryValues(values.batteryTelemetry, sources.battery);
-                    if (Number.isFinite(v.capacityKWh) && v.capacityKWh > 0)
-                      c.batteryCapacityKWh = v.capacityKWh;
-                    if (Number.isFinite(v.soc) && v.soc >= 0 && v.soc <= 100)
-                      c.initialSocPercent = v.soc;
-                    if (Number.isFinite(v.dischargePowerLimitKW) && v.dischargePowerLimitKW > 0)
-                      c.maxDischargeKW = Math.min(c.maxDischargeKW, v.dischargePowerLimitKW);
-                    if (Number.isFinite(v.dischargeCutoffSoc))
-                      c.backupReservePercent = Math.max(
-                        c.backupReservePercent,
-                        v.dischargeCutoffSoc,
-                      );
-                  }
-                  // Browser-side conservative model matches backend assumptions, no recharge.
-                  const rows = [];
-                  const valid = (slots || []).filter(
-                    (x) =>
-                      Number.isFinite(x.gridWh) &&
-                      Number.isFinite(x.essWh) &&
-                      x.coverageMs >= 720000,
-                  );
-                  for (let cap = c.minCapKW; cap <= c.maxCapKW + 0.00001; cap += c.capStepKW) {
-                    for (
-                      let reserve = c.reserveMinPercent;
-                      reserve <= c.reserveMaxPercent + 0.00001;
-                      reserve += c.reserveStepPercent
-                    ) {
-                      let soc = c.initialSocPercent,
-                        peak = 0,
-                        unshaved = 0;
-                      const eta = Math.sqrt(c.roundTripEfficiency),
-                        floor = Math.max(reserve, c.backupReservePercent);
-                      for (const x of valid) {
-                        const load = Math.max(0, (x.gridWh + x.essWh) / 250),
-                          need = Math.max(0, load - cap);
-                        const supplied = Math.min(
-                          need * 0.25,
-                          c.maxDischargeKW * 0.25,
-                          Math.max(0, ((soc - floor) / 100) * c.batteryCapacityKWh) * eta,
-                        );
-                        soc = Math.max(floor, soc - (supplied / eta / c.batteryCapacityKWh) * 100);
-                        unshaved += need * 0.25 - supplied;
-                        peak = Math.max(peak, load - supplied / 0.25);
-                      }
-                      rows.push({ cap, reserve, peak, unshaved });
-                    }
-                  }
-                  rows.sort((a, b) => a.peak - b.peak || a.unshaved - b.unshaved);
-                  const body = document.getElementById('simulationRows');
-                  body.replaceChildren();
-                  rows.slice(0, 25).forEach((x) => {
-                    const tr = document.createElement('tr');
-                    [
-                      x.cap.toFixed(1) + ' kW',
-                      x.reserve + ' %',
-                      x.peak.toFixed(2) + ' kW',
-                      x.unshaved.toFixed(2) + ' kWh',
-                      valid.length + '/' + (slots || []).length,
-                    ].forEach((v) => {
-                      const td = document.createElement('td');
-                      td.textContent = v;
-                      tr.appendChild(td);
-                    });
-                    body.appendChild(tr);
-                  });
-                  document.getElementById('simulationStatus').textContent = valid.length
-                    ? 'Illustrativ simulering. Ingen uppladdning modellerad; inga inställningar har ändrats.'
-                    : 'Otillräckliga mätvärden för simulering.';
-                });
-              });
-            });
-          });
-        };
+        document.getElementById('runSimulation').onclick = () => runSimulation(Homey);
 
         loadOverview(Homey);
         setInterval(() => loadOverview(Homey), 15000);

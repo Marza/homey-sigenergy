@@ -29,7 +29,12 @@ function hour(day, kw) {
     coverageMs: 900000,
   }));
 }
-const slots = [12, 13, 14, 15, 16].flatMap((day, i) => hour(day, 6 + i));
+const peaks = [12, 13, 14, 15, 16].flatMap((day, i) => hour(day, 6 + i));
+// Include intervening observed zero-load quarters; sparse peaks alone do not
+// establish the replay's chronological coverage.
+const slots = [];
+for (let t = peaks[0].t; t <= peaks.at(-1).t; t += 900000)
+  slots.push(peaks.find((s) => s.t === t) || { t, gridWh: 0, essWh: 0, coverageMs: 900000 });
 test('same five-hour model is used for baseline and counterfactual', () => {
   const r = evaluateTariffScenarios(slots, config, tariff, '2026-01');
   assert.equal(r.status, 'provisional');
