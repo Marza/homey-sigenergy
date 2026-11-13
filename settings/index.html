@@ -7,6 +7,7 @@
     <script src="price-coverage.js"></script>
     <script src="source-status.js"></script>
     <script src="simulator.js"></script>
+    <script src="charging-planner.js"></script>
     <script src="tariff-config.js"></script>
     <style>
       :root {
@@ -561,6 +562,10 @@
         >Maximal planerad laddningseffekt (kW)
         <input id="maxChargingPowerKW" type="number" min="0.1" step="0.1"
       /></label>
+      <label
+        >Laddverkningsgrad (0–1)
+        <input id="chargingEfficiency" type="number" min="0.01" max="1" step="0.01"
+      /></label>
       <h3>Dagliga avresemål</h3>
       <table>
         <thead>
@@ -575,6 +580,54 @@
       </table>
       <button id="save">Spara schema</button>
       <p id="message" role="status"></p>
+      <h3>Laddplan – förhandsvisning utan styrning</h3>
+      <p>
+        Manuell bil-SoC används tills EVDC är verifierad. Planen använder sparat schema och
+        Tibber-priser. Spara schemaändringar innan du beräknar.
+      </p>
+      <label>Avläst bil-SoC (%) <input id="planSoc" type="number" min="0" max="100" /></label>
+      <label
+        >Avläsningstid (denna enhets lokala tid) <input id="planObservedAt" type="datetime-local"
+      /></label>
+      <button type="button" id="planStamp">Ange aktuell avläsningstid</button>
+      <label
+        ><input id="planConnected" type="checkbox" /> Bilen antas ansluten hela
+        planeringsperioden</label
+      >
+      <label
+        >Antagen tillgänglig laddningseffekt (kW)
+        <input id="planPower" type="number" min="0" max="350" step="0.1"
+      /></label>
+      <p>
+        Effekten är ett antagande. Appen kontrollerar eller verkställer inga nät-, fas- eller
+        säkringsgränser. Ingen körning/urladdning mellan målen antas. Solfördelning och hemmabatteri
+        ingår inte.
+      </p>
+      <button type="button" id="previewCharging">Beräkna förhandsvisning</button>
+      <p id="chargingPreviewStatus" role="status">Ingen förhandsvisning beräknad.</p>
+      <p id="chargingPreviewContext"></p>
+      <p id="chargingPreviewSummary"></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Deadline</th>
+            <th>Mål SoC</th>
+            <th>Pristäckning</th>
+            <th>Ej uppnådd energi</th>
+          </tr>
+        </thead>
+        <tbody id="chargingDeadlines"></tbody>
+      </table>
+      <table>
+        <thead>
+          <tr>
+            <th>Prisintervall</th>
+            <th>Planerad inköpt energi</th>
+            <th>Tibber-pris</th>
+          </tr>
+        </thead>
+        <tbody id="chargingSlots"></tbody>
+      </table>
     </section>
     <script>
       'use strict';
@@ -1126,6 +1179,155 @@
           });
         });
       }
+      function bindChargingPreview(Homey) {
+        const element = (id) => document.getElementById(id),
+          button = element('previewCharging');
+        let generation = 0,
+          expiration;
+        const clear = (message) => {
+          generation++;
+          clearTimeout(expiration);
+          button.disabled = false;
+          for (const id of ['chargingDeadlines', 'chargingSlots']) element(id).replaceChildren();
+          for (const id of ['chargingPreviewContext', 'chargingPreviewSummary'])
+            element(id).textContent = '';
+          element('chargingPreviewStatus').textContent = message;
+        };
+        const invalidate = () => clear('Indata ändrade. Beräkna en ny förhandsvisning.');
+        for (const id of [
+          'planSoc',
+          'planObservedAt',
+          'planConnected',
+          'planPower',
+          'minimumSoc',
+          'minimumDeadline',
+          'usableBatteryKWh',
+          'maxChargingPowerKW',
+          'chargingEfficiency',
+        ])
+          element(id).oninput = invalidate;
+        element('days').oninput = invalidate;
+        element('planStamp').onclick = () => {
+          const now = new Date();
+          element('planObservedAt').value = new Date(
+            now.getTime() - now.getTimezoneOffset() * 60000,
+          )
+            .toISOString()
+            .slice(0, 16);
+          invalidate();
+        };
+        button.onclick = () => {
+          clear('Beräknar…');
+          let input;
+          try {
+            if (
+              !element('planSoc').value.trim() ||
+              !element('planPower').value.trim() ||
+              !element('planObservedAt').value
+            )
+              throw new Error('Fyll i SoC, avläsningstid och tillgänglig effekt.');
+            const observedAt = new Date(element('planObservedAt').value);
+            if (!Number.isFinite(observedAt.getTime())) throw new Error('Ogiltig avläsningstid.');
+            input = {
+              source: 'manual',
+              currentSoc: Number(element('planSoc').value),
+              observedAt: observedAt.toISOString(),
+              connected: element('planConnected').checked,
+              availablePowerKW: Number(element('planPower').value),
+            };
+          } catch (error) {
+            clear(error.message);
+            return;
+          }
+          const request = generation;
+          button.disabled = true;
+          const timeout = setTimeout(() => {
+            if (request === generation) clear('Förhandsvisningen kunde inte hämtas. Försök igen.');
+          }, 10000);
+          Homey.api('POST', '/charging/preview', input, (error, result) => {
+            clearTimeout(timeout);
+            if (request !== generation) return;
+            button.disabled = false;
+            if (error) {
+              clear(error.message);
+              return;
+            }
+            if (
+              !result?.assumptions ||
+              !result.soc ||
+              !result.pricing ||
+              !result.advisoryOnly ||
+              result.controlApplied !== false
+            ) {
+              clear('Ogiltigt svar från planeringen.');
+              return;
+            }
+            const a = result.assumptions,
+              p = result.pricing;
+            const planTime = (iso) =>
+              iso
+                ? new Intl.DateTimeFormat('sv-SE', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                    timeZone: a.timezone,
+                  }).format(new Date(iso))
+                : '–';
+            const labels = {
+              planned: 'Preliminär laddplan',
+              'already-met': 'Alla mål är redan uppnådda utan körning/urladdning',
+              unreachable: 'Alla mål kan inte uppnås',
+              'partial-prices': 'Ofullständiga priser – preliminärt urval',
+              'no-prices': 'Inga användbara priser',
+              'not-connected': 'Ingen plan: bilen antas inte ansluten',
+              'no-power': 'Ingen plan: tillgänglig effekt är 0 kW',
+            };
+            element('chargingPreviewStatus').textContent =
+              (labels[result.status] || 'Planering saknas') + ' · Ingen styrning';
+            element('chargingPreviewContext').textContent =
+              `Beräknad ${planTime(result.createdAt)}. Manuell SoC ${result.soc.percent} %, avläst ${planTime(result.soc.observedAt)}. ${a.usableBatteryKWh} kWh, verkningsgrad ${Math.round(a.chargingEfficiency * 100)} %, antagen effekt ${a.powerKW} kW. Tidszon ${a.timezone}, horisont ${a.horizonHours} h. Ansluten hela perioden: ${a.connected ? 'ja' : 'nej'}. Priser ${p.currency || 'okänd valuta'}: ${planTime(p.availableFrom)}–${planTime(p.availableTo)}, hämtade ${planTime(p.fetchedAt)}.`;
+            element('chargingPreviewSummary').textContent =
+              `Planerad energi ${result.plannedInputKWh ?? '–'} kWh från nätet, ${result.plannedBatteryKWh ?? '–'} kWh till bilen. Begränsad kostnadsuppskattning ${result.estimatedCost ?? '–'} ${p.currency || ''}. ${result.costBasis}`;
+            const row = (id, values) => {
+              const tr = document.createElement('tr');
+              for (const value of values) {
+                const td = document.createElement('td');
+                td.textContent = value;
+                tr.appendChild(td);
+              }
+              element(id).appendChild(tr);
+            };
+            for (const d of result.deadlines || []) {
+              const coverage = result.priceCoverage?.find(
+                  (c) => c.at === d.at && c.type === d.type,
+                ),
+                unmet = result.unmet?.find((u) => u.at === d.at && u.type === d.type);
+              row('chargingDeadlines', [
+                planTime(d.at) + (d.adjustment ? ' (sommartidsjusterad)' : ''),
+                d.soc + ' %',
+                coverage
+                  ? coverage.complete
+                    ? 'Komplett'
+                    : (coverage.gaps?.length || 0) + ' prisluckor'
+                  : 'Ej beräknad',
+                unmet ? unmet.missingBatteryKWh + ' kWh' : result.unmet ? '0 kWh' : 'Ej beräknad',
+              ]);
+            }
+            for (const slot of result.slots || [])
+              row('chargingSlots', [
+                planTime(slot.start) + '–' + planTime(slot.end),
+                slot.inputKWh + ' kWh',
+                slot.price + ' ' + (p.currency || '') + '/kWh',
+              ]);
+            expiration = setTimeout(
+              () =>
+                clear(
+                  'Förhandsvisningen har blivit inaktuell. Läs av SoC igen och beräkna på nytt.',
+                ),
+              Math.max(0, 15 * 60000 - (Date.now() - Date.parse(result.soc.observedAt))),
+            );
+          });
+        };
+      }
       function onHomeyReady(Homey) {
         refreshDiagnostics(Homey);
         setInterval(() => refreshDiagnostics(Homey), 15000);
@@ -1227,6 +1429,8 @@
 
         bindTariffSettings(Homey);
         bindTibberSettings(Homey);
+        bindChargingPreview(Homey);
+        document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {
           if (err) {
             document.getElementById('message').textContent = err.message;
@@ -1239,11 +1443,19 @@
             Homey.ready();
             return;
           }
+          try {
+            ChargingPlanner.validateConfig(config);
+          } catch (error) {
+            document.getElementById('message').textContent = error.message;
+            return;
+          }
+          document.getElementById('save').disabled = false;
           for (const key of [
             'minimumSoc',
             'minimumDeadline',
             'usableBatteryKWh',
             'maxChargingPowerKW',
+            'chargingEfficiency',
           ])
             document.getElementById(key).value = config[key];
           for (const [day, label] of Object.entries(names)) {
@@ -1257,8 +1469,21 @@
           }
         });
         document.getElementById('save').onclick = () => {
+          if (document.getElementById('save').disabled) return;
           const next = { ...config, dailyTargets: { ...config.dailyTargets } };
-          for (const key of ['minimumSoc', 'usableBatteryKWh', 'maxChargingPowerKW'])
+          try {
+            ChargingPlanner.validateConfig(config);
+          } catch (error) {
+            document.getElementById('message').textContent = error.message;
+            return;
+          }
+          document.getElementById('save').disabled = false;
+          for (const key of [
+            'minimumSoc',
+            'usableBatteryKWh',
+            'maxChargingPowerKW',
+            'chargingEfficiency',
+          ])
             next[key] = Number(document.getElementById(key).value);
           next.minimumDeadline = document.getElementById('minimumDeadline').value;
           for (const day of Object.keys(names))
@@ -1267,15 +1492,21 @@
               time: document.getElementById(`${day}-time`).value,
               soc: Number(document.getElementById(`${day}-soc`).value),
             };
-          if (
-            next.minimumSoc < 0 ||
-            next.minimumSoc > 100 ||
-            !next.minimumDeadline ||
-            next.usableBatteryKWh <= 0 ||
-            next.maxChargingPowerKW <= 0 ||
-            Object.values(next.dailyTargets).some((x) => x.soc < 0 || x.soc > 100 || !x.time)
-          ) {
-            document.getElementById('message').textContent = 'Kontrollera angivna värden.';
+          try {
+            for (const key of [
+              'minimumSoc',
+              'usableBatteryKWh',
+              'maxChargingPowerKW',
+              'chargingEfficiency',
+            ])
+              if (!document.getElementById(key).value.trim())
+                throw new Error('Fyll i alla laddparametrar.');
+            for (const day of Object.keys(names))
+              if (!document.getElementById(day + '-soc').value.trim())
+                throw new Error('Fyll i mål-SoC för varje dag.');
+            ChargingPlanner.validateConfig(next);
+          } catch (error) {
+            document.getElementById('message').textContent = error.message;
             return;
           }
           Homey.set('chargingConfig', next, (err) => {

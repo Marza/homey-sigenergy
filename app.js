@@ -17,6 +17,7 @@ const { HistoryStore } = require('./lib/history');
 const { calculateDemandCharge, validateTariff } = require('./lib/demand-tariff');
 const { SmoS40Reader } = require('./lib/nibe/smo-s40');
 const { heatPumpPolicy } = require('./lib/backup/heat-pump-policy');
+const { createChargingPreview } = require('./lib/charging/preview');
 const { DEFAULTS, planCharging } = require('./lib/charging/planner');
 const { fetchTibberPrices } = require('./lib/pricing/tibber');
 const { shouldRefreshPrices, hasTomorrowPrices } = require('./lib/pricing/refresh-policy');
@@ -326,6 +327,25 @@ module.exports = class SigenergyApp extends Homey.App {
     if (!tariff) return { status: 'not-configured' };
     validateTariff(tariff);
     return calculateDemandCharge(this.history.getSlots(), tariff, month);
+  }
+  getChargingPreview(input, now = new Date()) {
+    const values = Object.fromEntries(
+      [
+        'tibberToken',
+        'tibberHomeId',
+        'sourceConfig',
+        'priceCache',
+        'priceError',
+        'priceLastAttemptAt',
+      ].map((key) => [key, this.homey.settings.get(key)]),
+    );
+    return createChargingPreview({
+      input,
+      now,
+      config: this.homey.settings.get('chargingConfig'),
+      pricing: priceStatus(values, now.getTime()),
+      prices: usablePrices(values, now.getTime()),
+    });
   }
   getPricePlan(currentSoc, now = new Date()) {
     const values = Object.fromEntries(

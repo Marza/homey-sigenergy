@@ -36,3 +36,5 @@ Open `coverage/index.html` for per-file results. CI retains HTML, LCOV and JSON-
 The shared simulation engine is `lib/optimization/simulator.js`; `npm run format` also synchronizes its browser copy to `settings/simulator.js`. Keep browser/Node parity and unsafe-range regression tests passing. Do not add a separate replay loop to the settings page.
 
 Widget definitions live in `widgets/energy-overview/widget.compose.json` and are explicitly registered in `app.json` because this repository does not enable Homey Compose. Keep both consistent; tests enforce registration. `node scripts/verify-widget.js` checks `.homeybuild`, and release verification repeats it against the extracted archive.
+
+The shared charging planner is `lib/charging/planner.js`; the same sync command updates `settings/charging-planner.js`. Keep input/timezone validation, DST resolution and preview UI tests aligned with the backend; never add charging commands to the preview route.

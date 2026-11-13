@@ -17,6 +17,12 @@ Data refreshes every 30 seconds. Failed/malformed responses and requests exceedi
 - Light and dark layouts were visually inspected in local Chrome with a **400 × 900** viewport, using a synthetic API bridge. Both fit horizontally and keep units and advisory/coverage labels readable. A wider local browser view was also inspected. The light/dark preview PNGs were captured from these synthetic views; they contain no household measurements or account identifiers. This is local browser evidence, not a physical Dashboard test.
 - No minimum mobile-app or Dashboard client version has been established. Record the actual tested versions below rather than inferring support from the manifest or Node tests.
 
+## Physical observation — 2026-11-13
+
+Release **v0.17.9** (source commit `b0bdb256ca90f10649edf5336f829ab2894d5fb6`) was installed on the existing Homey Pro installation. The user confirmed that **Energiöversikt is visible in the Dashboard widget picker and displays data**. Homey monitoring had been recorded on firmware 13.5.4; the Dashboard/mobile client version was not recorded. This establishes basic visibility and data rendering on this installation, not the full smoke test below.
+
+The install preserved configuration, the Tibber token and all 34 previously closed history quarters. Fresh Sigenergy/Nibe reads and 192 cached price intervals were observed afterwards; hardware writes remained disabled. Private identifiers, addresses and usage values are omitted.
+
 ## Physical smoke test still required for issue #13
 
 After review/merge, install the release preserving app data, then:
