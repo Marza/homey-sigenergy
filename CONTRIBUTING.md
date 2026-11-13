@@ -18,3 +18,5 @@ credentials, exported history, or personally identifying telemetry.
 
 Clearly distinguish simulated results from values measured on physical devices.
 Do not claim hardware compatibility based solely on unit tests.
+
+Source-status rules live in `lib/source-status.js`. After editing them, run `node scripts/sync-source-status.js` to update the packaged browser copies in settings and the widget. Tests reject copies that differ from the shared module.

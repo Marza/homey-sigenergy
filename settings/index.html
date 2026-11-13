@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="sv"><head><meta charset="utf-8"><title>SigEnergy – Energiöversikt</title>
 <script src="/homey.js" data-origin="settings"></script>
+<script src="source-status.js"></script>
 <style>
 :root{color-scheme:light dark}*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0 auto;padding:18px;max-width:850px;line-height:1.45;color:var(--homey-text-color,#1d2935);background:var(--homey-background-color,transparent)}
 h1{font-size:25px;margin:0}h2{font-size:20px;margin:0 0 12px}h3{margin:22px 0 8px}p{color:var(--homey-text-color,#394b59)}.muted,.sub{font-size:13px;opacity:.75}.header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px}.pill{border-radius:99px;background:#e8eef5;color:#284660;padding:5px 10px;font-size:12px;font-weight:650}.tabs{display:flex;gap:8px;overflow:auto;margin:16px 0 20px}.tab{border:1px solid #b9c5cf;border-radius:9px;padding:9px 13px;margin:0;background:transparent;color:inherit;white-space:nowrap}.tab[aria-selected=true]{background:#204e72;color:#fff;border-color:#204e72}.panel[hidden]{display:none}.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card,.section{border:1px solid #bac5ce66;border-radius:14px;padding:15px;margin:0 0 12px}.card .value{font-size:26px;font-weight:700;letter-spacing:-.5px;margin:3px 0}.card .label{font-size:13px;opacity:.8}.statusline{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}.status{font-weight:650}.warning{color:#aa6b13}.ok{color:#187d58}.empty{color:#657687}.chart{width:100%;height:155px;display:block}.legend{display:flex;gap:14px;font-size:12px;flex-wrap:wrap}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px}.settingsGroup{border:1px solid #bac5ce66;border-radius:14px;padding:16px;margin:14px 0}label{display:block;margin:12px 0 4px}input{padding:8px;max-width:180px;border-radius:7px;border:1px solid #9aabba;background:transparent;color:inherit}input[type=checkbox]{width:auto}table{border-collapse:collapse;width:100%;font-size:13px}td,th{padding:7px;border-bottom:1px solid #bac5ce66;text-align:left}button{cursor:pointer;padding:10px 14px;margin-top:12px;border:1px solid #9aabba;border-radius:8px;background:transparent;color:inherit}button.primary{background:#204e72;color:#fff;border:0}button:focus-visible,input:focus-visible{outline:3px solid #5b9ddd;outline-offset:2px}.note{border-left:3px solid #c3903b;padding-left:10px;font-size:13px}.metric{font-variant-numeric:tabular-nums}@media(min-width:650px){.cards{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -13,7 +14,7 @@ h1{font-size:25px;margin:0}h2{font-size:20px;margin:0 0 12px}h3{margin:22px 0 8p
 <div class="card"><div class="label">Solproduktion</div><div class="value metric" id="pvPower">–</div><div class="sub">kW</div></div>
 <div class="card"><div class="label">Hembatteri</div><div class="value metric" id="batterySoc">–</div><div class="sub">SoC</div></div>
 <div class="card"><div class="label">Utomhus · Nibe BT1</div><div class="value metric" id="outdoorTemp">–</div><div class="sub" id="nibeUpdated">Ingen aktuell avläsning</div></div>
-</div><div class="section"><div class="statusline"><strong>Reservkraft och styrning</strong><span id="islandMode" class="status empty">Okänd</span></div><p id="backupDetails" class="sub">Ingen bekräftad status.</p><p class="note">Appen visar begärda åtgärder, inte bekräftade laddstopp eller Nibe-blockeringar.</p></div>
+</div><p id="measurementStatus" class="sub" aria-live="polite">Väntar på mätdata.</p><div class="section"><div class="statusline"><strong>Reservkraft och styrning</strong><span id="islandMode" class="status empty">Okänd</span></div><p id="backupDetails" class="sub">Ingen bekräftad status.</p><p class="note">Appen visar begärda åtgärder, inte bekräftade laddstopp eller Nibe-blockeringar.</p></div>
 <div class="section"><div class="statusline"><strong>Senaste nätmätning</strong><span class="sub" id="historyUpdated">–</span></div><svg class="chart" id="overviewChart" viewBox="0 0 680 155" role="img" aria-label="Nätimport senaste 15-minutersintervallen"><text x="20" y="80" fill="currentColor" opacity=".7">Ingen historik ännu</text></svg><div class="legend"><span><span class="dot" style="background:#3586b5"></span>Nätimport, 15-minutersmedel</span></div></div>
 </section>
 <section class="panel" id="panel-prices" hidden><div class="section"><div class="statusline"><strong>Morgondagens elpriser</strong><span id="tomorrowStatus" class="status empty">Kontrollerar…</span></div><p id="priceFreshness" class="sub">Väntar på Tibber-data.</p><p class="note">Efter kl. 13 kontrolleras Tibber var 15:e minut tills morgondagens priser finns. Tidigare kända priser behålls vid nätfel.</p></div><div class="section"><strong>Kommande priser</strong><svg class="chart" id="priceChart" viewBox="0 0 680 155" role="img" aria-label="Kommande elpriser"><text x="20" y="80" fill="currentColor" opacity=".7">Inga priser i cache</text></svg><p id="priceRange" class="sub">–</p></div></section>
@@ -111,45 +112,70 @@ function drawBars(id, values, color){
  const max=Math.max(...values.map(x=>Math.abs(x)),0.01), bar=630/values.length;
  svg.innerHTML=values.map((v,i)=>{const h=Math.max(2,Math.abs(v)/max*112);return `<rect x="${35+i*bar}" y="${130-h}" width="${Math.max(1,bar-2)}" height="${h}" rx="2" fill="${color}"/>`;}).join('')+`<text x="5" y="15" font-size="12" fill="currentColor">max ${max.toFixed(2)}</text>`;
 }
+let overviewRequest=0;
 function loadOverview(Homey){
- const get=(key,cb)=>Homey.get(key,(err,val)=>{if(!err)cb(val);});
- readHistory(Homey,(error,history)=>{
-  if(error){document.getElementById('historySummary').textContent=error.message;return;}
-  const slots=history.slots;
-  const recent=(Array.isArray(slots)?slots:[]).slice(-32);
-  const vals=recent.map(x=>{const w=historyAverage(x,'gridW');return Number.isFinite(w)?Math.max(0,w/1000):null;}).filter(x=>x!==null);
-  drawBars('overviewChart',vals,'#3586b5');
-  const last=recent.at(-1);
-  const grid=historyAverage(last,'gridW'),pv=historyAverage(last,'pvW'),soc=historyAverage(last,'soc');
-  document.getElementById('gridPower').textContent=Number.isFinite(grid)?formatKW(grid):'–';
-  document.getElementById('pvPower').textContent=Number.isFinite(pv)?formatKW(pv):'–';
-  document.getElementById('batterySoc').textContent=Number.isFinite(soc)?soc.toFixed(0)+' %':'–';
-  document.getElementById('historyUpdated').textContent=recent.length?'Senaste registrerade intervall: '+recent.length:'Ingen historik';
-  document.getElementById('historySummary').textContent=`${slots.length} sparade 15-minutersintervall · ${history.daily.length} dagssammanställningar · ${history.legacyDaily.length} äldre dagsposter`;
- });
- get('backupStatus',s=>{
-  if(!s)return;
-  const mode=s.mode||'unknown';document.getElementById('islandMode').textContent=mode;
-  document.getElementById('backupDetails').textContent=`Senaste status: ${localTime(s.observedAt)}. EV-stopp begärt: ${s.evStopRequested?'Ja':'Nej'}.`;
-  document.getElementById('connectionBadge').textContent=mode==='unknown'?'Status okänd':'Modbus-status mottagen';
- });
- get('nibeStatus',s=>{
-  const t=s?.readings?.outdoorC;
-  if(Number.isFinite(t))document.getElementById('outdoorTemp').textContent=t.toLocaleString('sv-SE',{maximumFractionDigits:1})+' °C';
-  document.getElementById('nibeUpdated').textContent=s?.readAt?'Avläst '+localTime(s.readAt):'Ingen aktuell avläsning';
- });
- get('priceCache',cache=>{
-  const prices=cache?.prices||[];
-  const tomorrowKey=localDate(new Date(Date.now()+30*3600000).toISOString());
+ const request=++overviewRequest;
+ const set=(id,value)=>{document.getElementById(id).textContent=value;};
+ SourceStatus.readSources(Homey,(sources,values)=>{
+  if(request!==overviewRequest)return;
+  const get=(key,cb)=>Homey.get(key,(error,value)=>{if(request===overviewRequest)cb(error?null:value);});
+  set('connectionBadge',SourceStatus.describe(sources.sigenergy));
+  const nibe=values.nibeStatus;
+  const outdoor=nibe?.readings?.outdoorC;
+  set('outdoorTemp',sources.nibe.usable&&Number.isFinite(outdoor)&&outdoor>=-50&&outdoor<=100?outdoor.toLocaleString('sv-SE',{maximumFractionDigits:1})+' °C':'–');
+  set('nibeUpdated',SourceStatus.describe(sources.nibe));
+  readHistory(Homey,(error,history)=>{
+   if(request!==overviewRequest)return;
+   const slots=history?.slots||[],recent=slots.slice(-32),last=recent.at(-1);
+   const fresh=SourceStatus.isFresh(last?.t,SourceStatus.MAX_AGE_MS.history);
+   const usable=!error&&fresh&&sources.sigenergy.usable;
+   const avg=key=>usable?historyAverage(last,key):null;
+   const grid=avg('gridW'),pv=avg('pvW'),soc=avg('soc');
+   set('gridPower',Number.isFinite(grid)?formatKW(grid):'–');
+   set('pvPower',Number.isFinite(pv)?formatKW(pv):'–');
+   set('batterySoc',Number.isFinite(soc)?soc.toFixed(0)+' %':'–');
+   set('measurementStatus',error?'Historiken kunde inte läsas':!last?'Ingen historik':!fresh?'Inaktuella historikvärden':
+     'Historiskt 15-minutersmedel · '+SourceStatus.describe(sources.sigenergy));
+   drawBars('overviewChart',error?[]:recent.map(x=>historyAverage(x,'gridW')).filter(Number.isFinite).map(w=>Math.max(0,w/1000)),'#3586b5');
+   set('historyUpdated',last?'Senaste intervallstart: '+localTime(last.t):'Ingen historik');
+   set('historySummary',error?'Historiken kunde inte läsas':`${slots.length} sparade 15-minutersintervall · ${history.daily.length} dagssammanställningar · ${history.legacyDaily.length} äldre dagsposter`);
+  });
+  get('backupStatus',status=>{
+   const usable=sources.sigenergy.usable&&SourceStatus.isFresh(status?.observedAt,values.sourceConfig?.sigenergy?.maxAgeMs||SourceStatus.MAX_AGE_MS.sigenergy);
+   set('islandMode',usable?status.mode||'unknown':'unknown');
+   set('backupDetails',usable?`Senaste status: ${localTime(status.observedAt)}. EV-stopp begärt: ${status.evStopRequested?'Ja':'Nej'}.`:'Ingen aktuell bekräftad status.');
+  });
+  const cache=values.priceCache,prices=sources.tibber.enabled?(cache?.prices||[]):[];
   const todayKey=localDate(new Date().toISOString());
-  const nextKey=(()=>{for(let h=1;h<=30;h++){const key=localDate(new Date(Date.now()+h*3600000).toISOString());if(key!==todayKey)return key;}return tomorrowKey;})();
-  const tomorrow=prices.filter(p=>localDate(p.start)===nextKey);
-  document.getElementById('tomorrowStatus').textContent=tomorrow.length?'Tillgängliga':'Inväntar publicering';
-  document.getElementById('priceFreshness').textContent=`Senast hämtat: ${localTime(cache?.fetchedAt)} · ${tomorrow.length} prisintervall för imorgon`;
+  let nextKey;
+  for(let h=1;h<=30;h++){const key=localDate(new Date(Date.now()+h*3600000).toISOString());if(key!==todayKey){nextKey=key;break;}}
+  const tomorrow=prices.filter(p=>Number.isFinite(Date.parse(p.start))&&localDate(p.start)===nextKey);
+  set('tomorrowStatus',!sources.tibber.enabled?'Ej konfigurerad':tomorrow.length?'Priser finns i cache':'Inväntar publicering');
+  set('priceFreshness',SourceStatus.describe(sources.tibber)+` · Senast hämtat: ${localTime(cache?.fetchedAt)} · ${tomorrow.length} prisintervall för imorgon`);
   drawBars('priceChart',prices.slice(0,96).map(p=>p.price),'#4d9a76');
-  document.getElementById('priceRange').textContent=prices.length?`Visar ${Math.min(96,prices.length)} av ${prices.length} kommande prisintervall. Pris i kr/kWh, inklusive Tibbers rapporterade komponenter.`:'Inga priser tillgängliga.';
+  set('priceRange',prices.length?`Visar ${Math.min(96,prices.length)} av ${prices.length} cachade prisintervall. Pris i kr/kWh, inklusive Tibbers rapporterade komponenter.`:'Inga priser tillgängliga.');
+  get('demandTariff',tariff=>set('tariffStatus',tariff?'Tariff konfigurerad men inte verifierad mot nätbolaget.':'Ingen tariff konfigurerad.'));
  });
- get('demandTariff',tariff=>document.getElementById('tariffStatus').textContent=tariff?'Tariff konfigurerad men inte verifierad mot nätbolaget.':'Ingen tariff konfigurerad.');
+}
+let diagnosticsRequest=0;
+function refreshDiagnostics(Homey){
+ const request=++diagnosticsRequest;
+ SourceStatus.readSources(Homey,(sources,values)=>{
+  if(request!==diagnosticsRequest)return;
+  const el=document.getElementById('diagnosticRows');el.replaceChildren();
+  for(const [key,name] of [['sigenergy','SigEnergy'],['battery','Batteri'],['nibe','Nibe'],['tibber','Tibber'],['evdc','EVDC']]){
+   const status=sources[key];const p=document.createElement('p');
+   p.textContent=name+': '+SourceStatus.describe(status);el.appendChild(p);
+   for(const [field,error] of Object.entries(status.fieldErrors)){
+    const detail=document.createElement('p');detail.className='sub';detail.textContent=field+': '+error;el.appendChild(detail);
+   }
+  }
+  const outdoor=values.nibeStatus?.readings?.outdoorC;
+  const b=SourceStatus.batteryValues(values.batteryTelemetry,sources.battery);
+  document.getElementById('temperatureStatus').textContent='Ute: '+(sources.nibe.usable&&Number.isFinite(outdoor)&&outdoor>=-50&&outdoor<=100?outdoor+' °C':'saknas')+' · BMS laddgräns: '+(Number.isFinite(b.chargePowerLimitKW)?b.chargePowerLimitKW+' kW':'saknas')+' · BMS urladdningsgräns: '+(Number.isFinite(b.dischargePowerLimitKW)?b.dischargePowerLimitKW+' kW':'saknas');
+  const vals=Object.entries(b).map(([k,v])=>k+': '+v).join(' · ');
+  document.getElementById('batteryTelemetryStatus').textContent=SourceStatus.describe(sources.battery)+(vals?' · '+vals:' · Manuella simuleringsvärden används')+' · Ej verifierat mot hårdvara';
+ });
 }
 
 function exportHistory(Homey){
@@ -193,26 +219,9 @@ function bindHistoryImport(Homey){
 }
 
 function onHomeyReady(Homey){
- function refreshDiagnostics(){
-  const keys=['sigenergyStatus','sigenergyError','batteryTelemetry','batteryTelemetryError','nibeHost','nibeStatus','nibeError','tibberToken','priceCache','priceError','lastEvdc','evdcError'];
-  const values={};let remaining=keys.length;
-  keys.forEach(k=>Homey.get(k,(err,v)=>{values[k]=err?null:v;if(--remaining!==0)return;
-    const now=Date.now();const items=[['SigEnergy','sigenergyStatus','sigenergyError',30000,true],['Batteri','batteryTelemetry','batteryTelemetryError',600000,true],['Nibe','nibeStatus','nibeError',90000,!!values.nibeHost],['Tibber','priceCache','priceError',93600000,!!values.tibberToken],['EVDC','lastEvdc','evdcError',90000,!!values.lastEvdc]];
-    const el=document.getElementById('diagnosticRows');el.replaceChildren();
-    items.forEach(([name,key,errorKey,maxAge,enabled])=>{
-      const t=values[key]?.readAt||values[key]?.fetchedAt;const age=Date.parse(t||'');const error=values[errorKey];
-      const status=!enabled?'Ej konfigurerad':error?'Fel: '+error:!Number.isFinite(age)?'Inga data':now-age>maxAge?'Inaktuella data':'OK';
-      const p=document.createElement('p');p.textContent=name+': '+status+(Number.isFinite(age)?' · '+Math.max(0,Math.round((now-age)/1000))+' s sedan':'');el.appendChild(p);
-    });
-    const outdoor=values.nibeStatus?.readings?.outdoorC;
-    const b=values.batteryTelemetry?.values||{};
-    document.getElementById('temperatureStatus').textContent='Ute: '+(Number.isFinite(outdoor)?outdoor+' °C':'saknas')+' · BMS laddgräns: '+(Number.isFinite(b.chargePowerLimitKW)?b.chargePowerLimitKW+' kW':'saknas')+' · BMS urladdningsgräns: '+(Number.isFinite(b.dischargePowerLimitKW)?b.dischargePowerLimitKW+' kW':'saknas');
-  }));
- }
- refreshDiagnostics();setInterval(refreshDiagnostics,15000);
+ refreshDiagnostics(Homey);setInterval(()=>refreshDiagnostics(Homey),15000);
  const optimizerKeys=['minCapKW','maxCapKW','capStepKW','reserveMinPercent','reserveMaxPercent','reserveStepPercent','backupReservePercent','batteryCapacityKWh','initialSocPercent','maxDischargeKW','maxChargeKW','roundTripEfficiency','batteryWearSekPerKWh'];
  Homey.get('autoBatteryValues',(err,v)=>{if(!err)document.getElementById('autoBatteryValues').checked=v!==false;});
- Homey.get('batteryTelemetry',(err,t)=>{if(err||!t)return;const vals=Object.entries(t.values||{}).map(([k,v])=>k+': '+v).join(' · ');document.getElementById('batteryTelemetryStatus').textContent='Senaste avläsning: '+localTime(t.readAt)+' · '+vals+' · Ej verifierat mot hårdvara';});
  Homey.get('optimizerConfig',(err,c)=>{if(!err&&c)for(const k of optimizerKeys)if(c[k]!==undefined)document.getElementById(k).value=c[k];});
  document.getElementById('saveOptimizer').onclick=()=>{
   const c=Object.fromEntries(optimizerKeys.map(k=>[k,Number(document.getElementById(k).value)]));
@@ -245,12 +254,11 @@ function onHomeyReady(Homey){
    if(err){document.getElementById('simulationStatus').textContent=err.message;return;}
    Homey.get('optimizerConfig',(e,c)=>{
     if(e||!c){document.getElementById('simulationStatus').textContent='Spara simuleringsparametrarna först.';return;}
-    Homey.get('batteryTelemetry',(telemetryError,telemetry)=>{
+    SourceStatus.readSources(Homey,(sources,values)=>{
      Homey.get('autoBatteryValues',(autoError,auto)=>{
       c={...c};
-      if(!telemetryError && !autoError && auto!==false && telemetry &&
-         Date.now()-Date.parse(telemetry.readAt)<600000){
-       const v=telemetry.values||{};
+      if(!autoError && auto!==false){
+       const v=SourceStatus.batteryValues(values.batteryTelemetry,sources.battery);
        if(Number.isFinite(v.capacityKWh)&&v.capacityKWh>0)c.batteryCapacityKWh=v.capacityKWh;
        if(Number.isFinite(v.soc)&&v.soc>=0&&v.soc<=100)c.initialSocPercent=v.soc;
        if(Number.isFinite(v.dischargePowerLimitKW)&&v.dischargePowerLimitKW>0)c.maxDischargeKW=Math.min(c.maxDischargeKW,v.dischargePowerLimitKW);
@@ -280,7 +288,7 @@ function onHomeyReady(Homey){
   });
  };
 
- loadOverview(Homey);
+ loadOverview(Homey);setInterval(()=>loadOverview(Homey),15000);
  document.getElementById('exportHistoryTop').onclick=()=>document.getElementById('exportHistory').click();
  document.getElementById('exportHistory').onclick=()=>exportHistory(Homey);
  bindHistoryImport(Homey);

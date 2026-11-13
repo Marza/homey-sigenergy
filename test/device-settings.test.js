@@ -27,7 +27,11 @@ test('settings change connects with new settings before Homey updates getSetting
   const newSettings = { ...oldSettings, host: '192.0.2.20', port: 503, unitId: 1, pollSeconds: 20 };
   const cleared = [], intervals = [];
   device.getSettings = () => oldSettings;
+  const values = new Map();
+  device.setCapabilityValue = async () => {};
+  device.error = () => {};
   device.homey = {
+    settings: { get: key => values.get(key), set: (key, value) => values.set(key, value) },
     setInterval(callback, ms) { intervals.push(ms); return intervals.length; },
     clearInterval(timer) { cleared.push(timer); },
   };

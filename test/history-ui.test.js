@@ -17,12 +17,12 @@ function render(file, row, start, canonical = false) {
   const Homey = {
     get(key, callback) {
       if (canonical && key === 'historyState') callback(null, { schema: 3, slots: [row], daily: [], events: [], legacyDaily: [] });
-      else callback(null, key === 'historySlots' ? [row] : undefined);
+      else callback(null, key === 'historySlots' ? [row] : key === 'sourceConfig' ? { sigenergy: { configured: true, enabled: true } } : key === 'sigenergyStatus' ? { readAt: new Date().toISOString() } : undefined);
     },
     ready() {},
   };
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
-  const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
+  const script = fs.readFileSync(path.join(__dirname, '../lib/source-status.js'), 'utf8') + '\n' + [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
   vm.runInNewContext(script + '\n' + start, { document, Homey, setInterval() {} });
   return id => String(elements.get(id).textContent).replace(/[\u00a0\u202f]/g, ' ');
 }
