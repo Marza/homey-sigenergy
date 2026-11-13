@@ -1,6 +1,6 @@
 'use strict';
 const Homey = require('homey');
-const { diagnostics } = require('./lib/diagnostics');
+const { diagnostics, nibeKey, batteryValues } = require('./lib/diagnostics');
 const { temperatureContext } = require('./lib/optimization/temperature');
 const { DEFAULT_OPERATION, resolveOperation } = require('./lib/operation-mode');
 const { DEFAULT_OPTIMIZER, simulate, effectiveBatteryConfig } = require('./lib/optimization/simulator');
@@ -20,6 +20,7 @@ module.exports = class SigenergyApp extends Homey.App {
     this.homey.settings.set('operationMode', resolveOperation(this.homey.settings.get('operationMode') || DEFAULT_OPERATION));
     if (this.homey.settings.get('autoBatteryValues') === null) this.homey.settings.set('autoBatteryValues', true);
     if (!this.homey.settings.get('optimizerConfig')) this.homey.settings.set('optimizerConfig', { ...DEFAULT_OPTIMIZER });
+    this.homey.settings.set('sourceConfig', {});
     this.history = new HistoryStore(this.homey.settings);
     this.recommendationTimer = this.homey.setInterval(() => this.refreshRecommendation(), 15 * 60 * 1000);
     this.refreshRecommendation();
@@ -27,6 +28,12 @@ module.exports = class SigenergyApp extends Homey.App {
       try { this.history.flush(); } catch (e) { this.error('History flush:', e.message); }
     }, 60 * 1000);
     if (!this.homey.settings.get('chargingConfig')) this.homey.settings.set('chargingConfig', JSON.parse(JSON.stringify(DEFAULTS)));
+    this.stopping = false;
+    this.settingsChanged = key => {
+      if (['nibeHost','nibePort','nibeUnitId','nibeAddressOffset'].includes(key)) this.resetNibeSource();
+    };
+    this.homey.settings.on('set', this.settingsChanged);
+    this.homey.settings.on('unset', this.settingsChanged);
     this.nibePolling = false;
     this.nibeTimer = this.homey.setInterval(() => this.pollNibe().catch(e => this.error('Nibe:', e.message)), 30000);
     this.pollNibe().catch(e => this.log('Nibe monitoring:', e.message));
@@ -39,17 +46,35 @@ module.exports = class SigenergyApp extends Homey.App {
     await this.refreshPrices().catch(e => this.log('Price cache not refreshed:', e.message));
     this.log('Sigenergy v0.14 initialized; read-only, no Modbus writes');
   }
+  resetNibeSource() {
+    const values = Object.fromEntries(['nibeHost','nibePort','nibeUnitId','nibeAddressOffset'].map(key => [key, this.homey.settings.get(key)]));
+    this.nibeGeneration = (this.nibeGeneration || 0) + 1;
+    const configured = !!String(values.nibeHost || '').trim();
+    this.homey.settings.set('sourceConfig', { ...this.homey.settings.get('sourceConfig'),
+      nibe: { configured, enabled: configured, connectionKey: nibeKey(values), since: new Date().toISOString() },
+    });
+    this.homey.settings.set('nibeStatus', null);
+    this.homey.settings.set('nibeError', null);
+  }
   async pollNibe() {
-    const host = this.homey.settings.get('nibeHost');
+    const host = String(this.homey.settings.get('nibeHost') || '').trim();
     if (!host || this.nibePolling) return;
     this.nibePolling = true;
-    const reader = new SmoS40Reader({
-      host, port: Number(this.homey.settings.get('nibePort')) || 502,
-      unitId: Number(this.homey.settings.get('nibeUnitId')) || 1,
-      addressOffset: Number(this.homey.settings.get('nibeAddressOffset')) || 0,
-    });
+    const values = Object.fromEntries(['nibeHost','nibePort','nibeUnitId','nibeAddressOffset'].map(key => [key, this.homey.settings.get(key)]));
+    const connectionKey = nibeKey(values);
+    const sourceConfig = this.homey.settings.get('sourceConfig') || {};
+    if (sourceConfig.nibe?.connectionKey !== connectionKey) this.resetNibeSource();
+    const generation = this.nibeGeneration;
+    const current = () => !this.stopping && generation === this.nibeGeneration && connectionKey === nibeKey(Object.fromEntries(Object.keys(values).map(key => [key, this.homey.settings.get(key)])));
+    let reader;
     try {
+      reader = new SmoS40Reader({
+        host, port: Number(this.homey.settings.get('nibePort')) || 502,
+        unitId: Number(this.homey.settings.get('nibeUnitId')) || 1,
+        addressOffset: Number(this.homey.settings.get('nibeAddressOffset')) || 0,
+      });
       const readings = await reader.snapshot();
+      if (!current()) return;
       const backup = this.homey.settings.get('backupStatus');
       const policy = heatPumpPolicy({
         gridMode: backup?.mode || 'unknown', batterySoc: backup?.soc,
@@ -61,9 +86,10 @@ module.exports = class SigenergyApp extends Homey.App {
       });
       this.homey.settings.set('nibeError', null);
     } catch (e) {
+      if (!current()) return;
       this.homey.settings.set('nibeError', String(e.message));
       throw e;
-    } finally { reader.close(); this.nibePolling = false; }
+    } finally { reader?.close(); this.nibePolling = false; }
   }
   async refreshPrices() {
     if (this.priceRefreshing) return;
@@ -85,7 +111,7 @@ module.exports = class SigenergyApp extends Homey.App {
     try {
       const config = effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'),
         this.homey.settings.get('batteryTelemetry'),
-        { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false });
+        { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false, status: this.getDiagnostics().battery });
       this.homey.settings.set('optimizationRecommendation',
         recommend(this.history.getSlots(), config));
       this.refreshDemandEstimate();
@@ -117,20 +143,22 @@ module.exports = class SigenergyApp extends Homey.App {
   getTemperatureContext() {
     const nibe = this.homey.settings.get('nibeStatus');
     const telemetry = this.homey.settings.get('batteryTelemetry');
-    const v = telemetry?.values || {};
+    const status = this.getDiagnostics();
+    const v = batteryValues(telemetry, status.battery);
     return temperatureContext({
-      outdoorC: nibe && Date.now() - Date.parse(nibe.readAt) < 90000 ? nibe.readings?.outdoorC : undefined,
+      outdoorC: status.nibe.usable ? nibe?.readings?.outdoorC : undefined,
+      outdoorObservedAt: nibe?.readAt,
       batteryC: v.batteryTemperatureC, chargeLimitKW: v.chargePowerLimitKW,
       dischargeLimitKW: v.dischargePowerLimitKW, observedAt: telemetry?.readAt,
     });
   }
   getOptimizationPreview() {
-    return simulate(this.history.getSlots(), effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'), { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false }));
+    return simulate(this.history.getSlots(), effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'), { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false, status: this.getDiagnostics().battery }));
   }
   getAdvancedOptimizationPreview(options = {}) {
     return compareScenarios(this.history.getSlots(),
       effectiveBatteryConfig(this.homey.settings.get('optimizerConfig'), this.homey.settings.get('batteryTelemetry'),
-        { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false }), options);
+        { autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false, status: this.getDiagnostics().battery }), options);
   }
   getDemandCharge(month) {
     const tariff = this.homey.settings.get('demandTariff');
@@ -145,5 +173,16 @@ module.exports = class SigenergyApp extends Homey.App {
     if (!prices.length) return { status: 'expired-prices' };
     return { status: 'simulation', fetchedAt: cache.fetchedAt, ...planCharging({ now, currentSoc, config: this.homey.settings.get('chargingConfig'), prices }) };
   }
-  async onUninit() { if (this.recommendationTimer) this.homey.clearInterval(this.recommendationTimer); if (this.historyTimer) this.homey.clearInterval(this.historyTimer); if (this.history) this.history.flush(); if (this.priceTimer) this.homey.clearInterval(this.priceTimer); if (this.nibeTimer) this.homey.clearInterval(this.nibeTimer); }
+  async onUninit() {
+    this.stopping = true;
+    if (this.settingsChanged) {
+      this.homey.settings.removeListener('set', this.settingsChanged);
+      this.homey.settings.removeListener('unset', this.settingsChanged);
+    }
+    if (this.recommendationTimer) this.homey.clearInterval(this.recommendationTimer);
+    if (this.historyTimer) this.homey.clearInterval(this.historyTimer);
+    if (this.priceTimer) this.homey.clearInterval(this.priceTimer);
+    if (this.nibeTimer) this.homey.clearInterval(this.nibeTimer);
+    if (this.history) this.history.flush();
+  }
 };

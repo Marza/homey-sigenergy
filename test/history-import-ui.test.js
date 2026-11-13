@@ -16,7 +16,7 @@ function view(api) {
   class Blob { constructor(parts) { downloaded.push(JSON.parse(parts[0])); } }
   const URL = { createObjectURL: () => 'test:blob', revokeObjectURL() {} };
   const html = fs.readFileSync(path.join(__dirname, '../settings/index.html'), 'utf8');
-  const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
+  const script = fs.readFileSync(path.join(__dirname, '../lib/source-status.js'), 'utf8') + '\n' + [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n');
   const context = vm.createContext({ document, Homey, Blob, URL, setTimeout() {} });
   vm.runInContext(script, context);
   return { element: id => document.getElementById(id), run: code => vm.runInContext(code, context), downloaded };

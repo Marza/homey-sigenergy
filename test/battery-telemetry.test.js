@@ -31,3 +31,12 @@ test('stale telemetry and manual mode use manual values', () => {
   assert.equal(effectiveBatteryConfig(DEFAULT_OPTIMIZER, { ...telemetry, readAt: new Date().toISOString() }, { autoBatteryValues: false }).batteryCapacityKWh, 42);
 });
 test('default cap step is 0.1 kW', () => assert.equal(DEFAULT_OPTIMIZER.capStepKW, 0.1));
+
+test('optional probe records rejected values as individual register errors', async () => {
+  const { SigenergyReader } = require('../lib/modbus');
+  const reader = new SigenergyReader({ host: '192.0.2.10' });
+  reader.read = async (address, count) => Array(count).fill(65535);
+  const result = await reader.batteryTelemetry();
+  assert.deepEqual(result.values, {});
+  assert.deepEqual(Object.keys(result.errors).sort(), Object.keys(OPTIONAL_BATTERY_REGISTERS).sort());
+});
