@@ -20,6 +20,8 @@ module.exports = [
       'settings/source-status.js',
       'widgets/energy-overview/public/source-status.js',
       'settings/price-coverage.js',
+      'settings/tariff-config.js',
+      'widgets/energy-overview/public/tariff-config.js',
       'widgets/energy-overview/public/price-coverage.js',
     ],
   },
@@ -39,6 +41,7 @@ module.exports = [
         Homey: 'readonly',
         SourceStatus: 'readonly',
         PriceCoverage: 'readonly',
+        TariffConfig: 'readonly',
       },
     },
     rules: {

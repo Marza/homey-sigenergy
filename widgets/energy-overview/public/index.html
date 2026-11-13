@@ -6,6 +6,7 @@
     <script src="/homey.js" data-origin="widget"></script>
     <script src="price-coverage.js"></script>
     <script src="source-status.js"></script>
+    <script src="tariff-config.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -80,7 +81,9 @@
     <section class="recommend">
       <b>Effektavgift – innevarande månad</b>
       <div class="grid">
-        <div class="tile">Femtoppsmedel<strong id="demandKw">–</strong></div>
+        <div class="tile">
+          <span id="demandPeakLabel">Medel av timtoppar</span><strong id="demandKw">–</strong>
+        </div>
         <div class="tile">Uppskattad avgift<strong id="demandSek">–</strong></div>
       </div>
       <small id="demandState">Tariff och timdata kontrolleras</small>
@@ -207,45 +210,88 @@
                     : r?.reason || 'Otillräcklig historik',
               );
             });
-            get('demandEstimate', (error, r) => {
-              const valid = !error && r?.status === 'provisional' && Number.isFinite(r.averageKw);
-              set(
-                'demandKw',
-                valid
-                  ? r.averageKw.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW'
-                  : '–',
-              );
-              set(
-                'demandSek',
-                valid ? Math.round(r.estimatedSek).toLocaleString('sv-SE') + ' kr' : '–',
-              );
-              set(
-                'demandState',
-                valid
-                  ? 'Preliminär · ' +
-                      r.selectedPeaks.length +
-                      ' kompletta timtoppar · Ej verifierad tariff'
-                  : r?.status === 'not-configured'
-                    ? 'Konfigurera effektavgift i appinställningarna'
-                    : 'Otillräcklig data eller ogiltig tariff',
-              );
-            });
-            get('tariffOptimization', (error, r) => {
-              const valid = !error && r?.status === 'provisional' && r.best;
-              set(
-                'simDemand',
-                valid ? Math.round(r.best.simulatedDemandSek).toLocaleString('sv-SE') + ' kr' : '–',
-              );
-              set(
-                'simSaving',
-                valid ? Math.round(r.best.demandSavingSek).toLocaleString('sv-SE') + ' kr' : '–',
-              );
-              set(
-                'savingState',
-                valid
-                  ? 'Historiskt scenario · Endast effektavgift · Ej verifierad tariff'
-                  : 'Otillräcklig historik eller tariff saknas · Ingen garanterad besparing',
-              );
+            get('demandTariff', (tariffError, tariff) => {
+              const clear = (message) => {
+                for (const id of ['demandKw', 'demandSek', 'simDemand', 'simSaving']) set(id, '–');
+                set('demandState', message);
+                set('savingState', message + ' · Ingen garanterad besparing');
+              };
+              set('demandPeakLabel', TariffConfig.peakLabel(tariffError ? null : tariff));
+              if (tariffError) {
+                clear('Tariffen kunde inte läsas');
+                return;
+              }
+              if (!tariff) {
+                clear('Konfigurera effektavgift i appinställningarna');
+                return;
+              }
+              try {
+                TariffConfig.validateTariff(tariff);
+              } catch (error) {
+                clear('Ogiltig tariff: ' + error.message);
+                return;
+              }
+              if (
+                tariff.months &&
+                !tariff.months.includes(Number(TariffConfig.currentMonth().slice(5)))
+              ) {
+                clear('Tariffen gäller inte denna månad');
+                return;
+              }
+              get('demandEstimate', (error, r) => {
+                const matches = !error && TariffConfig.matchesResult(r, tariff);
+                const valid =
+                  matches &&
+                  r.status === 'provisional' &&
+                  Number.isFinite(r.averageKw) &&
+                  Number.isFinite(r.estimatedSek);
+                set(
+                  'demandKw',
+                  valid
+                    ? r.averageKw.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW'
+                    : '–',
+                );
+                set(
+                  'demandSek',
+                  valid ? Math.round(r.estimatedSek).toLocaleString('sv-SE') + ' kr' : '–',
+                );
+                set(
+                  'demandState',
+                  valid
+                    ? 'Preliminär · ' +
+                        tariff.peakCount +
+                        ' kompletta timtoppar · Ej verifierad tariff'
+                    : error
+                      ? 'Beräkningen kunde inte läsas'
+                      : !matches
+                        ? 'Inväntar beräkning för sparad tariff och aktuell månad'
+                        : 'Otillräcklig data för ' + tariff.peakCount + ' timtoppar',
+                );
+              });
+              get('tariffOptimization', (error, r) => {
+                const valid =
+                  !error &&
+                  TariffConfig.matchesResult(r?.baseline, tariff) &&
+                  r.status === 'provisional' &&
+                  Number.isFinite(r.best?.simulatedDemandSek) &&
+                  Number.isFinite(r.best?.demandSavingSek);
+                set(
+                  'simDemand',
+                  valid
+                    ? Math.round(r.best.simulatedDemandSek).toLocaleString('sv-SE') + ' kr'
+                    : '–',
+                );
+                set(
+                  'simSaving',
+                  valid ? Math.round(r.best.demandSavingSek).toLocaleString('sv-SE') + ' kr' : '–',
+                );
+                set(
+                  'savingState',
+                  valid
+                    ? 'Historiskt scenario · Endast effektavgift · Ej verifierad tariff'
+                    : 'Inväntar tillräckliga beräkningar för sparad tariff och aktuell månad · Ingen garanterad besparing',
+                );
+              });
             });
             const temp = values.nibeStatus?.readings?.outdoorC;
             set(

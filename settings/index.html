@@ -6,6 +6,7 @@
     <script src="/homey.js" data-origin="settings"></script>
     <script src="price-coverage.js"></script>
     <script src="source-status.js"></script>
+    <script src="tariff-config.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -477,20 +478,54 @@
         Fyll i bekräftade uppgifter från Telge Näts aktuella prislista. Ingen tariff är förifylld.
         Beräkningen är preliminär och äldre historik saknar täckningsdata.
       </p>
-      <label>Starttid <input id="tariffStart" type="time" value="07:00" /></label>
-      <label>Sluttid <input id="tariffEnd" type="time" value="19:00" /></label>
+      <label>Starttid <input id="tariffStart" type="time" step="3600" /></label>
+      <label>Sluttid <input id="tariffEnd" type="time" step="3600" /></label>
       <label
         >Veckodagar (0=söndag, 1=måndag, ..., 6=lördag)
-        <input id="tariffWeekdays" type="text" value="1,2,3,4,5" style="max-width: 200px"
+        <input
+          id="tariffWeekdays"
+          type="text"
+          placeholder="0–6, separerade med komma"
+          style="max-width: 200px"
       /></label>
       <label
-        >Antal toppar per månad
-        <input id="tariffPeakCount" type="number" min="1" max="31" value="3"
+        >Antal toppar per månad <input id="tariffPeakCount" type="number" min="1" max="31" step="1"
       /></label>
-      <label>Effektpris (kr/kW) <input id="tariffRate" type="number" min="0" step="0.01" /></label>
+      <label>Effektpris (kr/kW) <input id="tariffRate" type="number" min="0" step="any" /></label>
       <label
-        ><input id="tariffDistinctDays" type="checkbox" checked /> Toppar från olika dagar</label
+        >Urval av toppar
+        <select id="tariffDistinctDays">
+          <option value="">Välj regel från ditt avtal</option>
+          <option value="true">Toppar från olika dagar</option>
+          <option value="false">Flera toppar från samma dag tillåts</option>
+        </select></label
       >
+      <fieldset>
+        <legend>Månader då tariffen gäller</legend>
+        <label><input id="tariffAllYear" type="checkbox" /> Hela året</label>
+        <div
+          id="tariffMonthOptions"
+          style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px"
+        >
+          <label><input type="checkbox" id="tariffMonth1" /> jan</label
+          ><label><input type="checkbox" id="tariffMonth2" /> feb</label
+          ><label><input type="checkbox" id="tariffMonth3" /> mar</label
+          ><label><input type="checkbox" id="tariffMonth4" /> apr</label
+          ><label><input type="checkbox" id="tariffMonth5" /> maj</label
+          ><label><input type="checkbox" id="tariffMonth6" /> jun</label
+          ><label><input type="checkbox" id="tariffMonth7" /> jul</label
+          ><label><input type="checkbox" id="tariffMonth8" /> aug</label
+          ><label><input type="checkbox" id="tariffMonth9" /> sep</label
+          ><label><input type="checkbox" id="tariffMonth10" /> okt</label
+          ><label><input type="checkbox" id="tariffMonth11" /> nov</label
+          ><label><input type="checkbox" id="tariffMonth12" /> dec</label>
+        </div>
+      </fieldset>
+      <p class="sub">
+        Välj månader eller Hela året. Tider måste vara hela timmar inom samma dygn. Avtalsregler,
+        helgdagar och pris är ännu inte verifierade av appen.
+      </p>
+      <p id="tariffConfigStatus" role="status">Läser sparad tariff…</p>
       <button id="saveTariff" type="button">Spara tariffparametrar</button>
       <p id="tariffMessage" role="status"></p>
       <h3>Tibber (priser hämtas via internet, sparas lokalt)</h3>
@@ -663,7 +698,7 @@
           if (request !== overviewRequest) return;
           const get = (key, cb) =>
             Homey.get(key, (error, value) => {
-              if (request === overviewRequest) cb(error ? null : value);
+              if (request === overviewRequest) cb(error ? null : value, error);
             });
           set('connectionBadge', SourceStatus.describe(sources.sigenergy));
           const nibe = values.nibeStatus;
@@ -769,14 +804,7 @@
                   gaps.map((g) => `${localTime(g.start)}–${localTime(g.end)}`).join(' · ')
               : 'Tibber är inte konfigurerat.',
           );
-          get('demandTariff', (tariff) =>
-            set(
-              'tariffStatus',
-              tariff
-                ? 'Tariff konfigurerad men inte verifierad mot nätbolaget.'
-                : 'Ingen tariff konfigurerad.',
-            ),
-          );
+          get('demandTariff', (tariff, error) => showTariffStatus(tariff, error));
         });
       }
       let diagnosticsRequest = 0;
@@ -903,6 +931,93 @@
         };
       }
 
+      function showTariffStatus(tariff, error) {
+        let text = 'Ingen tariff konfigurerad. Fyll i bekräftade avtalsuppgifter.';
+        if (error) text = 'Sparad tariff kunde inte läsas.';
+        else if (tariff) {
+          try {
+            TariffConfig.validateTariff(tariff);
+            text =
+              'Sparad tariff: ' +
+              TariffConfig.peakLabel(tariff) +
+              ` · ${tariff.start}–${tariff.end} · veckodagar ${tariff.weekdays.join(', ')} · ` +
+              (tariff.months ? 'månader ' + tariff.months.join(', ') : 'hela året') +
+              ` · ${tariff.rateSekPerKw.toLocaleString('sv-SE')} kr/kW · Ej verifierad mot nätbolagets avtal.`;
+          } catch (invalid) {
+            text = 'Ogiltig sparad tariff: ' + invalid.message;
+          }
+        }
+        for (const id of ['tariffStatus', 'tariffConfigStatus'])
+          document.getElementById(id).textContent = text;
+      }
+      function bindTariffSettings(Homey) {
+        const input = (id) => document.getElementById(id),
+          button = input('saveTariff');
+        const months = Array.from({ length: 12 }, (_, i) => i + 1);
+        const updateMonths = () =>
+          months.forEach((month) => {
+            input('tariffMonth' + month).disabled = input('tariffAllYear').checked;
+          });
+        input('tariffAllYear').onchange = updateMonths;
+        button.disabled = true;
+        Homey.get('demandTariff', (error, tariff) => {
+          showTariffStatus(tariff, error);
+          if (error) {
+            input('tariffMessage').textContent =
+              'Tariffen kunde inte läsas. Öppna sidan igen innan du sparar.';
+            return;
+          }
+          if (tariff && typeof tariff === 'object' && !Array.isArray(tariff)) {
+            input('tariffStart').value = typeof tariff.start === 'string' ? tariff.start : '';
+            input('tariffEnd').value = typeof tariff.end === 'string' ? tariff.end : '';
+            input('tariffWeekdays').value = Array.isArray(tariff.weekdays)
+              ? tariff.weekdays.join(',')
+              : '';
+            input('tariffPeakCount').value = Number.isFinite(tariff.peakCount)
+              ? String(tariff.peakCount)
+              : '';
+            input('tariffRate').value = Number.isFinite(tariff.rateSekPerKw)
+              ? String(tariff.rateSekPerKw)
+              : '';
+            input('tariffDistinctDays').value =
+              typeof tariff.distinctDays === 'boolean' ? String(tariff.distinctDays) : '';
+            input('tariffAllYear').checked = tariff.months === undefined;
+            months.forEach((month) => {
+              input('tariffMonth' + month).checked =
+                Array.isArray(tariff.months) && tariff.months.includes(month);
+            });
+          }
+          updateMonths();
+          button.disabled = false;
+        });
+        button.onclick = () => {
+          if (button.disabled) return;
+          let tariff;
+          try {
+            tariff = TariffConfig.parseTariffForm({
+              start: input('tariffStart').value,
+              end: input('tariffEnd').value,
+              weekdays: input('tariffWeekdays').value,
+              peakCount: input('tariffPeakCount').value,
+              rateSekPerKw: input('tariffRate').value,
+              distinctDays: input('tariffDistinctDays').value,
+              allYear: input('tariffAllYear').checked,
+              months: months.filter((month) => input('tariffMonth' + month).checked),
+            });
+          } catch (error) {
+            input('tariffMessage').textContent = error.message;
+            return;
+          }
+          button.disabled = true;
+          Homey.set('demandTariff', tariff, (error) => {
+            button.disabled = false;
+            input('tariffMessage').textContent = error
+              ? error.message
+              : 'Tariffparametrarna sparade. Avgiften uppdateras direkt, scenarier periodiskt. Avtalet är inte verifierat.';
+            if (!error) showTariffStatus(tariff);
+          });
+        };
+      }
       function bindTibberSettings(Homey) {
         Homey.get('tibberToken', (err, value) => {
           if (!err) document.getElementById('tibberToken').value = value || '';
@@ -1132,53 +1247,7 @@
         document.getElementById('exportHistory').onclick = () => exportHistory(Homey);
         bindHistoryImport(Homey);
 
-        Homey.get('demandTariff', (err, value) => {
-          if (err || !value) return;
-          document.getElementById('tariffStart').value = value.start;
-          document.getElementById('tariffEnd').value = value.end;
-          document.getElementById('tariffWeekdays').value = value.weekdays.join(',');
-          document.getElementById('tariffPeakCount').value = value.peakCount;
-          document.getElementById('tariffRate').value = value.rateSekPerKw;
-          document.getElementById('tariffDistinctDays').checked = value.distinctDays;
-        });
-        document.getElementById('saveTariff').onclick = () => {
-          const weekdays = document
-            .getElementById('tariffWeekdays')
-            .value.split(',')
-            .map((x) => Number(x.trim()));
-          const tariff = {
-            start: document.getElementById('tariffStart').value,
-            end: document.getElementById('tariffEnd').value,
-            weekdays,
-            peakCount: Number(document.getElementById('tariffPeakCount').value),
-            rateSekPerKw: Number(document.getElementById('tariffRate').value),
-            distinctDays: document.getElementById('tariffDistinctDays').checked,
-          };
-          const time = /^([01]\d|2[0-3]):[0-5]\d$/;
-          if (
-            !time.test(tariff.start) ||
-            !time.test(tariff.end) ||
-            tariff.start >= tariff.end ||
-            !weekdays.length ||
-            new Set(weekdays).size !== weekdays.length ||
-            weekdays.some((d) => !Number.isInteger(d) || d < 0 || d > 6) ||
-            !Number.isInteger(tariff.peakCount) ||
-            tariff.peakCount < 1 ||
-            tariff.peakCount > 31 ||
-            !document.getElementById('tariffRate').value ||
-            !Number.isFinite(tariff.rateSekPerKw) ||
-            tariff.rateSekPerKw < 0
-          ) {
-            document.getElementById('tariffMessage').textContent =
-              'Kontrollera tariffparametrarna.';
-            return;
-          }
-          Homey.set('demandTariff', tariff, (err) => {
-            document.getElementById('tariffMessage').textContent = err
-              ? err.message
-              : 'Tariffparametrarna sparade lokalt.';
-          });
-        };
+        bindTariffSettings(Homey);
         bindTibberSettings(Homey);
         Homey.get('chargingConfig', (err, value) => {
           if (err) {
