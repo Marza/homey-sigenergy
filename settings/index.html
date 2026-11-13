@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <title>SigEnergy – Energiöversikt</title>
     <script src="/homey.js" data-origin="settings"></script>
+    <script src="price-coverage.js"></script>
     <script src="source-status.js"></script>
     <style>
       :root {
@@ -285,8 +286,8 @@
         </div>
         <p id="priceFreshness" class="sub">Väntar på Tibber-data.</p>
         <p class="note">
-          Efter kl. 13 kontrolleras Tibber var 15:e minut tills morgondagens priser finns. Tidigare
-          kända priser behålls vid nätfel.
+          Efter kl. 13 prövas Tibber var 15:e minut tills hela morgondagen är täckt. Tiderna
+          kontrolleras var femte minut. Tidigare kända priser behålls vid nätfel.
         </p>
       </div>
       <div class="section">
@@ -564,13 +565,6 @@
             }).format(d)
           : '–';
       };
-      const localDate = (iso) =>
-        new Intl.DateTimeFormat('sv-SE', {
-          timeZone: 'Europe/Stockholm',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }).format(new Date(iso));
       const formatKW = (w) =>
         Number.isFinite(Number(w))
           ? (Number(w) / 1000).toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW'
@@ -635,6 +629,29 @@
             })
             .join('') +
           `<text x="5" y="15" font-size="12" fill="currentColor">max ${max.toFixed(2)}</text>`;
+      }
+      function drawPriceChart(prices) {
+        prices = prices.filter((p) => Date.parse(p.end) > Date.now());
+        const chart = document.getElementById('priceChart');
+        if (!prices.length) {
+          chart.innerHTML =
+            '<text x="20" y="80" fill="currentColor">Inga verifierade kommande priser</text>';
+          return;
+        }
+        const from = Math.max(Date.now(), Date.parse(prices[0].start)),
+          to = Date.parse(prices.at(-1).end);
+        const low = Math.min(0, ...prices.map((p) => p.price)),
+          high = Math.max(0, ...prices.map((p) => p.price));
+        const y = (value) => 135 - ((value - low) / Math.max(0.01, high - low)) * 115,
+          zero = y(0);
+        chart.innerHTML =
+          prices
+            .map((p) => {
+              const left = Math.max(from, Date.parse(p.start)),
+                right = Date.parse(p.end);
+              return `<rect x="${25 + ((left - from) / (to - from)) * 630}" y="${Math.min(zero, y(p.price))}" width="${Math.max(1, ((right - left) / (to - from)) * 630 - 1)}" height="${Math.max(1, Math.abs(zero - y(p.price)))}" fill="${p.price < 0 ? '#b07436' : '#4d9a76'}"><title>${p.start}–${p.end}: ${p.price} SEK/kWh</title></rect>`;
+            })
+            .join('') + `<line x1="25" x2="655" y1="${zero}" y2="${zero}" stroke="currentColor"/>`;
       }
       let overviewRequest = 0;
       function loadOverview(Homey) {
@@ -719,42 +736,38 @@
             );
           });
           const cache = values.priceCache,
-            prices = sources.tibber.enabled ? cache?.prices || [] : [];
-          const todayKey = localDate(new Date().toISOString());
-          let nextKey;
-          for (let h = 1; h <= 30; h++) {
-            const key = localDate(new Date(Date.now() + h * 3600000).toISOString());
-            if (key !== todayKey) {
-              nextKey = key;
-              break;
-            }
-          }
-          const tomorrow = prices.filter(
-            (p) => Number.isFinite(Date.parse(p.start)) && localDate(p.start) === nextKey,
-          );
-          set(
-            'tomorrowStatus',
-            !sources.tibber.enabled
-              ? 'Ej konfigurerad'
-              : tomorrow.length
-                ? 'Priser finns i cache'
-                : 'Inväntar publicering',
-          );
+            status = sources.tibber;
+          const prices = status.usable ? PriceCoverage.usablePrices(values) : [];
+          const tomorrow = status.coverage.tomorrow;
+          const stateNames = {
+            complete: 'Komplett dygn',
+            partial: 'Delvis publicerat',
+            missing: 'Inga verifierade priser',
+          };
+          set('tomorrowStatus', status.enabled ? stateNames[tomorrow.state] : 'Ej konfigurerad');
           set(
             'priceFreshness',
-            SourceStatus.describe(sources.tibber) +
-              ` · Senast hämtat: ${localTime(cache?.fetchedAt)} · ${tomorrow.length} prisintervall för imorgon`,
+            !status.enabled
+              ? 'Tibber är avstängt; inga uppdateringar görs.'
+              : SourceStatus.describe(status) +
+                  (status.error && status.usable ? ' · Kända cachade intervall används' : '') +
+                  ` · Hämtat: ${localTime(status.fetchedAt)} · Senaste försök: ${localTime(status.lastAttemptAt)} · Nästa tidigaste försök: ${localTime(status.refresh.nextAttemptAt)} (kontroll var femte minut)`,
           );
-          drawBars(
-            'priceChart',
-            prices.slice(0, 96).map((p) => p.price),
-            '#4d9a76',
-          );
+          drawPriceChart(prices);
+          const gaps = status.coverage.horizon.gaps;
           set(
             'priceRange',
-            prices.length
-              ? `Visar ${Math.min(96, prices.length)} av ${prices.length} cachade prisintervall. Pris i kr/kWh, inklusive Tibbers rapporterade komponenter.`
-              : 'Inga priser tillgängliga.',
+            status.enabled
+              ? `Imorgon: ${(tomorrow.coveredMs / 3600000).toFixed(2)} av ${tomorrow.expectedMs / 3600000} timmar täckta. ` +
+                  (prices.length
+                    ? `${prices.length} kommande intervall · ${localTime(status.availableFrom)}–${localTime(status.availableTo)} · SEK/kWh. `
+                    : 'Inga användbara prisintervall. ') +
+                  `${gaps.length} luckor till slutet av morgondagen. ` +
+                  (cache?.duplicateRows
+                    ? `${cache.duplicateRows} identiska dubletter ignorerades. `
+                    : '') +
+                  gaps.map((g) => `${localTime(g.start)}–${localTime(g.end)}`).join(' · ')
+              : 'Tibber är inte konfigurerat.',
           );
           get('demandTariff', (tariff) =>
             set(
@@ -890,6 +903,29 @@
         };
       }
 
+      function bindTibberSettings(Homey) {
+        Homey.get('tibberToken', (err, value) => {
+          if (!err) document.getElementById('tibberToken').value = value || '';
+        });
+        Homey.get('tibberHomeId', (err, value) => {
+          if (!err) document.getElementById('tibberHomeId').value = value || '';
+        });
+        document.getElementById('saveTibber').onclick = () => {
+          Homey.set('tibberToken', document.getElementById('tibberToken').value.trim(), (err) => {
+            if (err) {
+              document.getElementById('tibberMessage').textContent = err.message;
+              return;
+            }
+            Homey.set('tibberHomeId', document.getElementById('tibberHomeId').value.trim(), (e) => {
+              document.getElementById('tibberMessage').textContent = e
+                ? e.message
+                : !document.getElementById('tibberToken').value.trim()
+                  ? 'Tibber är avstängt. Cachade priser används inte.'
+                  : 'Sparat. Hämtning prövas inom fem minuter. Normalt timvis; var 15:e minut efter kl. 13 tills morgondagen är komplett.';
+            });
+          });
+        };
+      }
       function onHomeyReady(Homey) {
         refreshDiagnostics(Homey);
         setInterval(() => refreshDiagnostics(Homey), 15000);
@@ -1143,25 +1179,7 @@
               : 'Tariffparametrarna sparade lokalt.';
           });
         };
-        Homey.get('tibberToken', (err, value) => {
-          if (!err) document.getElementById('tibberToken').value = value || '';
-        });
-        Homey.get('tibberHomeId', (err, value) => {
-          if (!err) document.getElementById('tibberHomeId').value = value || '';
-        });
-        document.getElementById('saveTibber').onclick = () => {
-          Homey.set('tibberToken', document.getElementById('tibberToken').value.trim(), (err) => {
-            if (err) {
-              document.getElementById('tibberMessage').textContent = err.message;
-              return;
-            }
-            Homey.set('tibberHomeId', document.getElementById('tibberHomeId').value.trim(), (e) => {
-              document.getElementById('tibberMessage').textContent = e
-                ? e.message
-                : 'Sparat. Priser hämtas vid nästa 30-minutersuppdatering eller omstart.';
-            });
-          });
-        };
+        bindTibberSettings(Homey);
         Homey.get('chargingConfig', (err, value) => {
           if (err) {
             document.getElementById('message').textContent = err.message;

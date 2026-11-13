@@ -1,8 +1,9 @@
 'use strict';
 const fs = require('node:fs');
-for (const destination of [
-  'settings/source-status.js',
-  'widgets/energy-overview/public/source-status.js',
+for (const [source, name] of [
+  ['lib/source-status.js', 'source-status.js'],
+  ['lib/pricing/coverage.js', 'price-coverage.js'],
 ]) {
-  fs.copyFileSync('lib/source-status.js', destination);
+  for (const directory of ['settings', 'widgets/energy-overview/public'])
+    fs.copyFileSync(source, `${directory}/${name}`);
 }

@@ -1,14 +1,14 @@
 /* Shared by Node and both browser views. Run node scripts/sync-source-status.js after editing. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.SourceStatus = factory();
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  if (typeof module === 'object' && module.exports)
+    module.exports = factory(require('./pricing/coverage'));
+  else root.SourceStatus = factory(root.PriceCoverage);
+})(typeof globalThis !== 'undefined' ? globalThis : this, function (PriceCoverage) {
   'use strict';
   const MAX_AGE_MS = Object.freeze({
     sigenergy: 30000,
     battery: 600000,
     nibe: 90000,
-    tibber: 93600000,
     evdc: 90000,
     history: 1800000,
   });
@@ -27,6 +27,8 @@
     'tibberToken',
     'priceCache',
     'priceError',
+    'priceLastAttemptAt',
+    'tibberHomeId',
     'lastEvdc',
     'evdcError',
   ];
@@ -118,14 +120,7 @@
         now,
         maxAgeMs: MAX_AGE_MS.nibe,
       }),
-      tibber: sourceStatus({
-        configured: !!values.tibberToken,
-        enabled: !!values.tibberToken,
-        readAt: values.priceCache?.fetchedAt,
-        error: values.priceError,
-        now,
-        maxAgeMs: MAX_AGE_MS.tibber,
-      }),
+      tibber: PriceCoverage.priceStatus(values, now),
       evdc: sourceStatus({
         ...evdc,
         readAt: values.lastEvdc?.readAt,
@@ -157,6 +152,11 @@
     let text = labels[status.status] || 'Okänd status';
     if (status.reason === 'future-time' || status.reason === 'invalid-time')
       text += ' · Ogiltig tidsstämpel';
+    if (status.reason === 'unverified-intervals')
+      text += ' · Äldre priscache behöver hämtas på nytt';
+    if (status.reason === 'configuration-changed')
+      text += ' · Väntar på priser för sparad konfiguration';
+    if (status.reason === 'expired-prices') text += ' · Prisintervallen har löpt ut';
     if (status.error) {
       const error = String(status.error);
       if (/ECONNREFUSED|connection refused/i.test(error))

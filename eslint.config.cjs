@@ -19,6 +19,8 @@ module.exports = [
       'dist/**',
       'settings/source-status.js',
       'widgets/energy-overview/public/source-status.js',
+      'settings/price-coverage.js',
+      'widgets/energy-overview/public/price-coverage.js',
     ],
   },
   {
@@ -32,7 +34,12 @@ module.exports = [
     plugins: { html },
     languageOptions: {
       sourceType: 'script',
-      globals: { ...globals.browser, Homey: 'readonly', SourceStatus: 'readonly' },
+      globals: {
+        ...globals.browser,
+        Homey: 'readonly',
+        SourceStatus: 'readonly',
+        PriceCoverage: 'readonly',
+      },
     },
     rules: {
       ...rules,

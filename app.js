@@ -1,5 +1,7 @@
 'use strict';
 const Homey = require('homey');
+const { randomUUID, createHash } = require('node:crypto');
+const { priceStatus, usablePrices } = require('./lib/pricing/coverage');
 const { diagnostics, nibeKey, batteryValues } = require('./lib/diagnostics');
 const { temperatureContext } = require('./lib/optimization/temperature');
 const { DEFAULT_OPERATION, resolveOperation } = require('./lib/operation-mode');
@@ -29,7 +31,9 @@ module.exports = class SigenergyApp extends Homey.App {
       this.homey.settings.set('autoBatteryValues', true);
     if (!this.homey.settings.get('optimizerConfig'))
       this.homey.settings.set('optimizerConfig', { ...DEFAULT_OPTIMIZER });
-    this.homey.settings.set('sourceConfig', {});
+    const previousTibber = this.homey.settings.get('sourceConfig')?.tibber;
+    this.homey.settings.set('sourceConfig', previousTibber ? { tibber: previousTibber } : {});
+    this.configurePrices();
     this.history = new HistoryStore(this.homey.settings);
     this.recommendationTimer = this.homey.setInterval(
       () => this.refreshRecommendation(),
@@ -49,6 +53,7 @@ module.exports = class SigenergyApp extends Homey.App {
     this.settingsChanged = (key) => {
       if (['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'].includes(key))
         this.resetNibeSource();
+      if (['tibberToken', 'tibberHomeId'].includes(key)) this.configurePrices();
     };
     this.homey.settings.on('set', this.settingsChanged);
     this.homey.settings.on('unset', this.settingsChanged);
@@ -150,23 +155,54 @@ module.exports = class SigenergyApp extends Homey.App {
       this.nibePolling = false;
     }
   }
+  configurePrices() {
+    const token = String(this.homey.settings.get('tibberToken') || '').trim();
+    const homeId = String(this.homey.settings.get('tibberHomeId') || '').trim();
+    // Private settings fingerprint binds the random cache revision to credentials without exposing either in diagnostics.
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify([token, homeId]))
+      .digest('hex');
+    if (
+      this.homey.settings.get('tibberConfigFingerprint') !== fingerprint ||
+      !this.homey.settings.get('sourceConfig')?.tibber?.revision
+    ) {
+      this.priceGeneration = (this.priceGeneration || 0) + 1;
+      this.homey.settings.set('sourceConfig', {
+        ...this.homey.settings.get('sourceConfig'),
+        tibber: { revision: randomUUID() },
+      });
+      this.homey.settings.set('tibberConfigFingerprint', fingerprint);
+      this.homey.settings.set('priceError', null);
+    }
+    this.homey.settings.set('priceLastAttemptAt', null);
+  }
   async refreshPrices() {
     if (this.priceRefreshing) return;
     const token = this.homey.settings.get('tibberToken');
     if (!token) return;
     this.priceRefreshing = true;
+    const generation = this.priceGeneration;
+    const revision = this.homey.settings.get('sourceConfig')?.tibber?.revision;
+    const current = () => !this.stopping && generation === this.priceGeneration;
     this.homey.settings.set('priceLastAttemptAt', new Date().toISOString());
     try {
       const result = await fetchTibberPrices({
         token,
         homeId: this.homey.settings.get('tibberHomeId') || undefined,
       });
-      this.homey.settings.set('priceCache', result);
+      if (!current()) return;
+      this.homey.settings.set('priceCache', {
+        ...result,
+        ...(revision ? { configRevision: revision } : {}),
+      });
       this.homey.settings.set('priceTomorrowAvailable', hasTomorrowPrices(result));
       this.homey.settings.set('priceError', null);
     } catch (e) {
-      this.homey.settings.set('priceError', String(e.message));
-      throw e;
+      if (!current()) return;
+      const message = String(e.message).split(token).join('[redacted]');
+      this.homey.settings.set('priceError', message);
+      // eslint-disable-next-line preserve-caught-error -- An upstream cause may contain the token that was just redacted.
+      throw new Error(message);
     } finally {
       this.priceRefreshing = false;
     }
@@ -285,18 +321,33 @@ module.exports = class SigenergyApp extends Homey.App {
     return calculateDemandCharge(this.history.getSlots(), tariff, month);
   }
   getPricePlan(currentSoc, now = new Date()) {
-    const cache = this.homey.settings.get('priceCache');
-    if (!cache?.prices?.length) return { status: 'no-prices' };
-    const prices = cache.prices.filter((p) => Date.parse(p.end) > now.getTime());
-    if (!prices.length) return { status: 'expired-prices' };
+    const values = Object.fromEntries(
+      [
+        'tibberToken',
+        'tibberHomeId',
+        'sourceConfig',
+        'priceCache',
+        'priceError',
+        'priceLastAttemptAt',
+      ].map((key) => [key, this.homey.settings.get(key)]),
+    );
+    const status = priceStatus(values, now.getTime());
+    if (!status.usable)
+      return {
+        status: status.reason === 'expired-prices' ? 'expired-prices' : 'no-prices',
+        pricing: status,
+        advisoryOnly: true,
+      };
     return {
-      status: 'simulation',
-      fetchedAt: cache.fetchedAt,
+      fetchedAt: status.fetchedAt,
+      currency: status.currency,
+      pricing: status,
+      advisoryOnly: true,
       ...planCharging({
         now,
         currentSoc,
         config: this.homey.settings.get('chargingConfig'),
-        prices,
+        prices: usablePrices(values, now.getTime()),
       }),
     };
   }
