@@ -4,7 +4,7 @@ Experimental Homey SDK v3 app for local, read-only Sigenergy monitoring, optiona
 
 **Version 0.17.0 · Learning mode only · MIT licensed**
 
-The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. It has **not been verified on physical Homey, Sigenergy, EVDC or Nibe hardware**. Register mappings, installation and runtime compatibility still require validation. Unit tests do not establish hardware compatibility or safe operation.
+The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic installation, pairing, plant readings and recovery after a Homey reboot were tested on one physical Homey Pro running firmware 13.5.4 on 2026-11-13.** The user confirmed the base readings against mySigen with unit ID 247. See the [verification record](docs/installation-verification.md) for scope and remaining tests. Exact inverter firmware and the full register profile remain unverified; EVDC, Nibe, optional battery telemetry and island/safety behavior have not been hardware-validated. Unit tests do not establish hardware compatibility or safe operation.
 
 ## Features and implementation status
 
@@ -42,7 +42,7 @@ Homey polling is not fuse protection, load balancing or an outage fail-safe. Kee
 
 ## Local installation with Homey SDK v3
 
-This is a source-based development installation; successful installation on a physical Homey has not yet been established.
+This is a source-based development installation. One physical Homey Pro installation on firmware 13.5.4 has passed basic pairing, plant monitoring and post-reboot recovery; see the [verification record](docs/installation-verification.md). Other configurations and uninstall/reinstall behavior remain untested.
 
 ```sh
 git clone https://github.com/Marza/homey-sigenergy.git
@@ -139,7 +139,7 @@ npm run validate
 npm run build:homey
 ```
 
-`npm test` runs the built-in Node.js test runner. Tests cover charging plans, solar allocation, Tibber normalization/refresh, history, advisory backup logic, mocked Nibe/EVDC reads, telemetry validation, diagnostics, replay, demand charges and marginal costs. They do not validate physical registers, Homey installation, widget packaging, actual API contracts or safety behavior on hardware.
+`npm test` runs the built-in Node.js test runner. Tests cover charging plans, solar allocation, Tibber normalization/refresh, history, advisory backup logic, mocked Nibe/EVDC reads, device connection-setting changes, telemetry validation, diagnostics, replay, demand charges and marginal costs. They do not validate physical registers, Homey installation, widget packaging, actual API contracts or safety behavior on hardware.
 
 [GitHub Actions](.github/workflows/ci.yml) uses Node.js 24 and `npm ci` with the committed lockfile. It runs tests, matching manifest/package version checks, local-development Homey validation and a build including production dependencies on pushes and pull requests. Tests are limited to `test/*.test.js` so generated build copies are not run twice. `.homeyignore` excludes tests and development documentation from the app bundle. CI does not install on physical Homey or certify App Store readiness.
 
