@@ -8,3 +8,5 @@ for (const [source, name] of [
   for (const directory of ['settings', 'widgets/energy-overview/public'])
     fs.copyFileSync(source, `${directory}/${name}`);
 }
+
+fs.copyFileSync('lib/optimization/simulator.js', 'settings/simulator.js');

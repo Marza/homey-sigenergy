@@ -8,7 +8,12 @@ const {
   simulate,
 } = require('../lib/optimization/simulator');
 const { resolveOperation, assertReadOnly } = require('../lib/operation-mode');
-const slot = (gridWh, essWh = 0) => ({ t: Date.now(), gridWh, essWh, coverageMs: 900000 });
+const slot = (gridWh, essWh = 0) => ({
+  t: Math.floor(Date.now() / 900000) * 900000,
+  gridWh,
+  essWh,
+  coverageMs: 900000,
+});
 test('learning mode always prevents writes even if user requests control', () => {
   assert.equal(
     resolveOperation({ mode: 'control', allowHardwareWrites: true }).allowHardwareWrites,

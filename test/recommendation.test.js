@@ -7,7 +7,7 @@ test('no recommendation without history', () => {
   assert.equal(recommend([], DEFAULT_OPTIMIZER).status, 'insufficient-data');
 });
 test('recommendation is advisory and has 0.1 kW increments', () => {
-  const t = Date.now();
+  const t = Math.floor(Date.now() / 900000) * 900000;
   const slots = Array.from({ length: 12 }, (_, i) => ({
     t: t + i * 900000,
     gridWh: 500,
