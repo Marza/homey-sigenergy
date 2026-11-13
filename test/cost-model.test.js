@@ -32,13 +32,13 @@ test('negative Tibber export prices are preserved', () => {
 });
 test('net energy cost subtracts export revenue', () => {
   const p = {
-    1: { importSekPerKWh: 1.5, exportSekPerKWh: 0.4 },
-    2: { importSekPerKWh: 1.5, exportSekPerKWh: 0.4 },
+    0: { importSekPerKWh: 1.5, exportSekPerKWh: 0.4 },
+    900000: { importSekPerKWh: 1.5, exportSekPerKWh: 0.4 },
   };
   const energy = evaluateEnergySlots(
     [
-      { t: 1, gridWh: 1000, coverageMs: 900000 },
-      { t: 2, gridWh: -500, coverageMs: 900000 },
+      { t: 0, gridWh: 1000, importWh: 1000, exportWh: 0, coverageMs: 900000 },
+      { t: 900000, gridWh: -500, importWh: 0, exportWh: 500, coverageMs: 900000 },
     ],
     p,
     settings,
@@ -54,8 +54,8 @@ test('net energy cost subtracts export revenue', () => {
 test('missing export price fails closed', () => {
   assert.equal(
     evaluateEnergySlots(
-      [{ t: 1, gridWh: 1000, coverageMs: 900000 }],
-      { 1: { importSekPerKWh: 1 } },
+      [{ t: 0, gridWh: 1000, importWh: 1000, exportWh: 0, coverageMs: 900000 }],
+      { 0: { importSekPerKWh: 1 } },
       settings,
     ).status,
     'insufficient-data',
