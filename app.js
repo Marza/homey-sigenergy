@@ -14,6 +14,7 @@ const { compareScenarios } = require('./lib/optimization/advanced-simulator');
 const { recommend } = require('./lib/optimization/recommendation');
 const { evaluateTariffScenarios } = require('./lib/optimization/tariff-optimizer');
 const { HistoryStore } = require('./lib/history');
+const { validateState: validateMeterHistory } = require('./lib/pricing/consumption-history');
 const { calculateDemandCharge, validateTariff } = require('./lib/demand-tariff');
 const { SmoS40Reader } = require('./lib/nibe/smo-s40');
 const { heatPumpPolicy } = require('./lib/backup/heat-pump-policy');
@@ -54,6 +55,7 @@ module.exports = class SigenergyApp extends Homey.App {
       if (['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'].includes(key))
         this.resetNibeSource();
       if (['tibberToken', 'tibberHomeId'].includes(key)) this.configurePrices();
+      if (key === 'tibberConsumptionHistory') this.refreshDemandEstimate();
       if (key === 'demandTariff') {
         this.refreshDemandEstimate();
         this.homey.settings.set('tariffOptimization', {
@@ -265,6 +267,7 @@ module.exports = class SigenergyApp extends Homey.App {
       const tariff = this.homey.settings.get('demandTariff');
       if (!tariff) {
         this.homey.settings.set('demandEstimate', { status: 'not-configured' });
+        this.homey.settings.set('meterDemandEstimate', { status: 'not-configured' });
         return;
       }
       const month = new Intl.DateTimeFormat('en-CA', {
@@ -273,8 +276,10 @@ module.exports = class SigenergyApp extends Homey.App {
         month: '2-digit',
       }).format(new Date());
       this.homey.settings.set('demandEstimate', this.getDemandCharge(month));
+      this.homey.settings.set('meterDemandEstimate', this.getMeterDemandCharge(month));
     } catch (error) {
       this.homey.settings.set('demandEstimate', { status: 'error', reason: String(error.message) });
+      this.homey.settings.set('meterDemandEstimate', { status: 'error' });
     }
   }
   getDiagnostics() {
@@ -320,6 +325,24 @@ module.exports = class SigenergyApp extends Homey.App {
       ),
       options,
     );
+  }
+  getMeterDemandCharge(month) {
+    const state = this.homey.settings.get('tibberConsumptionHistory');
+    const revision = this.homey.settings.get('sourceConfig')?.tibber?.revision;
+    const tariff = this.homey.settings.get('demandTariff');
+    if (!tariff) return { status: 'not-configured' };
+    if (!state) return { status: 'no-meter-history' };
+    if (!revision || state.configRevision !== revision) return { status: 'configuration-changed' };
+    try {
+      validateMeterHistory(state);
+    } catch {
+      return { status: 'invalid-meter-history' };
+    }
+    if (Date.parse(state.fetchedAt) > Date.now()) return { status: 'invalid-time' };
+    return {
+      ...calculateDemandCharge([], tariff, month, { meterHours: state.hours }),
+      fetchedAt: state.fetchedAt,
+    };
   }
   getDemandCharge(month) {
     const tariff = this.homey.settings.get('demandTariff');
