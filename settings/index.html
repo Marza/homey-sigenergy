@@ -83,6 +83,10 @@ document.querySelectorAll('.tab').forEach(el=>el.addEventListener('click',()=>sh
 const localTime=iso=>{if(!iso)return '–';const d=new Date(iso);return Number.isFinite(d.getTime())?new Intl.DateTimeFormat('sv-SE',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Stockholm'}).format(d):'–';};
 const localDate=iso=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Stockholm',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(iso));
 const formatKW=w=>Number.isFinite(Number(w))?(Number(w)/1000).toLocaleString('sv-SE',{maximumFractionDigits:2})+' kW':'–';
+function historyAverage(row,key){
+ const count=row?.counts?.[key],sum=row?.sum?.[key];
+ return Number.isInteger(count)&&count>0&&Number.isFinite(sum)?sum/count:null;
+}
 function drawBars(id, values, color){
  const svg=document.getElementById(id);
  if(!values.length){svg.innerHTML='<text x="20" y="80" fill="currentColor" opacity=".7">Inga mätvärden ännu</text>';return;}
@@ -93,14 +97,13 @@ function loadOverview(Homey){
  const get=(key,cb)=>Homey.get(key,(err,val)=>{if(!err)cb(val);});
  get('historySlots',slots=>{
   const recent=(Array.isArray(slots)?slots:[]).slice(-32);
-  const vals=recent.map(x=>{const w=x.n>0?x.sum?.gridW/x.n:undefined;return Number.isFinite(Number(w))?Math.max(0,Number(w)/1000):null;}).filter(x=>x!==null);
+  const vals=recent.map(x=>{const w=historyAverage(x,'gridW');return Number.isFinite(w)?Math.max(0,w/1000):null;}).filter(x=>x!==null);
   drawBars('overviewChart',vals,'#3586b5');
-  const last=recent.at(-1);if(last?.n){
-   const grid=last.sum?.gridW/last.n,pv=last.sum?.pvW/last.n,soc=last.sum?.soc/last.n;
-   if(Number.isFinite(grid))document.getElementById('gridPower').textContent=formatKW(grid);
-   if(Number.isFinite(pv))document.getElementById('pvPower').textContent=formatKW(pv);
-   if(Number.isFinite(soc))document.getElementById('batterySoc').textContent=soc.toFixed(0)+' %';
-  }
+  const last=recent.at(-1);
+  const grid=historyAverage(last,'gridW'),pv=historyAverage(last,'pvW'),soc=historyAverage(last,'soc');
+  document.getElementById('gridPower').textContent=Number.isFinite(grid)?formatKW(grid):'–';
+  document.getElementById('pvPower').textContent=Number.isFinite(pv)?formatKW(pv):'–';
+  document.getElementById('batterySoc').textContent=Number.isFinite(soc)?soc.toFixed(0)+' %':'–';
   document.getElementById('historyUpdated').textContent=recent.length?'Senaste registrerade intervall: '+recent.length:'Ingen historik';
   document.getElementById('historySummary').textContent=`${(slots||[]).length} sparade 15-minutersintervall`;
  });
@@ -221,7 +224,7 @@ function onHomeyReady(Homey){
  document.getElementById('exportHistoryTop').onclick=()=>document.getElementById('exportHistory').click();
  document.getElementById('exportHistory').onclick=()=>{
   const keys=['historySlots','historyDaily','historyEvents'];
-  const result={schema:1,exportedAt:new Date().toISOString()};
+  const result={schema:2,exportedAt:new Date().toISOString()};
   let remaining=keys.length;
   keys.forEach(key=>Homey.get(key,(err,value)=>{
    if(err){document.getElementById('historyMessage').textContent='Export misslyckades: '+err.message;return;}
