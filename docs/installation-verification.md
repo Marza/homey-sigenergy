@@ -6,7 +6,7 @@ This records packaging checks and limited physical installation tests for issue 
 
 - Homey CLI: 4.6.3, pinned in `devDependencies` and `package-lock.json`.
 - Development/CI: Node.js 24 and npm; install with `npm ci`.
-- Manifest: Homey SDK 3, local platform, Homey firmware >=12.0.0. The validator requires 12.0.0 for the `battery` driver class. Physical installation/polling has been tested on Homey firmware 13.5.4; the declared 12.0.0 minimum has not been physically tested.
+- Manifest: Homey SDK 3, local platform, Homey firmware >=12.3.0 for the registered Dashboard widget (the `battery` driver alone requires 12.0.0). Physical installation/polling has been tested on Homey firmware 13.5.4; the declared 12.3.0 minimum has not been physically tested.
 
 Use `npx --no-install homey ...` after `npm ci` to use the pinned CLI rather than a different global version. The SDK runtime's `require('homey')` is supplied by Homey; the development dependency is the CLI.
 
@@ -22,11 +22,11 @@ npm run build:homey
 
 `validate` runs `homey app validate --level debug`. `build:homey` creates `.homeybuild/`, copies production dependencies and validates at the debug level. Neither command requires an account or installs on a Homey. Generated output must not be committed. This is development validation; publish-level checks and App Store assets/certification are outside this change.
 
-The initial source failed debug validation because `author` was missing, the declared firmware minimum was too low for `battery`, and the app icon was absent. The manifest now identifies the existing maintainer, declares >=12.0.0, and includes original generic battery icons for app and driver. Driver IDs, capabilities and register maps are unchanged. Follow-up fixes complete pairing navigation and apply incoming connection settings correctly; hardware access remains read-only.
+The initial source failed debug validation because `author` was missing, the declared firmware minimum was too low for `battery`, and the app icon was absent. The packaging fix identified the existing maintainer, declared >=12.0.0 at that time, and includes original generic battery icons for app and driver. Driver IDs, capabilities and register maps are unchanged. Follow-up fixes complete pairing navigation and apply incoming connection settings correctly; hardware access remains read-only.
 
 Local results on 2026-11-12 (macOS, Node.js 24.22.3, npm 11.20.0, CLI 4.6.3): clean `npm ci`, all 74 tests, matching version checks, debug validation and the production-dependency build passed. The build contains the manifest, runtime, driver, settings, icons and Modbus dependency; tests, development docs and the CLI executable are excluded. The packaged Modbus dependency also loads locally. CI repeats that dependency-load check on Linux. These automated/local build checks alone do not establish installation or operation on Homey; the separate physical observations below provide the limited evidence collected.
 
-The widget remains a candidate tracked in issue #13. A successful app build does not establish widget registration, visibility or runtime behavior on Dashboard.
+The widget is now registered in the manifest and its API/assets are checked in the build and release archive; see [Dashboard verification](dashboard-widget.md). Physical visibility and runtime checks remain tracked in issue #13. A successful build alone does not establish Dashboard operation.
 
 ## Physical verification — 2026-11-13
 

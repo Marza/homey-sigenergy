@@ -2,7 +2,7 @@
 
 Download `homey-sigenergy-vX.Y.Z.tar.gz` and `SHA256SUMS` from the same [GitHub release](https://github.com/Marza/homey-sigenergy/releases). Use the attached build, not GitHub's automatically generated source archives.
 
-Requirements: Node.js 24 or newer, npm, a local Homey Pro running Homey 12 or newer, a Homey account with access to it, and network access from the computer to Homey. Basic hardware verification currently covers one Homey Pro on firmware 13.5.4; see the repository README for compatibility limits.
+Requirements: Node.js 24 or newer, npm, a local Homey Pro running Homey 12.3.0 or newer, a Homey account with access to it, and network access from the computer to Homey. Basic hardware verification currently covers one Homey Pro on firmware 13.5.4; see the repository README for compatibility limits.
 
 In a terminal, replace `X.Y.Z` with the downloaded version:
 

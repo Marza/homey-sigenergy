@@ -1,4 +1,5 @@
 'use strict';
+const { attachWidgetApi } = require('./widget-helper');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -32,6 +33,7 @@ function render(file, row, start, canonical = false) {
     },
     ready() {},
   };
+  if (file.startsWith('widgets/')) attachWidgetApi(Homey);
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const script =
     fs.readFileSync(path.join(__dirname, '../lib/tariff-config.js'), 'utf8') +
@@ -41,7 +43,13 @@ function render(file, row, start, canonical = false) {
     fs.readFileSync(path.join(__dirname, '../lib/source-status.js'), 'utf8') +
     '\n' +
     [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
-  vm.runInNewContext(script + '\n' + start, { document, Homey, setInterval() {} });
+  vm.runInNewContext(script + '\n' + start, {
+    document,
+    Homey,
+    setTimeout: () => 0,
+    clearTimeout() {},
+    setInterval() {},
+  });
   return (id) => String(elements.get(id).textContent).replace(/[\u00a0\u202f]/g, ' ');
 }
 
