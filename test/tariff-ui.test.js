@@ -279,3 +279,21 @@ test('Telge holiday calendar survives settings edits and invalidates old widget 
   assert.equal(widget.element('demandKw').textContent, '–');
   assert.equal(widget.element('simSaving').textContent, '–');
 });
+
+test('meter-import reference remains separate and hides after binding changes', () => {
+  const tariff = base(),
+    r = estimate(tariff),
+    v = view('widgets/energy-overview/public/index.html', {
+      sourceConfig: { tibber: { revision: 'r' } },
+      tibberConsumptionHistory: { configRevision: 'r' },
+      meterDemandEstimate: { ...r, averageKw: 7, estimatedSek: 700 },
+      demandTariff: tariff,
+      demandEstimate: r,
+    });
+  v.run('onHomeyReady(Homey)');
+  assert.equal(v.element('meterKw').textContent, '7 kW');
+  assert.equal(v.element('demandKw').textContent, '4 kW');
+  v.values.sourceConfig.tibber.revision = 'changed';
+  v.refresh();
+  assert.equal(v.element('meterKw').textContent, '–');
+});

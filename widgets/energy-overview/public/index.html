@@ -102,6 +102,20 @@
       </div>
       <small id="savingState">Historisk simulering, inte garanterad besparing.</small>
     </section>
+    <section class="recommend">
+      <b>Tibber – mätarreferens för månaden</b>
+      <div class="grid">
+        <div class="tile">
+          <span id="meterPeakLabel">Medel av timtoppar</span><strong id="meterKw">–</strong>
+        </div>
+        <div class="tile">Preliminär effektavgift<strong id="meterSek">–</strong></div>
+      </div>
+      <small id="meterState" role="status">Ingen importerad mätarhistorik</small>
+      <small
+        >Engångsimport av timvis förbrukning. Ingen batteribesparing beräknas för dessa
+        timmar.</small
+      >
+    </section>
     <footer>
       Inlärningsläge · Ingen styrning · <span id="state" role="status">Väntar på mätdata</span>
     </footer>
@@ -190,11 +204,21 @@
               : ' · Månadstäckning okänd';
           get('demandTariff', (tariffError, tariff) => {
             const clear = (message) => {
-              for (const id of ['demandKw', 'demandSek', 'simDemand', 'simSaving']) set(id, '–');
+              for (const id of [
+                'demandKw',
+                'demandSek',
+                'simDemand',
+                'simSaving',
+                'meterKw',
+                'meterSek',
+              ])
+                set(id, '–');
               set('demandState', message);
+              set('meterState', message);
               set('savingState', message + ' · Ingen garanterad besparing');
             };
             set('demandPeakLabel', TariffConfig.peakLabel(tariffError ? null : tariff));
+            set('meterPeakLabel', TariffConfig.peakLabel(tariffError ? null : tariff));
             if (tariffError) {
               clear('Tariffen kunde inte läsas');
               return;
@@ -216,6 +240,30 @@
               clear('Tariffen gäller inte denna månad');
               return;
             }
+            get('meterDemandEstimate', (error, r) => {
+              const valid =
+                !error &&
+                TariffConfig.matchesResult(r, tariff) &&
+                r.status === 'provisional' &&
+                Number.isFinite(r.averageKw) &&
+                Number.isFinite(r.estimatedSek);
+              set(
+                'meterKw',
+                valid
+                  ? r.averageKw.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW'
+                  : '–',
+              );
+              set(
+                'meterSek',
+                valid ? Math.round(r.estimatedSek).toLocaleString('sv-SE') + ' kr' : '–',
+              );
+              set(
+                'meterState',
+                valid
+                  ? 'Tibber timhistorik · Preliminär avgift' + coverageText(r.coverage)
+                  : 'Ingen tillräcklig importerad mätarhistorik för aktuell tariff/månad',
+              );
+            });
             get('demandEstimate', (error, r) => {
               const matches = !error && TariffConfig.matchesResult(r, tariff);
               const valid =
@@ -314,6 +362,8 @@
               'demandSek',
               'simDemand',
               'simSaving',
+              'meterKw',
+              'meterSek',
             ])
               document.getElementById(id).textContent = '–';
             for (const id of [
@@ -323,6 +373,7 @@
               'recommendState',
               'demandState',
               'savingState',
+              'meterState',
             ])
               document.getElementById(id).textContent =
                 'Kunde inte läsa data. Försöker igen automatiskt.';
