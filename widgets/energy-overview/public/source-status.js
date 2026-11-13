@@ -14,6 +14,7 @@
   });
   const SOURCE_KEYS = [
     'sourceConfig',
+    'backupStatus',
     'sigenergyStatus',
     'sigenergyError',
     'batteryTelemetry',
@@ -75,6 +76,33 @@
         usable: availableFields > 0,
       };
     return { ...result, status: 'ok', usable: true };
+  }
+  // Live advice requires both a fresh plant source and a fresh restored-grid decision.
+  function backupAdvisory(values, now = Date.now(), plant = diagnostics(values, now).sigenergy) {
+    const backup = values.backupStatus;
+    const fresh =
+      plant.usable &&
+      isFresh(
+        backup?.observedAt,
+        values.sourceConfig?.sigenergy?.maxAgeMs || MAX_AGE_MS.sigenergy,
+        now,
+      );
+    const mode = fresh && ['on-grid', 'off-grid'].includes(backup?.mode) ? backup.mode : 'unknown';
+    const restricted = mode !== 'on-grid' || backup?.suspendEconomicOptimization !== false;
+    return {
+      mode,
+      batterySoc:
+        fresh && Number.isFinite(backup?.soc) && backup.soc >= 0 && backup.soc <= 100
+          ? backup.soc
+          : null,
+      restricted,
+      status: restricted ? 'backup-restricted' : 'available',
+      reason: restricted
+        ? 'Aktuella ekonomiska råd pausade: ödrift, okänt nätläge eller nätåtergång som ännu inte bekräftats. Historiska scenarier är inte råd för aktuell drift. Ingen styrning utförs.'
+        : 'Endast rådgivning. Ingen styrning utförs.',
+      advisoryOnly: true,
+      controlApplied: false,
+    };
   }
   function nibeKey(values) {
     return JSON.stringify([
@@ -208,6 +236,7 @@
     nibeKey,
     diagnostics,
     batteryValues,
+    backupAdvisory,
     describe,
     readSources,
   };

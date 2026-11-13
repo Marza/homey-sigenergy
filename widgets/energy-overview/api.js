@@ -1,5 +1,5 @@
 'use strict';
-const { diagnostics } = require('../../lib/source-status');
+const { diagnostics, backupAdvisory } = require('../../lib/source-status');
 const pick = (value, keys) =>
   value && typeof value === 'object'
     ? Object.fromEntries(
@@ -50,6 +50,7 @@ function getOverview({ homey }, now) {
   };
   const sourceKeys = [
     'sourceConfig',
+    'backupStatus',
     'sigenergyStatus',
     'sigenergyError',
     'nibeHost',
@@ -69,6 +70,7 @@ function getOverview({ homey }, now) {
         usable: false,
         error: 'Status kunde inte läsas',
       };
+  const advisory = backupAdvisory(sourceValues, now ?? Date.now(), sources.sigenergy);
   const state = read('historyState');
   let slots = [];
   if (state === null || state === undefined) slots = read('historySlots') || [];
@@ -112,12 +114,14 @@ function getOverview({ homey }, now) {
           readings: pick(sourceValues.nibeStatus.readings, ['outdoorC']),
         }
       : null,
-    optimizationRecommendation: pick(read('optimizationRecommendation'), [
-      'updatedAt',
-      'status',
-      'capKW',
-      'reservePercent',
-    ]),
+    optimizationRecommendation: advisory.restricted
+      ? { ...advisory, updatedAt: new Date(now ?? Date.now()).toISOString() }
+      : pick(read('optimizationRecommendation'), [
+          'updatedAt',
+          'status',
+          'capKW',
+          'reservePercent',
+        ]),
     demandTariff: pick(tariff, [
       'start',
       'end',
@@ -132,6 +136,7 @@ function getOverview({ homey }, now) {
     tariffOptimization: optimization
       ? {
           status: optimization.status,
+          backupAdvisory: advisory,
           baseline: estimate(optimization.baseline),
           best: pick(optimization.best, ['simulatedDemandSek', 'demandSavingSek']),
         }

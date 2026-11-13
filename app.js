@@ -2,7 +2,7 @@
 const Homey = require('homey');
 const { randomUUID, createHash } = require('node:crypto');
 const { priceStatus, usablePrices } = require('./lib/pricing/coverage');
-const { diagnostics, nibeKey, batteryValues } = require('./lib/diagnostics');
+const { diagnostics, nibeKey, batteryValues, backupAdvisory } = require('./lib/diagnostics');
 const { temperatureContext } = require('./lib/optimization/temperature');
 const { DEFAULT_OPERATION, resolveOperation } = require('./lib/operation-mode');
 const {
@@ -35,6 +35,7 @@ module.exports = class SigenergyApp extends Homey.App {
       this.homey.settings.set('optimizerConfig', { ...DEFAULT_OPTIMIZER });
     const previousTibber = this.homey.settings.get('sourceConfig')?.tibber;
     this.homey.settings.set('sourceConfig', previousTibber ? { tibber: previousTibber } : {});
+    this.homey.settings.set('backupStatus', null);
     this.configurePrices();
     this.history = new HistoryStore(this.homey.settings);
     this.recommendationTimer = this.homey.setInterval(
@@ -45,6 +46,7 @@ module.exports = class SigenergyApp extends Homey.App {
     this.historyTimer = this.homey.setInterval(() => {
       try {
         this.history.flush();
+        this.syncBackupAdvisories();
       } catch (e) {
         this.error('History flush:', e.message);
       }
@@ -53,6 +55,8 @@ module.exports = class SigenergyApp extends Homey.App {
       this.homey.settings.set('chargingConfig', JSON.parse(JSON.stringify(DEFAULTS)));
     this.stopping = false;
     this.settingsChanged = (key) => {
+      if (['backupStatus', 'sigenergyStatus', 'sigenergyError', 'sourceConfig'].includes(key))
+        this.syncBackupAdvisories();
       if (['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'].includes(key))
         this.resetNibeSource();
       if (['tibberToken', 'tibberHomeId'].includes(key)) this.configurePrices();
@@ -142,10 +146,10 @@ module.exports = class SigenergyApp extends Homey.App {
       });
       const readings = await reader.snapshot();
       if (!current()) return;
-      const backup = this.homey.settings.get('backupStatus');
+      const advisory = this.getBackupAdvisory();
       const policy = heatPumpPolicy({
-        gridMode: backup?.mode || 'unknown',
-        batterySoc: backup?.soc,
+        gridMode: advisory.mode,
+        batterySoc: advisory.batterySoc,
         // Do not infer tariff hours: Nibe's existing local schedule stays authoritative.
         tariffActive: false,
       });
@@ -217,6 +221,34 @@ module.exports = class SigenergyApp extends Homey.App {
       this.priceRefreshing = false;
     }
   }
+  getBackupAdvisory(now = Date.now()) {
+    return backupAdvisory(
+      Object.fromEntries(
+        ['backupStatus', 'sourceConfig', 'sigenergyStatus', 'sigenergyError'].map((key) => [
+          key,
+          this.homey.settings.get(key),
+        ]),
+      ),
+      now,
+    );
+  }
+  syncBackupAdvisories() {
+    const advisory = this.getBackupAdvisory();
+    const key =
+      advisory.status + advisory.mode + (advisory.batterySoc !== null && advisory.batterySoc < 25);
+    if (key === this.backupAdvisoryKey) return;
+    this.backupAdvisoryKey = key;
+    this.refreshRecommendation();
+    const nibe = this.homey.settings.get('nibeStatus');
+    if (nibe)
+      this.homey.settings.set('nibeStatus', {
+        ...nibe,
+        policy: heatPumpPolicy({
+          gridMode: advisory.mode,
+          batterySoc: advisory.batterySoc,
+        }),
+      });
+  }
   refreshRecommendation() {
     try {
       const config = effectiveBatteryConfig(
@@ -229,7 +261,9 @@ module.exports = class SigenergyApp extends Homey.App {
       );
       this.homey.settings.set(
         'optimizationRecommendation',
-        recommend(this.history.getSlots(), config),
+        this.getBackupAdvisory().restricted
+          ? { ...this.getBackupAdvisory(), updatedAt: new Date().toISOString() }
+          : recommend(this.history.getSlots(), config),
       );
       this.refreshDemandEstimate();
       const tariff = this.homey.settings.get('demandTariff');
@@ -239,10 +273,11 @@ module.exports = class SigenergyApp extends Homey.App {
           year: 'numeric',
           month: '2-digit',
         }).format(new Date());
-        this.homey.settings.set(
-          'tariffOptimization',
-          evaluateTariffScenarios(this.history.getSlots(), config, tariff, month),
-        );
+        this.homey.settings.set('tariffOptimization', {
+          ...evaluateTariffScenarios(this.history.getSlots(), config, tariff, month),
+          historicalOnly: true,
+          backupAdvisory: this.getBackupAdvisory(),
+        });
       } else {
         this.homey.settings.set('tariffOptimization', {
           status: 'not-configured',
@@ -301,31 +336,39 @@ module.exports = class SigenergyApp extends Homey.App {
     });
   }
   getOptimizationPreview() {
-    return simulate(
-      this.history.getSlots(),
-      effectiveBatteryConfig(
-        this.homey.settings.get('optimizerConfig'),
-        this.homey.settings.get('batteryTelemetry'),
-        {
-          autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false,
-          status: this.getDiagnostics().battery,
-        },
+    return {
+      historicalOnly: true,
+      backupAdvisory: this.getBackupAdvisory(),
+      ...simulate(
+        this.history.getSlots(),
+        effectiveBatteryConfig(
+          this.homey.settings.get('optimizerConfig'),
+          this.homey.settings.get('batteryTelemetry'),
+          {
+            autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false,
+            status: this.getDiagnostics().battery,
+          },
+        ),
       ),
-    );
+    };
   }
   getAdvancedOptimizationPreview(options = {}) {
-    return compareScenarios(
-      this.history.getSlots(),
-      effectiveBatteryConfig(
-        this.homey.settings.get('optimizerConfig'),
-        this.homey.settings.get('batteryTelemetry'),
-        {
-          autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false,
-          status: this.getDiagnostics().battery,
-        },
+    return {
+      historicalOnly: true,
+      backupAdvisory: this.getBackupAdvisory(),
+      ...compareScenarios(
+        this.history.getSlots(),
+        effectiveBatteryConfig(
+          this.homey.settings.get('optimizerConfig'),
+          this.homey.settings.get('batteryTelemetry'),
+          {
+            autoBatteryValues: this.homey.settings.get('autoBatteryValues') !== false,
+            status: this.getDiagnostics().battery,
+          },
+        ),
+        options,
       ),
-      options,
-    );
+    };
   }
   getMeterDemandCharge(month) {
     const state = this.homey.settings.get('tibberConsumptionHistory');
@@ -352,6 +395,8 @@ module.exports = class SigenergyApp extends Homey.App {
     return calculateDemandCharge(this.history.getSlots(), tariff, month);
   }
   getChargingPreview(input, now = new Date()) {
+    const advisory = this.getBackupAdvisory(now.getTime());
+    if (advisory.restricted) return { ...advisory, slots: [], createdAt: now.toISOString() };
     const values = Object.fromEntries(
       [
         'tibberToken',
@@ -371,6 +416,8 @@ module.exports = class SigenergyApp extends Homey.App {
     });
   }
   getPricePlan(currentSoc, now = new Date()) {
+    const advisory = this.getBackupAdvisory(now.getTime());
+    if (advisory.restricted) return { ...advisory, slots: [], createdAt: now.toISOString() };
     const values = Object.fromEntries(
       [
         'tibberToken',

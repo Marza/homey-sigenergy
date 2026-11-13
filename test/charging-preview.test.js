@@ -168,6 +168,6 @@ test('authenticated preview API delegates computation and runtime does not write
     homey: { app },
     body: { ...input(), observedAt: new Date().toISOString() },
   });
-  assert.equal(r.status, 'no-prices');
+  assert.equal(r.status, 'backup-restricted');
   assert.ok(!JSON.stringify(r).includes('private-token'));
 });

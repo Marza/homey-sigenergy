@@ -19,6 +19,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
+    this.island = new IslandController({ maxGapMs: Math.max(30000, seconds * 3000) });
+    this.homey.settings.set('backupStatus', null);
     const since = new Date().toISOString();
     const configured = !!String(settings.host || '').trim();
     this.updateSources({
@@ -79,6 +81,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
         gridMode: data.gridMode,
       });
       this.homey.settings.set('sigenergyError', null);
+      await this.publishBackup(backup);
+      if (!current()) return;
       // Optional telemetry is deliberately decoupled from the fast polling loop.
       const now = Date.now();
       if (!this.lastBatteryProbeAt || now - this.lastBatteryProbeAt >= 5 * 60 * 1000) {
@@ -110,8 +114,6 @@ module.exports = class SigenergyDevice extends Homey.Device {
         essW: data.essW,
         soc: data.soc,
       });
-      await this.publishBackup(backup);
-      if (!current()) return;
       await Promise.all([
         this.setCapabilityValue('measure_battery', data.soc),
         this.setCapabilityValue('measure_grid_power', data.gridW),
@@ -147,10 +149,10 @@ module.exports = class SigenergyDevice extends Homey.Device {
       if (current()) await this.setAvailable();
     } catch (error) {
       if (!current()) return;
-      await this.clearEvdc();
-      if (!current()) return;
       this.homey.settings.set('sigenergyError', String(error.message));
       await this.publishBackup(this.island.communicationLost());
+      await this.clearEvdc();
+      if (!current()) return;
       await this.setUnavailable(`Modbus read failed: ${error.message}`);
     } finally {
       this.polling = false;

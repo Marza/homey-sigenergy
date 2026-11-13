@@ -1143,7 +1143,9 @@
                   const result = Simulator.simulate(history.slots || [], effective);
                   const a = result.assumptions,
                     coverage = result.coverage;
-                  const context = `Modell: ${result.model}. Start-SoC ${a.initialSocPercent} %, kapacitet ${a.batteryCapacityKWh} kWh. Reserv ${a.reserveMinPercent}–${a.reserveMaxPercent} %, reservkraft ${a.backupReservePercent} %. Historik ${coverage.validSlots}/${coverage.expectedSlots} kvartstimmar (${Math.round(coverage.coverageFraction * 100)} %), ${coverage.missingSlots} saknade, ${coverage.excludedSlots} ogiltiga poster. Ingen uppladdning eller priser tillförda. Start-SoC och aktuella batterigränser är antaganden för historiken. Luckor modelleras inte. Inga styrkommandon skickas.`;
+                  const context =
+                    SourceStatus.backupAdvisory(values, Date.now(), sources.sigenergy).reason +
+                    ` Historisk simulering. Modell: ${result.model}. Start-SoC ${a.initialSocPercent} %, kapacitet ${a.batteryCapacityKWh} kWh. Reserv ${a.reserveMinPercent}–${a.reserveMaxPercent} %, reservkraft ${a.backupReservePercent} %. Historik ${coverage.validSlots}/${coverage.expectedSlots} kvartstimmar (${Math.round(coverage.coverageFraction * 100)} %), ${coverage.missingSlots} saknade, ${coverage.excludedSlots} ogiltiga poster. Ingen uppladdning eller priser tillförda. Start-SoC och aktuella batterigränser är antaganden för historiken. Luckor modelleras inte. Inga styrkommandon skickas.`;
                   if (result.status !== 'illustrative') {
                     status.textContent =
                       'Otillräckligt underlag: minst ' +
@@ -1183,8 +1185,10 @@
         const element = (id) => document.getElementById(id),
           button = element('previewCharging');
         let generation = 0,
-          expiration;
+          expiration,
+          displayed = false;
         const clear = (message) => {
+          displayed = false;
           generation++;
           clearTimeout(expiration);
           button.disabled = false;
@@ -1193,6 +1197,13 @@
             element(id).textContent = '';
           element('chargingPreviewStatus').textContent = message;
         };
+        setInterval(() => {
+          if (!displayed) return;
+          SourceStatus.readSources(Homey, (sources, values) => {
+            const advisory = SourceStatus.backupAdvisory(values, Date.now(), sources.sigenergy);
+            if (advisory.restricted) clear(advisory.reason);
+          });
+        }, 15000);
         const invalidate = () => clear('Indata ändrade. Beräkna en ny förhandsvisning.');
         for (const id of [
           'planSoc',
@@ -1252,6 +1263,10 @@
               clear(error.message);
               return;
             }
+            if (result?.status === 'backup-restricted') {
+              clear(result.reason);
+              return;
+            }
             if (
               !result?.assumptions ||
               !result.soc ||
@@ -1264,6 +1279,7 @@
             }
             const a = result.assumptions,
               p = result.pricing;
+            displayed = true;
             const planTime = (iso) =>
               iso
                 ? new Intl.DateTimeFormat('sv-SE', {
