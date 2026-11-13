@@ -40,6 +40,10 @@ Homey polling is not fuse protection, load balancing or an outage fail-safe. Kee
 - Git, Node.js and npm on the development computer. Use Node.js 24 (the CI version) and npm. The project requires Node.js 24+ and pins Homey CLI 4.6.3 in its development dependencies. Follow the [official setup requirements](https://apps.developer.homey.app/the-basics/getting-started) for Docker and local execution.
 - Optional: a Tibber API token/subscription with consumption prices, or a Nibe SMO S40 with Modbus TCP/IP enabled and its own register export checked.
 
+## Downloadable releases
+
+Successful CI runs on `main` publish a versioned production archive and SHA-256 checksum in [GitHub Releases](https://github.com/Marza/homey-sigenergy/releases). Follow the [release installation instructions](docs/release-installation.md) to install or update through Homey CLI. A computer and Homey login are required. Releases are local developer installations, not App Store packages.
+
 ## Local installation with Homey SDK v3
 
 This is a source-based development installation. One physical Homey Pro installation on firmware 13.5.4 has passed basic pairing, plant monitoring and post-reboot recovery; see the [verification record](docs/installation-verification.md). Other configurations and uninstall/reinstall behavior remain untested.

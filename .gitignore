@@ -9,3 +9,4 @@ coverage/
 *.zip
 *.tgz
 .nyc_output/
+dist/
