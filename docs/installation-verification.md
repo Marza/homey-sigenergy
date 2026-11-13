@@ -47,6 +47,25 @@ The exact inverter/battery firmware and an authoritative vendor register revisio
 | Read-only operation mode | Pass for reported state and source boundary | operationMode returned learning with allowHardwareWrites:false before/after testing and after reboot. Source contains no Modbus write path; no packet-level audit was performed. |
 | Connection-error recovery | Partially observed | Initial unreachable example host became a responding endpoint after correcting settings/restarting. Wrong unit ID produced a protocol exception; unit 247 recovered. A controlled disconnect/reconnect test was not performed. |
 
+## Nibe SMO S40 verification — 2026-11-13
+
+On the same Homey Pro installation (Homey firmware 13.5.4), the user enabled Modbus on the Nibe SMO S40. A subsequent read of the app's status through the Homey API showed a successful temperature snapshot and `nibeError: null`. The observed snapshot was timestamped 20:39:10 Europe/Stockholm (19:39:10 UTC). The installed app version was confirmed as **0.17.4**; this test does not imply that later merged releases had been installed.
+
+The user explicitly confirmed that all four temperatures matched the Nibe display:
+
+| Reading | Register used by the app | Comparison |
+| --- | --- | --- |
+| BT1 / outdoor | Input register 1 | User confirmed against display |
+| BT7 / hot water | Input register 8 | User confirmed against display |
+| BT25 / supply | Input register 39 | User confirmed against display |
+| BT71 / return | Input register 88 | User confirmed against display |
+
+The working configuration used Modbus TCP port **502**, unit ID **1**, and address offset **0**. Each field was read as one signed 16-bit input register, divided by **10** to obtain degrees Celsius. The connection had previously been refused before Modbus was enabled; reads succeeded after activation. Private network addresses, identifiers and live temperature values are omitted from this public record.
+
+The app reported `controlApplied: false` in both the Nibe status and its advisory policy. Only reads were exercised; no Nibe writes, schedule changes or protection changes were performed. The display comparison establishes basic register mapping and plausible temperature readings on this installation, not independent sensor calibration or compatibility with every SMO S40 configuration.
+
+The exact Nibe firmware and vendor register-export/protocol revision were not recorded. Missing-sensor and unsupported-register behavior, controlled communication loss/recovery, and long-term operation still need hardware validation under [issue #4](https://github.com/Marza/homey-sigenergy/issues/4). EVDC was not exercised by this test and remains unverified.
+
 ## Remaining smoke tests and validation limits
 
 - [ ] Test the Docker-backed `homey app run` lifecycle separately. Testing used persistent installation and direct Homey API checks; Docker-run behavior is unverified.
@@ -55,7 +74,7 @@ The exact inverter/battery firmware and an authoritative vendor register revisio
 - [ ] Check the full settings/diagnostics UI after restart. Pairing and advanced-settings UI were exercised; all tabs and browser/device layouts were not systematically verified.
 - [ ] Test uninstall/reinstall only after exporting required history. It was deliberately not performed on the active installation; data-loss/reinstall semantics remain unverified.
 - [ ] Record exact Sigenergy hardware/firmware and validate the register profile under issue #3. Optional battery fields and grid/island mapping remain outside the basic reading comparison.
-- [ ] Validate EVDC/Nibe separately under issue #4. EVDC remained disabled; no EVDC or Nibe hardware validation was established.
+- [ ] Complete EVDC/Nibe validation under issue #4. Basic Nibe reads and all four display comparisons passed as recorded above; firmware/protocol evidence and error-case testing remain. EVDC remained disabled and was not hardware-validated.
 - [ ] Validate Dashboard under issue #13, and history, tariffs, pricing and optimization under their respective issues. No financial/safety accuracy is established by this smoke test.
 
 Issue #2 remains open for the outstanding smoke tests. Do not mark it complete from CI or this limited installation test alone.

@@ -4,7 +4,7 @@ Experimental Homey SDK v3 app for local, read-only Sigenergy monitoring, optiona
 
 **Version 0.17.0 · Learning mode only · MIT licensed**
 
-The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic installation, pairing, plant readings and recovery after a Homey reboot were tested on one physical Homey Pro running firmware 13.5.4 on 2026-11-13.** The user confirmed the base readings against mySigen with unit ID 247. See the [verification record](docs/installation-verification.md) for scope and remaining tests. Exact inverter firmware and the full register profile remain unverified; EVDC, Nibe, optional battery telemetry and island/safety behavior have not been hardware-validated. Unit tests do not establish hardware compatibility or safe operation.
+The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic installation, pairing, plant readings and recovery after a Homey reboot were tested on one physical Homey Pro running firmware 13.5.4 on 2026-11-13.** The user confirmed the base readings against mySigen with unit ID 247. **Nibe SMO S40 Modbus reads also worked after Modbus was enabled, and the user confirmed all four temperatures against the Nibe display.** See the [verification record](docs/installation-verification.md) for scope and remaining tests. Exact inverter firmware and the full register profile remain unverified; EVDC, optional battery telemetry and island/safety behavior have not been hardware-validated. Unit tests do not establish hardware compatibility or safe operation.
 
 ## Features and implementation status
 
@@ -13,7 +13,7 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | Sigenergy monitoring | Battery SoC and capacity, grid/PV/battery power, grid mode; Homey device capabilities | Local Modbus TCP reads; one plant per Homey through a fixed pairing identity |
 | Battery telemetry | Optional power limits, available energy, nominal power, SoC cutoffs and SoH | Probed about every five minutes; individual failures do not invalidate the main snapshot; registers and scaling unverified |
 | EVDC monitoring | Optional charging power and vehicle SoC reads | Experimental and disabled by default; no charger control |
-| Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Optional local reads every 30 seconds; no separate Homey device and no heat-pump control |
+| Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Four readings verified against the display on one installation; optional local reads every 30 seconds, no separate Homey device or heat-pump control |
 | Backup advisory | Grid/island/unknown state and a “Backup mode changed” Flow trigger | EV-stop and Nibe-mode tokens are requests, never confirmation of an action |
 | Local history | Quarter-hour aggregates, daily summaries, backup-mode events and JSON export | Stored in Homey app settings, not a dedicated database |
 | Tibber prices and EV planning | Cached consumption prices and a price-based charging planner | Internet needed for refresh; planning only; no automatic execution |
