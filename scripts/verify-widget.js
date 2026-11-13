@@ -13,6 +13,7 @@ function verifyWidget(directory) {
     'public/source-status.js',
     'public/price-coverage.js',
     'public/tariff-config.js',
+    'public/widget-layout.js',
     'preview-light.png',
     'preview-dark.png',
   ])

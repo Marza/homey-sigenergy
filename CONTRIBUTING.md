@@ -38,3 +38,5 @@ The shared simulation engine is `lib/optimization/simulator.js`; `npm run format
 Widget definitions live in `widgets/energy-overview/widget.compose.json` and are explicitly registered in `app.json` because this repository does not enable Homey Compose. Keep both consistent; tests enforce registration. `node scripts/verify-widget.js` checks `.homeybuild`, and release verification repeats it against the extracted archive.
 
 The shared charging planner is `lib/charging/planner.js`; the same sync command updates `settings/charging-planner.js`. Keep input/timezone validation, DST resolution and preview UI tests aligned with the backend; never add charging commands to the preview route.
+
+Widget sizing/fit rules live in `lib/widget-layout.js`; the sync command updates `widgets/energy-overview/public/widget-layout.js`. Measure intrinsic content, preserve overflow when constrained, and avoid intercepting global touch/wheel gestures or accessing the Dashboard parent document.

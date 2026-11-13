@@ -81,6 +81,8 @@ function view(file) {
   const browserCopy = path.join(path.dirname(file), 'source-status.js');
   assert.match(html, /<script src="source-status.js"><\/script>/);
   const script =
+    fs.readFileSync(path.join(__dirname, '../lib/widget-layout.js'), 'utf8') +
+    '\n' +
     fs.readFileSync(path.join(__dirname, '../lib/tariff-config.js'), 'utf8') +
     '\n' +
     fs.readFileSync(path.join(__dirname, '../lib/pricing/coverage.js'), 'utf8') +
