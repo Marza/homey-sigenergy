@@ -200,14 +200,21 @@
       @media (prefers-color-scheme: dark) {
         #solarPreviewPanel,
         #economicHistoryPanel,
-        #costContractPanel {
+        #costContractPanel,
+        #economicReplayPanel {
           color: var(--homey-text-color, #e8edf2);
         }
       }
       #solarPreviewPanel p,
       #economicHistoryPanel p,
-      #costContractPanel p {
+      #costContractPanel p,
+      #economicReplayPanel p {
         color: inherit;
+      }
+      #economicReplayPanel fieldset {
+        min-width: 0;
+        margin: 12px 0;
+        padding: 12px;
       }
       #solarPreviewPanel fieldset {
         min-width: 0;
@@ -786,6 +793,60 @@
           batteriantagandena. Jag förstår att modellen antar konstant nettoförbrukning inom varje
           kvart och gemensam AC-mätgräns för nät och batteri.</label
         >
+        <label
+          ><input id="econ-solar-enabled" type="checkbox" /> Jämför solfördelning mellan husbatteri,
+          bil och export i samma historiska modell</label
+        >
+        <fieldset id="econ-solar-fields" disabled>
+          <legend>Hypotetisk bil på observerad solhistorik</legend>
+          <p>
+            Sol/bil-modellen använder 1–168 avslutade timmar och högst 10 effekttak. Den jämför
+            batteri först och bil först med samma laddmål och avgång. Kvarvarande solöverskott
+            exporteras. Ingen väderprognos eller framtida laddplan skapas.
+          </p>
+          <label
+            >Husbatteriets högsta solmål (kWh) <input id="econ-solar-target" inputmode="decimal"
+          /></label>
+          <p>
+            Extra lagrad solenergi används senare i modellen. Husbatteriet måste ändå sluta med
+            samma energi som vid periodstart för att en kostnadsskillnad ska visas.
+          </p>
+          <p id="econ-ev-config"></p>
+          <label
+            >Bilens antagna SoC vid periodstart (%) <input id="econ-ev-initial" inputmode="decimal"
+          /></label>
+          <label>Bilens mål vid avgång (%) <input id="econ-ev-target" inputmode="decimal" /></label>
+          <label
+            >Bilens minsta aktiva laddeffekt (kW) <input id="econ-ev-min" inputmode="decimal"
+          /></label>
+          <label
+            >Bilens maximala laddeffekt (kW) <input id="econ-ev-max" inputmode="decimal"
+          /></label>
+          <label
+            >Bilen ansluts efter antal timmar från periodstart (steg 0,25)
+            <input id="econ-ev-arrival" value="0" inputmode="decimal"
+          /></label>
+          <label
+            >Bilen avgår efter antal timmar från periodstart (steg 0,25)
+            <input id="econ-ev-departure" inputmode="decimal"
+          /></label>
+          <label
+            ><input id="econ-ev-history-confirm" type="checkbox" /> Bilens SoC och närvaro är
+            uttryckliga antaganden för den historiska modellperioden, inte en aktuell avläsning
+            eller automatisk avgångsplan.</label
+          >
+          <label
+            ><input id="econ-ev-absent-confirm" type="checkbox" /> Jag har kontrollerat att vald
+            historik saknar befintlig billaddning. Modellen får inte lägga till laddning ovanpå
+            redan registrerad bilförbrukning.</label
+          >
+          <p>
+            Komplett separat solenergitäckning krävs. Känd billaddning i historiken blockerar
+            modellen. Laddning från andra källor kan behövas för att nå avgångsmålet och räknas då
+            med i nät-/batteriflödet; effekttaket kan därför bli ouppnått. Faser och säkringar
+            modelleras inte.
+          </p>
+        </fieldset>
         <button id="econ-run" type="button">Jämför utan styrning</button>
         <p id="econ-result" role="status"></p>
         <div id="econ-results"></div>

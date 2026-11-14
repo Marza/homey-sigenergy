@@ -14,6 +14,7 @@ Quarter-hour records introduced by issue #5 retain `schema: 2`. Issue #6 stores 
 | `importWh`, `exportWh` | Nonnegative directional grid integrals for newly observed segments; both may be positive within one quarter |
 | `directionalCoverageMs` | Duration covered by those directional integrals; missing means unknown, not zero |
 | `coverageMs` | Integrated grid-power duration in this quarter; EVDC samples do not affect it |
+| `fieldCoverageMs` | New per-power-field coverage for gridW/pvW/essW/evW; absent legacy coverage is not inferred |
 | `essCoverageMs` | Battery integral coverage recorded for new ESS observation pairs; full 900,000 ms is required by the balanced replay, independently of grid coverage |
 | `legacy` | Original older record, only when new observations overlap its quarter; retained for export, excluded from the new record's statistics and energy |
 
@@ -57,7 +58,7 @@ Both app settings and `HistoryStore.export()` now use the same authenticated bac
 ```json
 {
   "format": "com.local.sigenergy.history",
-  "schema": 5,
+  "schema": 6,
   "timezone": "Europe/Stockholm",
   "exportedAt": "2026-06-10T00:00:00.000Z",
   "slots": [],
@@ -69,7 +70,7 @@ Both app settings and `HistoryStore.export()` now use the same authenticated bac
 
 The settings page selects a local JSON file, asks the server for a preview, then offers a separate merge action. No import is applied by selecting a file. Preview includes live pending data without writing it; apply recalculates against the current state. Existing quarters and archived days win conflicts, and overlapping energy is never summed. Raw records outside the retained window are not restored to that window, but valid daily summaries may remain within daily retention. Daily summaries are recalculated only when the available source is at least as complete as the archive.
 
-Canonical schema-3 history exports remain accepted without directional fields. New exports use schema 5 for independent battery coverage; schema 4 introduced the directional extension. Valid schema-4 files remain accepted without inferred ESS coverage; older app versions cannot read these new backups. The in-memory/stored state and daily record schemas stay 3, and quarter record schema stays 2. Keep a backup made before upgrading if you need to downgrade. Directional fields must appear as a complete nonnegative pair with finite coverage no greater than net coverage; complete directional coverage must agree with signed net energy.
+Canonical schema-3 history exports remain accepted without directional fields. New exports use schema 6 for independent power-field coverage; schema 5 introduced independent battery coverage and schema 4 introduced directional energy. Valid schema-4/5 files remain accepted without inferred missing coverage; older app versions cannot read these new backups. The in-memory/stored state and daily record schemas stay 3, and quarter record schema stays 2. Keep a backup made before upgrading if you need to downgrade. Directional fields must appear as a complete nonnegative pair with finite coverage no greater than net coverage; complete directional coverage must agree with signed net energy.
 
 Legacy schema 1/2 exports are accepted in either the slots/daily/events form or the old settings-page historySlots/historyDaily/historyEvents form. All three collections are required. Unknown versions/fields, credential-bearing fields, malformed dates, future records, unaligned/duplicate quarters, inconsistent counts, impossible coverage, excessive counts and invalid nested legacy data are rejected before any write. UTC daily summaries from legacy files go to legacyDaily. Unknown fields are rejected rather than silently applied as settings.
 
@@ -81,13 +82,13 @@ Routes in api.js are authenticated (`public: false`): GET /history/export, POST 
 
 The new snapshot has an explicit 4 MiB serialized-JSON budget. Import files are limited to 8 MiB, with stricter collection and final merged-state bounds. A budget error leaves committed history intact; no old data is silently deleted to make an oversized import fit. The frozen migration keys occupy additional space and are not included in the new snapshot budget. Manual exports contain private usage patterns and must be kept private.
 
-A synthetic 32-day fixture with all six observation fields, directional grid energy and independent ESS coverage produces 3,072 quarters and 32 daily summaries in 1,547,377 serialized bytes, with one canonical write. This is a local in-memory test, not a Homey performance/storage measurement. Run `node scripts/benchmark-history.js` to repeat it without accessing Homey or private data.
+A synthetic 32-day fixture with all six observation fields, directional grid energy and independent ESS/all-power-field coverage produces 3,072 quarters and 32 daily summaries in 1,777,777 serialized bytes, with one canonical write. This is a local in-memory test, not a Homey performance/storage measurement. Run `node scripts/benchmark-history.js` to repeat it without accessing Homey or private data.
 
 The budget is an application policy, not an established Homey storage ceiling. Tests inject write failures and restart the store against committed snapshots. Full-window storage latency, a new-format physical restart, browser/API transport of large exports, and physical preview/restore still require staged testing after review. Issue #6 remains open for that verification. [Homey's persistence documentation](https://apps.developer.homey.app/the-basics/app/persistent-storage) says app settings survive restarts and are deleted on uninstall; no database, automatic external backup or durability guarantee is inferred.
 
 ## Combined backup and meter archive
 
-The authenticated settings-page export wraps the existing inverter history in `{format: "com.local.sigenergy.backup", schema: 1, exportedAt, history, meter}`. `history` uses the schema-5 export described above; `meter` is null or the validated 13-month `tibberConsumptionArchive`. Existing schema-1/2/3/4/5 history-only files remain accepted and do not alter meter references. Compact JSON keeps a valid maximum-budget bundle below the 8 MiB file limit. The meter archive has its own 1 MiB budget; the inverter snapshot retains its 4 MiB budget. These are application limits, not measured Homey storage guarantees.
+The authenticated settings-page export wraps the existing inverter history in `{format: "com.local.sigenergy.backup", schema: 1, exportedAt, history, meter}`. `history` uses the schema-6 export described above; `meter` is null or the validated 13-month `tibberConsumptionArchive`. Existing schema-1/2/3/4/5/6 history-only files remain accepted and do not alter meter references. Compact JSON keeps a valid maximum-budget bundle below the 8 MiB file limit. The meter archive has its own 1 MiB budget; the inverter snapshot retains its 4 MiB budget. These are application limits, not measured Homey storage guarantees.
 
 Preview validates both sections before any write and reports retained meter month/hour counts, overlapping hours and whether rebinding is needed. Existing meter hours win overlaps, missing hours may be filled, and energy is never summed twice. The 13-month retention window also applies on import; expired months are not reintroduced. A later successful Tibber fetch can still replace a monthly snapshot with provider corrections.
 
@@ -99,4 +100,6 @@ The Dashboard continues to show only the current-month summary. Retained prior-m
 
 ## Dated economic comparison
 
-The independent ESS coverage field, dated cost/tariff archive and balanced replay are described in [economic replay](economic-replay.md). Older energy is retained but not promoted to complete battery coverage. Export schema 5 is not readable by older app versions; retain a pre-upgrade backup for downgrade. Dated cost versions have a separate private export and are not part of the combined history/meter backup.
+The independent ESS coverage field, dated cost/tariff archive and balanced replay are described in [economic replay](economic-replay.md). Older energy is retained but not promoted to complete battery coverage. Export schema 6 is not readable by older app versions; retain a pre-upgrade backup for downgrade. Dated cost versions have a separate private export and are not part of the combined history/meter backup.
+
+For coupled solar/EV modeling, see [coupled solar replay](coupled-solar-ev.md). Its independent PV requirement starts with newly observed covered segments; missing legacy PV coverage is not inferred from battery/net coverage.

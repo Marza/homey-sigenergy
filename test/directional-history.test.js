@@ -144,7 +144,7 @@ test('net-only upgrade coverage cannot be borrowed to qualify new directional vo
   assert.equal(summary.completeQuarters, 0);
   assert.equal(summary.importKWh, null);
   const file = f.store.export();
-  assert.equal(file.schema, 5);
+  assert.equal(file.schema, 6);
   assert.equal(parseExport(file, T + SLOT_MS).slots[0].directionalCoverageMs, 10000);
   const settings = {
     energyTaxExVatSekPerKWh: 0,
@@ -167,11 +167,11 @@ test('net-only upgrade coverage cannot be borrowed to qualify new directional vo
     'provisional',
   ); // Explicit external API input remains supported.
 });
-test('version 5 export/restore preserves directional data; old valid files remain accepted and malformed fields fail', () => {
+test('version 6 export/restore preserves directional data; old valid files remain accepted and malformed fields fail', () => {
   const f = fixture(T + SLOT_MS);
   for (let dt = 0; dt <= SLOT_MS; dt += 60000) f.store.append({ gridW: 3600 }, T + dt);
   const file = f.store.export();
-  assert.equal(file.schema, 5);
+  assert.equal(file.schema, 6);
   near(file.slots[0].importWh, 900);
   const target = fixture(T + SLOT_MS);
   target.store.import(file);
@@ -180,7 +180,8 @@ test('version 5 export/restore preserves directional data; old valid files remai
   const legacy = structuredClone(file);
   legacy.schema = 3;
   for (const row of [...legacy.slots, ...legacy.daily])
-    for (const key of ['importWh', 'exportWh', 'directionalCoverageMs']) delete row[key];
+    for (const key of ['importWh', 'exportWh', 'directionalCoverageMs', 'fieldCoverageMs'])
+      delete row[key];
   assert.equal(parseExport(legacy, T + SLOT_MS).slots[0].importWh, undefined);
   for (const mutate of [
     (r) => {
@@ -208,6 +209,7 @@ test('version 5 export/restore preserves directional data; old valid files remai
   }
   const oldVersion = structuredClone(file);
   oldVersion.schema = 3;
+  for (const row of oldVersion.slots) delete row.fieldCoverageMs;
   assert.throws(() => parseExport(oldVersion, T + SLOT_MS), /schema 4/);
   const badDaily = structuredClone(file);
   badDaily.daily[0].exportWh = -1;
