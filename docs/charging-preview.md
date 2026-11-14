@@ -32,3 +32,7 @@ A deadline is resolved once per local calendar date in the saved timezone (defau
 Tests cover explicit/manual/stale/future SoC, finite/bounded configuration and power, disconnection, zero power, no/partial/negative prices, already-met and unreachable targets, spring/fall transitions, year boundaries, authenticated runtime delegation without writes or credential leakage, and browser request/result invalidation. The browser configuration validator is an exact generated copy of the shared planner.
 
 These checks do not establish physical charging behavior or guarantee that the manually entered SoC, efficiency, available power or connection assumptions are true. Learning mode and read-only hardware access remain in place.
+
+## Separate solar surplus preview
+
+The settings page also has an independent [solar surplus preview](solar-surplus.md), based on current cached plant power rather than the deadline/price schedule above. Its incremental home/EV/export allocations do not modify or automatically combine with this purchased-energy plan.
