@@ -100,7 +100,11 @@
       <div class="grid">
         <div class="tile">Nätimport<strong id="grid">–</strong></div>
         <div class="tile">Sol<strong id="pv">–</strong></div>
-        <div class="tile">Batteri<strong id="soc">–</strong></div>
+        <div class="tile">
+          Batteri<strong id="soc">–</strong> <small id="batteryPower">–</small><br /><small
+            >Nettoeffekt · kvartsmedel</small
+          >
+        </div>
         <div class="tile">
           Utomhus<strong id="outdoor">–</strong><small id="outdoorState">Väntar på data</small>
         </div>
@@ -164,7 +168,7 @@
           );
         const render = () => {
           get('historyState', (error, history) => {
-            for (const id of ['grid', 'pv', 'soc']) set(id, '–');
+            for (const id of ['grid', 'pv', 'soc', 'batteryPower']) set(id, '–');
             set('updated', 'Ingen aktuell historik');
             const rows = history?.slots;
             if (error || !Array.isArray(rows) || !rows.length) {
@@ -187,6 +191,14 @@
                 : (v / 1000).toLocaleString('sv-SE', { maximumFractionDigits: 1 }) + ' kW';
             set('grid', kw(avg('gridW')));
             set('pv', kw(avg('pvW')));
+            const batteryW = avg('essW');
+            set(
+              'batteryPower',
+              batteryW === null
+                ? '–'
+                : (batteryW > 0 ? 'Laddar ' : batteryW < 0 ? 'Urladdar ' : 'Vila ') +
+                    kw(Math.abs(batteryW)),
+            );
             set('soc', avg('soc') === null ? '–' : avg('soc').toFixed(0) + ' %');
             set(
               'updated',
@@ -392,6 +404,7 @@
               'grid',
               'pv',
               'soc',
+              'batteryPower',
               'outdoor',
               'cap',
               'reserve',

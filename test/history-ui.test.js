@@ -103,3 +103,42 @@ for (const [file, start, ids] of [
     assert.equal(text(ids[0]), '2 kW');
   });
 }
+
+// Battery sign follows the existing plant convention: positive charges.
+for (const [watts, expected] of [
+  [2400, 'Laddar 2,4 kW'],
+  [-1600, 'Urladdar 1,6 kW'],
+  [0, 'Vila 0 kW'],
+]) {
+  test(`widget shows battery direction for ${watts} W without EV sample dilution`, () => {
+    const text = render(
+      'widgets/energy-overview/public/index.html',
+      {
+        t: Date.now(),
+        n: 5,
+        counts: { essW: 2, soc: 1, evW: 3 },
+        sum: { essW: watts * 2, soc: 65, evW: 9000 },
+      },
+      'onHomeyReady(Homey)',
+      true,
+    );
+    assert.equal(text('batteryPower'), expected);
+    assert.equal(text('soc'), '65 %');
+  });
+}
+test('widget leaves missing, legacy or non-finite battery power unknown', () => {
+  for (const row of [
+    { sum: { essW: 1200 } },
+    { counts: { essW: 0 }, sum: { essW: 0 } },
+    { counts: { essW: 1 }, sum: { essW: NaN } },
+    { counts: { soc: 1 }, sum: { soc: 65 } },
+  ]) {
+    const text = render(
+      'widgets/energy-overview/public/index.html',
+      { t: Date.now(), ...row },
+      'onHomeyReady(Homey)',
+      true,
+    );
+    assert.equal(text('batteryPower'), '–');
+  }
+});

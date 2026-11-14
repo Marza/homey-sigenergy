@@ -117,8 +117,8 @@ function getOverview({ homey }, now) {
         ? [
             {
               t: latest.t,
-              counts: pick(latest.counts, ['gridW', 'pvW', 'soc']),
-              sum: pick(latest.sum, ['gridW', 'pvW', 'soc']),
+              counts: pick(latest.counts, ['gridW', 'pvW', 'soc', 'essW']),
+              sum: pick(latest.sum, ['gridW', 'pvW', 'soc', 'essW']),
             },
           ]
         : [],
