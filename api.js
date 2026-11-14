@@ -2,10 +2,28 @@
 // Manifest routes are authenticated by Homey; none are public.
 const { compareEconomicScenarios } = require('./lib/pricing/economic-comparison');
 const { exportBackup, previewBackup, restoreBackup } = require('./lib/history-backup');
+const {
+  timelineStatus,
+  publishContract,
+  restoreTimeline,
+} = require('./lib/pricing/contract-timeline');
+const { compareReplay } = require('./lib/pricing/replay-comparison');
 const { getEnergyHistory } = require('./lib/pricing/energy-history');
 const { previewSolar } = require('./lib/charging/solar-preview');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
+  async getContractTimeline({ homey }) {
+    return timelineStatus(homey);
+  },
+  async publishCostContract({ homey, body }) {
+    return publishContract(homey, body);
+  },
+  async restoreCostContracts({ homey, body }) {
+    return restoreTimeline(homey, body);
+  },
+  async compareBatteryReplay({ homey, body }) {
+    return compareReplay(homey, body);
+  },
   async getTibberHistoryPriceStatus({ homey }) {
     return homey.app.tibberHistoryPrices.status();
   },

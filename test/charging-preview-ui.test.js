@@ -167,7 +167,9 @@ test('stamp action is explicit and schedule saving shares backend validation', (
   v.element('planStamp').onclick();
   assert.match(v.element('planObservedAt').value, /2026-11-13T/);
   assert.equal(v.requests.length, 0);
-  v.run('TibberHistoryPricesSettings.bind = () => {}; onHomeyReady(Homey)');
+  v.run(
+    'TibberHistoryPricesSettings.bind = () => {}; EconomicReplaySettings.bind = () => {}; onHomeyReady(Homey)',
+  );
   assert.equal(v.element('chargingEfficiency').value, '0.92');
   v.element('chargingEfficiency').value = '';
   v.element('save').onclick();

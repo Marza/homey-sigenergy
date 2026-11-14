@@ -9,6 +9,8 @@
       );
     const number = (n) => Number(n).toLocaleString('sv-SE', { maximumFractionDigits: 2 });
     const messages = {
+      'dated-contract-required':
+        'Ange ett giltighetsdatum och publicera ett tidsbundet kostnadsunderlag i avsnittet Ekonomisk jämförelse.',
       'not-configured': 'Spara Tibber-token i befintliga Tibber-inställningar.',
       'select-home':
         'Ange Tibber Home ID i befintliga inställningar eller invänta ordinarie prishämtning.',
@@ -40,7 +42,7 @@
               '. Pristimmar: ' +
               s.priceHours +
               '.';
-      el('components').hidden = !s.confirmed;
+      el('components').hidden = true;
       el('network').checked = !!s.includeNetwork;
       const r = await api('GET', '/economics/observed');
       el('costs').textContent = r.totals
@@ -59,10 +61,12 @@
           ' kr. ' +
           (r.componentBasis === 'tibber-trade-only'
             ? 'Endast rapporterade elhandelspriser.'
-            : 'Inklusive bekräftade nätkomponenter.')
+            : 'Avgifter enligt tidsbundna kostnadsversioner.')
         : 'Ingen kostnadssumma: ' + (messages[r.status] || r.status);
       el('coverage').textContent =
-        'Saknar köppris: ' +
+        'Saknar daterat underlag: ' +
+        (r.missingContractHours || 0) +
+        ' timmar. Saknar köppris: ' +
         (r.missingPriceHours || 0) +
         ' timmar, säljpris: ' +
         (r.missingProductionHours || 0) +
