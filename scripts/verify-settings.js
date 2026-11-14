@@ -9,6 +9,8 @@ function verifySettings(directory) {
   assert.match(html, /<script src="navigation.js"/);
   assert.ok(fs.statSync(path.join(folder, 'styles.css')).size > 1000, 'Missing compiled CSS');
   assert.equal(typeof require(path.resolve(folder, 'navigation.js')).bind, 'function');
+  assert.match(html, /<script src="settings-assistant.js"/);
+  assert.equal(typeof require(path.resolve(folder, 'settings-assistant.js')).bind, 'function');
   assert.doesNotMatch(html, /(?:src|href)="https?:/, 'Settings assets must be local');
 }
 if (require.main === module) verifySettings(process.argv[2] || '.homeybuild');

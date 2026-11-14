@@ -78,3 +78,15 @@ four-sided field borders, contrast, spacing, touch targets and keyboard focus.
 CI installs Chromium and runs this check. Vendor CSS and household data are not
 included in the fixture. For a local SDK comparison, `SETTINGS_HOST_CSS` can point
 to a private stylesheet bundle; do not commit that file or private screenshots.
+
+`settings/settings-assistant.js` provides draft-only setup helpers: named tariff
+weekdays, schedule copying, a checked-date shortcut, period picks and read-only
+unit explanations. It must not call Homey APIs, apply tariff presets, publish
+contract dates or attest historical assumptions. Host callbacks explicitly refresh
+weekday/schedule controls after successful reads; failed reads keep bulk actions
+disabled. Numeric inputs and persisted schemas retain their original units and
+precision. Conversions describe the draft without normalizing or changing it.
+
+The browser test also covers these interactions, existing irregular day selections,
+explicit saves, inactive schedule targets, hidden required fields and read failures.
+Preserve the existing validators and keep advanced fields discoverable when invalid.

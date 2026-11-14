@@ -43,6 +43,7 @@ function view(api) {
     document,
     Homey,
     SettingsNavigation: require('../settings/navigation'),
+    SettingsAssistant: require('../settings/settings-assistant'),
     Blob,
     URL,
     setTimeout() {},
