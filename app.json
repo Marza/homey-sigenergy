@@ -17,7 +17,11 @@
   "category": "energy",
   "permissions": [],
   "api": {
-    "previewEconomics": { "method": "POST", "path": "/economics/preview", "public": false },
+    "previewEconomics": {
+      "method": "POST",
+      "path": "/economics/preview",
+      "public": false
+    },
     "exportHistory": {
       "method": "GET",
       "path": "/history/export",
@@ -233,6 +237,121 @@
             "en": "EVDC SoC divisor"
           },
           "value": 1
+        }
+      ]
+    },
+    {
+      "id": "energy-grid",
+      "name": {
+        "en": "Sigenergy Energy — grid",
+        "sv": "Sigenergy Energy — nät"
+      },
+      "class": "sensor",
+      "capabilities": ["measure_power"],
+      "energy": {
+        "cumulative": true
+      },
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_devices"
+          },
+          "options": {
+            "singular": true
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "id": "enabled",
+          "type": "checkbox",
+          "label": {
+            "en": "Publish live readings (avoid duplicate Energy sources)",
+            "sv": "Publicera aktuella värden (undvik dubbla energikällor)"
+          },
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "energy-solar",
+      "name": {
+        "en": "Sigenergy Energy — solar",
+        "sv": "Sigenergy Energy — sol"
+      },
+      "class": "solarpanel",
+      "capabilities": ["measure_power"],
+      "energy": {},
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_devices"
+          },
+          "options": {
+            "singular": true
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "id": "enabled",
+          "type": "checkbox",
+          "label": {
+            "en": "Publish live readings (avoid duplicate Energy sources)",
+            "sv": "Publicera aktuella värden (undvik dubbla energikällor)"
+          },
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "energy-battery",
+      "name": {
+        "en": "Sigenergy Energy — battery",
+        "sv": "Sigenergy Energy — batteri"
+      },
+      "class": "battery",
+      "capabilities": ["measure_power", "measure_battery"],
+      "energy": {
+        "homeBattery": true
+      },
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_devices"
+          },
+          "options": {
+            "singular": true
+          }
+        },
+        {
+          "id": "add_devices",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "id": "enabled",
+          "type": "checkbox",
+          "label": {
+            "en": "Publish live readings (avoid duplicate Energy sources)",
+            "sv": "Publicera aktuella värden (undvik dubbla energikällor)"
+          },
+          "value": true
         }
       ]
     }

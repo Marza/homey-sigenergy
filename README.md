@@ -15,6 +15,7 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | EVDC monitoring | Optional charging power and vehicle SoC reads | Experimental and disabled by default; no charger control |
 | Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Four readings verified against the display on one installation; optional local reads every 30 seconds, no separate Homey device or heat-pump control |
 | Backup advisory | Grid/island/unknown state and a “Backup mode changed” Flow trigger | EV-stop and Nibe-mode tokens are requests, never confirmation of an action |
+| Native Homey Energy | Optional grid, solar and battery power-reporting companions | Initial W/% support; native physical behavior and cumulative kWh remain unverified |
 | Local history | Quarter-hour aggregates, daily summaries, backup-mode events and JSON export | Stored in Homey app settings, not a dedicated database |
 | Tibber prices and EV planning | Cached consumption prices and a manual-SoC charging-plan preview | Authenticated dry run with coverage, deadlines and unmet targets; no charging commands |
 | Peak shaving | Historical replay, configurable caps/reserves, stored advisory recommendations | Illustrative scenarios, not a forecast or guaranteed power limit |
@@ -128,6 +129,10 @@ The result includes `coverage`: expected eligible hours in the full Stockholm ca
 See [dated Telge rules and validation gaps](docs/telge-tariff.md) for the public 2026 tariff reference, reproducible synthetic example and remaining billing checks. Older records without coverage cannot qualify. The 32-day detailed window can retain the full current calendar month, including a 31-day month with a DST transition; this is a storage bound, not proof that every interval was observed. Verify seasonal rules, import/export treatment, peak selection, VAT basis and rate against your contract. Displayed savings are historical scenarios, not billing-accurate or future savings.
 
 Automatic daily Tibber consumption fetching supplies a **separate hourly demand reference** for the current Stockholm month, including available hours before app installation. It re-fetches the elapsed current month and the whole previous month to include delayed values and corrections, retaining the current month plus twelve previous months; failed requests retain the previous snapshot and retry after an hour. Fetching uses the saved Tibber token/home selection and starts within five minutes of app startup when due. The widget displays it alongside, rather than merged into, inverter history. Imported hours retain their hourly resolution/source and cannot supply missing PV, ESS or SoC for battery replay. Missing/delayed Tibber values stay missing. See [hourly consumption reference](docs/tibber-consumption.md) for scope, storage and backup limits.
+
+## Native Homey Energy (initial power-only support)
+
+Optional **Sigenergy Energy — grid / solar / battery** devices report fresh power from the existing plant reader through standard Homey capabilities. Pair only the sources you need and exclude duplicate P1/Tibber/solar integrations from Energy. Existing plant pairing, settings and history remain intact. No additional Modbus reads or device commands are added. This is initial native reporting: cumulative kWh registers, AC measurement boundaries and the native whole-house display still require verification. See [setup, source mapping and physical checklist](docs/homey-energy.md). The custom Dashboard widget is separate.
 
 ## History, diagnostics and simulations
 
