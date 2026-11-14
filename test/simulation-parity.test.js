@@ -264,7 +264,9 @@ test('settings renders shared results and clears them on insufficient history, b
 });
 test('settings rejects unsafe scenario ranges before saving configuration', () => {
   const b = browser();
-  b.run('TibberHistoryPricesSettings.bind = () => {}; onHomeyReady(Homey)');
+  b.run(
+    'TibberHistoryPricesSettings.bind = () => {}; EconomicReplaySettings.bind = () => {}; onHomeyReady(Homey)',
+  );
   for (const key of Object.keys(S.DEFAULT_OPTIMIZER))
     b.element(key).value = String(b.element(key).value);
   b.element('capStepKW').value = '0.0000001';

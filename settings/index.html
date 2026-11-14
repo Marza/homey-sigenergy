@@ -12,6 +12,7 @@
     <script src="cost-model.js"></script>
     <script src="solar-preview.js"></script>
     <script src="tibber-history-prices.js"></script>
+    <script src="economic-replay.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -238,6 +239,15 @@
         .cards {
           grid-template-columns: repeat(4, minmax(0, 1fr));
         }
+      }
+      #economicReplayPanel {
+        overflow-wrap: anywhere;
+      }
+      #econ-results article {
+        border: 1px solid #8885;
+        border-radius: 10px;
+        padding: 12px;
+        margin-top: 10px;
       }
     </style>
   </head>
@@ -710,6 +720,85 @@
           vägledande beräkning från effektprov, inte exakta kvartspriser, en faktura eller en
           beräknad batteribesparing. Fasta avgifter, effektavgift och slitage ingår inte. Luckor
           fylls inte och ingen styrning sker.
+        </p>
+      </section>
+      <section id="economicReplayPanel">
+        <h3>Ekonomisk jämförelse – historisk modell</h3>
+        <p>
+          Spara först kostnadsunderlag och effektavgiftsinställningar i deras vanliga formulär.
+          Publicera sedan en kopia med ett uttryckligt giltighetsdatum. Kontrollerat datum används
+          inte som avtalsstart. Tidigare versioner ändras inte när formulären ändras.
+        </p>
+        <label>Gäller från (Europe/Stockholm) <input id="econ-from" type="date" /></label>
+        <label
+          ><input id="econ-date-confirm" type="checkbox" /> Jag har kontrollerat giltighetsdatumet
+          för de sparade villkoren och effekttariffen.</label
+        >
+        <label
+          ><input id="econ-network" type="checkbox" /> Lägg till separat debiterad nätavgift,
+          energiskatt och exportnytta från underlaget.</label
+        >
+        <label
+          ><input id="econ-components-confirm" type="checkbox" /> Jag har kontrollerat vad Tibbers
+          rapporterade timpriser innehåller. Valda separata tillägg ingår inte redan där; övriga
+          kostnader för elhandeln täcks av prisunderlaget.</label
+        >
+        <button id="econ-publish" type="button">Publicera daterad kopia av sparade villkor</button>
+        <p id="econ-contract-message" role="status"></p>
+        <ol id="econ-contracts"></ol>
+        <button id="econ-refresh" type="button">Läs om sparade versioner och underlag</button>
+        <button id="econ-export" type="button">Exportera kostnadsversioner</button>
+        <label
+          >Återläs kostnadsversioner
+          <input id="econ-import-file" type="file" accept="application/json,.json"
+        /></label>
+        <label
+          ><input id="econ-import-confirm" type="checkbox" /> Filen gäller samma anläggning.
+          Befintliga versioner får inte ändras.</label
+        >
+        <button id="econ-import" type="button">Återläs valda kostnadsversioner</button>
+        <p>
+          Exporten innehåller användarangivna avtalsuppgifter. Förvara filen privat. Den vanliga
+          historikbackupen innehåller inte dessa kostnadsversioner.
+        </p>
+        <h4>Batteriscenarier för senaste avslutade timmarna</h4>
+        <label
+          >Antal timmar <input id="econ-hours" type="number" min="1" max="768" value="24"
+        /></label>
+        <label
+          >Effekttak att jämföra (kW, semikolonseparerat) <input id="econ-caps" value="2;3;4"
+        /></label>
+        <label
+          >Antagen batterikapacitet (kWh) <input id="econ-capacity" inputmode="decimal"
+        /></label>
+        <label
+          >Energi vid periodens början och slut (kWh) <input id="econ-initial" inputmode="decimal"
+        /></label>
+        <label>Reservenergi (kWh) <input id="econ-reserve" inputmode="decimal" /></label>
+        <label>Max laddning (kW) <input id="econ-charge" inputmode="decimal" /></label>
+        <label>Max urladdning (kW) <input id="econ-discharge" inputmode="decimal" /></label>
+        <label>Laddverkningsgrad (0–1) <input id="econ-charge-eta" inputmode="decimal" /></label>
+        <label
+          >Urladdningsverkningsgrad (0–1) <input id="econ-discharge-eta" inputmode="decimal"
+        /></label>
+        <label
+          ><input id="econ-model-confirm" type="checkbox" /> Jag har kontrollerat
+          batteriantagandena. Jag förstår att modellen antar konstant nettoförbrukning inom varje
+          kvart och gemensam AC-mätgräns för nät och batteri.</label
+        >
+        <button id="econ-run" type="button">Jämför utan styrning</button>
+        <p id="econ-result" role="status"></p>
+        <div id="econ-results"></div>
+        <p>
+          Baslinjen har inget aktivt batteri. Modellen tar bort den observerade batterieffekten från
+          nätenergin och använder samma kvarvarande hus-/solflöde i alla scenarier. Återladdning och
+          förluster ingår i nät-/exportflödet. Kostnadsskillnad visas bara när start- och slutenergi
+          matchar och samma pris-, avtals- och effektunderlag finns för hela perioden.
+        </p>
+        <p>
+          Effektiva historiska timpriser ger en indikativ jämförelse, inte verifierade priser för
+          hypotetiska kvart. Effektavgiften är preliminär för de observerade timmarna. Ingen
+          automatisk ekonomisk rangordning, garanterad besparing eller styrning aktiveras.
         </p>
       </section>
       <h3>Tibber (priser hämtas via internet, sparas lokalt)</h3>
@@ -1945,6 +2034,7 @@
         bindChargingPreview(Homey);
         bindEconomicHistory(Homey);
         TibberHistoryPricesSettings.bind(Homey);
+        EconomicReplaySettings.bind(Homey);
         SolarPreview.bind(Homey);
         document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {

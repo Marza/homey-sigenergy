@@ -358,15 +358,38 @@ test('network additions apply purchase VAT only; supplier fees are never duplica
   assert.throws(() => f.service.options({ includeNetwork: true }), /network-confirmation/);
   assert.throws(() => f.service.options({ includeNetwork: 'yes' }), /invalid-options/);
   f.service.options({ includeNetwork: true, confirmSeparateNetworkComponents: true });
+  assert.equal(f.service.ledger().status, 'dated-contract-required');
+  f.data.demandTariff = {
+    start: '00:00',
+    end: '23:00',
+    weekdays: [0, 1, 2, 3, 4, 5, 6],
+    peakCount: 1,
+    distinctDays: false,
+    rateSekPerKw: 50,
+  };
+  const { publishContract, timelineStatus } = require('../lib/pricing/contract-timeline');
+  const state = timelineStatus(f.homey);
+  publishContract(
+    f.homey,
+    {
+      expectedRevision: state.revision,
+      draftHash: state.draftHash,
+      from: '2026-06-01',
+      confirmEffectiveDate: true,
+      confirmTradeComponents: true,
+      includeNetwork: true,
+    },
+    NOW,
+  );
   const full = f.service.ledger();
   assert.ok(Math.abs(full.totals.importCostSek - 1.7) < 1e-9);
   assert.ok(Math.abs(full.totals.exportRevenueSek + 0.085) < 1e-9);
   f.data.costContract.otherImportExVatSekPerKWh = 0.1;
-  assert.equal(f.service.ledger().status, 'network-confirmation-required');
+  assert.equal(f.service.ledger().componentBasis, 'dated-contract-components');
   f.data.costContract = null;
-  assert.equal(f.service.ledger().status, 'network-confirmation-required');
+  assert.equal(f.service.ledger().componentBasis, 'dated-contract-components');
   f.service.options({ includeNetwork: false });
-  assert.equal(f.service.ledger().totals.importCostSek, 1.2);
+  assert.equal(f.service.ledger().totals.importCostSek, 1.7);
   f.data.tibberHomeId = 'changed';
   assert.throws(() => f.service.options({ includeNetwork: false }), /home-confirmation/);
 });

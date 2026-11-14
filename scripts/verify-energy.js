@@ -47,6 +47,21 @@ function verifyEnergy(directory) {
   );
   assert.ok(fs.existsSync(path.join(directory, 'settings/tibber-history-prices.js')));
   assert.ok(settingsHtml.includes('TibberHistoryPricesSettings.bind(Homey)'));
+  for (const name of [
+    'getContractTimeline',
+    'publishCostContract',
+    'restoreCostContracts',
+    'compareBatteryReplay',
+  ]) {
+    assert.equal(manifest.api[name].public, false);
+    assert.equal(typeof require(path.resolve(directory, 'api'))[name], 'function');
+  }
+  assert.equal(
+    typeof require(path.resolve(directory, 'lib/optimization/balanced-replay')).replayBattery,
+    'function',
+  );
+  assert.ok(fs.existsSync(path.join(directory, 'settings/economic-replay.js')));
+  assert.ok(settingsHtml.includes('EconomicReplaySettings.bind(Homey)'));
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
   assert.equal(typeof reporting.createDevice, 'function');

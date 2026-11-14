@@ -18,14 +18,11 @@ The effective hourly unit price can reflect the actual meter's within-hour consu
 
 Totals describe only matched hours: observed import kWh × reported purchase unit price and observed export kWh × reported production unit price. Signed/negative prices are preserved. The UI exposes matched hours, missing price hours, incomplete energy quarters, gaps and complete quarters left outside whole hours. Empty coverage produces no cost totals. This does not backfill energy history or calculate battery savings.
 
-## Optional separate network components
+## Dated separate network components
 
-Default totals contain only the reported trade unit prices. They do not assert that all Tibber fees are included. The optional network mode requires an explicit confirmation of separately billed network/tax/export components and a validated schema-2 `spot-ex-vat` cost contract with no included-tax flag. It adds:
+Network/tax/export terms now come from immutable dated cost snapshots, as described in [economic replay](economic-replay.md). Save the existing draft cost/tariff forms, then explicitly publish their effective date and component confirmation. Editing today's draft does not reprice older periods. No date is inferred from `checkedOn`. The previous undated network option requests a dated snapshot after upgrade; a timeline gap is reported rather than filled with current rates.
 
-- import: `(energyTaxExVatSekPerKWh + gridImportExVatSekPerKWh) × (1 + vatRate)`;
-- export: `gridExportBenefitSekPerKWh - gridExportFeeSekPerKWh`, in final applicable amounts.
-
-Supplier additions (`otherImportExVatSekPerKWh`) are not added automatically because their inclusion in the source must be established before combining them. The saved VAT rate applies only to the explicitly separate purchase additions; no extra purchase VAT is applied to production payouts or export benefit. Changing the cost contract invalidates network confirmation. Fixed fees, demand charges, battery wear, rewards and counterfactual savings remain excluded. Confirm the component meaning against the contract and bill before interpreting totals.
+For each covered hour, a dated snapshot can add separately confirmed purchase tax/grid fees with purchase VAT and final export benefit/fee without extra purchase VAT. Supplier additions are not automatically duplicated. The observed ledger still excludes fixed fees, demand charges, wear, rewards and counterfactual savings. Separate replay results show wear and preliminary demand costs with explicit model and price limitations.
 
 ## Scheduling and failure behavior
 
