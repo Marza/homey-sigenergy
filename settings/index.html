@@ -14,6 +14,7 @@
     <script src="solar-preview.js"></script>
     <script src="tibber-history-prices.js"></script>
     <script src="economic-replay.js"></script>
+    <script src="economic-readiness.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="navigation.js"></script>
     <script src="settings-assistant.js"></script>
@@ -1910,6 +1911,36 @@
                         2;3;4. Inga tak garanteras.
                       </p>
                     </div>
+                  </div>
+                  <label class="hy-nostyle"
+                    ><input id="econ-solar-enabled" type="checkbox" class="hy-nostyle" /> Jämför
+                    solfördelning mellan husbatteri, bil och export i samma historiska modell</label
+                  >
+                  <section
+                    class="settingsGroup"
+                    id="econ-readiness-panel"
+                    aria-labelledby="econ-data-heading"
+                  >
+                    <h4 id="econ-data-heading">Kontrollera underlaget först</h4>
+                    <p class="sub">
+                      Grundkontroll av den valda periodens lokala historik, priser och daterade
+                      villkor. Inga nya data hämtas eller villkor publiceras.
+                    </p>
+                    <button type="button" class="hy-nostyle" id="econ-check-data">
+                      Kontrollera periodens underlag
+                    </button>
+                    <p id="econ-data-status" role="status" aria-live="polite">
+                      Kontrollen är inte utförd.
+                    </p>
+                    <ul class="readiness-list" id="econ-data-checks"></ul>
+                    <p class="note">
+                      En ögonblicksbild av datatäckning, inte en verifierad besparing.
+                      Batteri-/bilantaganden, effektavgift, laddmål och slutenergi prövas i
+                      beräkningen. Frånvaro av registrerad billaddning ersätter inte din
+                      bekräftelse. Beräkningen läser alltid om underlaget.
+                    </p>
+                  </section>
+                  <div class="form-grid">
                     <label class="hy-nostyle"
                       >Antagen batterikapacitet (kWh)
                       <input id="econ-capacity" inputmode="decimal" class="hy-nostyle"
@@ -1971,10 +2002,7 @@
                     nettoförbrukning inom varje kvart och gemensam AC-mätgräns för nät och
                     batteri.</label
                   >
-                  <label class="hy-nostyle"
-                    ><input id="econ-solar-enabled" type="checkbox" class="hy-nostyle" /> Jämför
-                    solfördelning mellan husbatteri, bil och export i samma historiska modell</label
-                  >
+
                   <fieldset id="econ-solar-fields" disabled class="hy-nostyle">
                     <legend>Hypotetisk bil på observerad solhistorik</legend>
                     <p>
@@ -3234,6 +3262,7 @@
         bindEconomicHistory(Homey);
         TibberHistoryPricesSettings.bind(Homey);
         EconomicReplaySettings.bind(Homey);
+        EconomicReadinessSettings.bind(Homey);
         SolarPreview.bind(Homey);
         document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {
