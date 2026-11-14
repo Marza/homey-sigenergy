@@ -72,6 +72,7 @@ const snapshot = { gridMode: 0, soc: 60, capacityKWh: 42, gridW: 2000, pvW: 1000
 function deviceFixture({
   snapshotRead = async () => snapshot,
   evdcRead = async () => ({ soc: 0, powerW: 0 }),
+  energyRead = async () => ({ values: {} }),
   batteryRead = async () => ({
     values: {},
     errors: { soh: 'Unsupported' },
@@ -88,6 +89,9 @@ function deviceFixture({
     }
     snapshot() {
       return snapshotRead(this);
+    }
+    energyCounters(profile) {
+      return energyRead(profile);
     }
     batteryTelemetry() {
       return batteryRead(this);
@@ -277,4 +281,49 @@ test('shared Energy snapshots follow plant success, reader replacement, communic
   assert.equal(device.getEnergySnapshot().maxAgeMs, 60000);
   await device.onUninit();
   assert.equal(device.getEnergySnapshot(), null);
+});
+
+test('optional counter probing commits high-water marks before publish and never invalidates power on counter/store failure', async () => {
+  const { PROFILE } = require('../lib/energy/meters');
+  let raw = '1000',
+    failRead = false,
+    failWrite = false,
+    stored;
+  const { device } = deviceFixture({
+    energyRead: async () => {
+      if (failRead) throw Error('unsupported');
+      return {
+        values: { solar: raw, imported: raw, exported: raw, charged: raw, discharged: raw },
+      };
+    },
+  });
+  const settings = device.getSettings();
+  device.getSettings = () => ({ ...settings, energyMetersProfile: PROFILE, energyCounterEpoch: 0 });
+  device.getStoreValue = () => stored;
+  device.setStoreValue = async (_key, state) => {
+    if (failWrite) throw Error('disk');
+    stored = structuredClone(state);
+  };
+  await device.onInit();
+  await tick();
+  assert.equal(device.getEnergySnapshot().meters.values.solar, 10);
+  assert.equal(stored.channels.solar.raw, '1000');
+  raw = '1050';
+  failWrite = true;
+  device.lastEnergyProbeAt = 0;
+  await device.poll();
+  assert.equal(Object.keys(device.getEnergySnapshot().meters.values).length, 0);
+  assert.equal(stored.channels.solar.raw, '1000');
+  assert.equal(device.available, true);
+  failWrite = false;
+  device.lastEnergyProbeAt = 0;
+  await device.poll();
+  assert.equal(device.getEnergySnapshot().meters.values.solar, 10.5);
+  failRead = true;
+  device.lastEnergyProbeAt = 0;
+  await device.poll();
+  assert.equal(device.getEnergySnapshot().gridW, 2000);
+  assert.equal(Object.keys(device.getEnergySnapshot().meters.values).length, 0);
+  assert.equal(device.available, true);
+  await device.onUninit();
 });

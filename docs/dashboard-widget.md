@@ -2,7 +2,7 @@
 
 ## Supported target and implementation
 
-The app now declares **Homey >=12.3.0**, local platform only, following the [official widget requirements](https://apps.developer.homey.app/the-basics/widgets). This raises the earlier 12.0.0 minimum. Physical app monitoring has been tested on Homey Pro firmware 13.5.4; it does **not** establish widget compatibility at either version. Homey Cloud is outside the target.
+The widget requires **Homey >=12.3.0**, local platform only, following the [official widget requirements](https://apps.developer.homey.app/the-basics/widgets). The app minimum is now **>=12.4.5** for native Energy counter mappings; the earlier widget work raised it from 12.0.0 to 12.3.0. Physical app monitoring has been tested on Homey Pro firmware 13.5.4; it does **not** establish widget compatibility at either version. Homey Cloud is outside the target.
 
 This repository does not use Homey Compose. Merely including `widget.compose.json` did not register the widget in `app.json`; the widget is now explicitly registered there as `energy-overview`. Tests compare both definitions. The former numeric height of 2 would mean pixels, not grid rows. It is removed, and the widget reports the rounded intrinsic height of its content wrapper at initial readiness and on subsequent content/viewport/font changes, including error states. Body/viewport height is not reused as content height.
 

@@ -5,7 +5,7 @@
   "author": {
     "name": "Marza"
   },
-  "compatibility": ">=12.3.0",
+  "compatibility": ">=12.4.5",
   "name": {
     "en": "Sigenergy Local Monitor",
     "sv": "Sigenergy lokal övervakning"
@@ -122,6 +122,73 @@
       "getable": true,
       "setable": false,
       "decimals": 0
+    },
+    "measure_energy_status": {
+      "type": "enum",
+      "title": {
+        "en": "Energy counters",
+        "sv": "Energiräknare"
+      },
+      "getable": true,
+      "setable": false,
+      "values": [
+        {
+          "id": "disabled",
+          "title": {
+            "en": "Disabled",
+            "sv": "Avstängda"
+          }
+        },
+        {
+          "id": "waiting",
+          "title": {
+            "en": "Waiting for source",
+            "sv": "Inväntar källa"
+          }
+        },
+        {
+          "id": "ok",
+          "title": {
+            "en": "Current",
+            "sv": "Aktuella"
+          }
+        },
+        {
+          "id": "partial",
+          "title": {
+            "en": "Partly available",
+            "sv": "Delvis tillgängliga"
+          }
+        },
+        {
+          "id": "stale",
+          "title": {
+            "en": "Stale",
+            "sv": "För gamla"
+          }
+        },
+        {
+          "id": "reset-required",
+          "title": {
+            "en": "Counter reset — verify and acknowledge",
+            "sv": "Räknare har minskat — verifiera och bekräfta"
+          }
+        },
+        {
+          "id": "source-changed",
+          "title": {
+            "en": "Source changed — verify and acknowledge",
+            "sv": "Ändrad källa — verifiera och bekräfta"
+          }
+        },
+        {
+          "id": "invalid",
+          "title": {
+            "en": "Unavailable or invalid",
+            "sv": "Otillgängliga eller ogiltiga"
+          }
+        }
+      ]
     }
   },
   "drivers": [
@@ -237,6 +304,42 @@
             "en": "EVDC SoC divisor"
           },
           "value": 1
+        },
+        {
+          "id": "energyMetersProfile",
+          "type": "dropdown",
+          "label": {
+            "en": "Cumulative energy register profile",
+            "sv": "Registerprofil för kumulativ energi"
+          },
+          "value": "disabled",
+          "values": [
+            {
+              "id": "disabled",
+              "label": {
+                "en": "Disabled (power only)",
+                "sv": "Avstängd (endast effekt)"
+              }
+            },
+            {
+              "id": "sigenergy-v29-statistics",
+              "label": {
+                "en": "Sigenergy V2.9 new statistics (confirm firmware support)",
+                "sv": "Sigenergy V2.9 ny statistik (bekräfta firmwarestöd)"
+              }
+            }
+          ]
+        },
+        {
+          "id": "energyCounterEpoch",
+          "type": "number",
+          "label": {
+            "en": "Counter reference generation (increase only after verifying reset/source change)",
+            "sv": "Räknarreferensens generation (öka först efter verifierad återställning/källändring)"
+          },
+          "value": 0,
+          "min": 0,
+          "step": 1
         }
       ]
     },
@@ -247,9 +350,16 @@
         "sv": "Sigenergy Energy — nät"
       },
       "class": "sensor",
-      "capabilities": ["measure_power"],
+      "capabilities": [
+        "measure_power",
+        "meter_power.imported",
+        "meter_power.exported",
+        "measure_energy_status"
+      ],
       "energy": {
-        "cumulative": true
+        "cumulative": true,
+        "cumulativeImportedCapability": "meter_power.imported",
+        "cumulativeExportedCapability": "meter_power.exported"
       },
       "pair": [
         {
@@ -277,7 +387,25 @@
           },
           "value": true
         }
-      ]
+      ],
+      "capabilitiesOptions": {
+        "meter_power.imported": {
+          "decimals": 2,
+          "title": {
+            "en": "Imported energy",
+            "sv": "Importerad energi"
+          },
+          "min": 0
+        },
+        "meter_power.exported": {
+          "decimals": 2,
+          "title": {
+            "en": "Exported energy",
+            "sv": "Exporterad energi"
+          },
+          "min": 0
+        }
+      }
     },
     {
       "id": "energy-solar",
@@ -286,8 +414,10 @@
         "sv": "Sigenergy Energy — sol"
       },
       "class": "solarpanel",
-      "capabilities": ["measure_power"],
-      "energy": {},
+      "capabilities": ["measure_power", "meter_power", "measure_energy_status"],
+      "energy": {
+        "meterPowerExportedCapability": "meter_power"
+      },
       "pair": [
         {
           "id": "list_devices",
@@ -314,7 +444,17 @@
           },
           "value": true
         }
-      ]
+      ],
+      "capabilitiesOptions": {
+        "meter_power": {
+          "decimals": 2,
+          "title": {
+            "en": "Solar generation",
+            "sv": "Solproduktion"
+          },
+          "min": 0
+        }
+      }
     },
     {
       "id": "energy-battery",
@@ -323,9 +463,17 @@
         "sv": "Sigenergy Energy — batteri"
       },
       "class": "battery",
-      "capabilities": ["measure_power", "measure_battery"],
+      "capabilities": [
+        "measure_power",
+        "measure_battery",
+        "meter_power.charged",
+        "meter_power.discharged",
+        "measure_energy_status"
+      ],
       "energy": {
-        "homeBattery": true
+        "homeBattery": true,
+        "meterPowerImportedCapability": "meter_power.charged",
+        "meterPowerExportedCapability": "meter_power.discharged"
       },
       "pair": [
         {
@@ -353,7 +501,25 @@
           },
           "value": true
         }
-      ]
+      ],
+      "capabilitiesOptions": {
+        "meter_power.charged": {
+          "decimals": 2,
+          "title": {
+            "en": "Charged energy",
+            "sv": "Laddad energi"
+          },
+          "min": 0
+        },
+        "meter_power.discharged": {
+          "decimals": 2,
+          "title": {
+            "en": "Discharged energy",
+            "sv": "Urladdad energi"
+          },
+          "min": 0
+        }
+      }
     }
   ],
   "flow": {
