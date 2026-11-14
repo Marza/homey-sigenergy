@@ -94,6 +94,7 @@ function view(file) {
     document,
     Homey,
     SettingsNavigation: require('../settings/navigation'),
+    SettingsAssistant: require('../settings/settings-assistant'),
     Date: Clock,
     setTimeout: () => 0,
     clearTimeout() {},

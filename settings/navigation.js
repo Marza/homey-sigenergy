@@ -53,8 +53,14 @@
         button.addEventListener('click', () => showCategory(button.dataset.settingsCategory, true));
       for (const link of document.querySelectorAll('[data-settings-link]'))
         link.addEventListener('click', () => {
+          const guide = link.closest?.('#setupGuide');
+          if (guide) guide.open = false;
           showTab('settings');
           showCategory(link.dataset.settingsLink, true);
+          for (const id of (link.dataset.settingsDetail || '').split(/\s+/).filter(Boolean)) {
+            const detail = document.getElementById(id);
+            if (detail?.tagName === 'DETAILS') detail.open = true;
+          }
         });
       showCategory(picker.value || 'connections');
     }

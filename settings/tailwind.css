@@ -360,3 +360,62 @@ body.sigenergy-settings {
     @apply m-0;
   }
 }
+
+body.sigenergy-settings {
+  .setup-steps {
+    @apply list-none m-0;
+  }
+  .setup-steps > li {
+    @apply border-b pb-3 mb-3;
+    border-color: var(--line);
+  }
+  .setup-steps button {
+    @apply m-0;
+  }
+  .setup-steps p {
+    @apply mb-0;
+  }
+  .unit-glossary {
+    @apply grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm my-4;
+  }
+  .unit-glossary dt {
+    @apply font-semibold;
+  }
+  .helper-actions {
+    @apply flex flex-wrap gap-2 mb-3;
+  }
+  .helper-actions button {
+    @apply mt-2;
+  }
+  .day-options {
+    @apply grid grid-cols-2 sm:grid-cols-4 gap-2;
+  }
+  .day-options label {
+    @apply rounded-xl border p-3 m-0;
+    border-color: var(--line);
+  }
+  .day-options label:has(:checked) {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+  .form-grid > .settings-details {
+    grid-column: 1 / -1;
+  }
+  .field-help {
+    @apply text-sm mt-1 mb-3;
+    color: var(--muted);
+  }
+  .unit-preview {
+    @apply text-sm mt-1 mb-2 font-medium;
+    color: var(--accent);
+  }
+}
+
+body.sigenergy-settings {
+  .details-body ol:not(.setup-steps) {
+    @apply list-decimal ml-5 my-3 space-y-2;
+  }
+  .details-body ul {
+    @apply list-disc ml-5 my-3 space-y-2;
+  }
+}

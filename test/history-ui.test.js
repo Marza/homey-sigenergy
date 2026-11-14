@@ -49,6 +49,7 @@ function render(file, row, start, canonical = false) {
     document,
     Homey,
     SettingsNavigation: require('../settings/navigation'),
+    SettingsAssistant: require('../settings/settings-assistant'),
     setTimeout: () => 0,
     clearTimeout() {},
     setInterval() {},

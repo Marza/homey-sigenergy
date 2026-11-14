@@ -16,6 +16,7 @@
     <script src="economic-replay.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="navigation.js"></script>
+    <script src="settings-assistant.js"></script>
   </head>
   <body class="sigenergy-settings">
     <div class="header flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -281,6 +282,87 @@
         Välj ett område. Inmatade värden behålls när du byter vy, tills sidan stängs eller laddas
         om.
       </p>
+      <details class="settings-details" id="setupGuide">
+        <summary>Hjälp mig komma igång</summary>
+        <div class="details-body">
+          <p>
+            För att bara följa anläggningen räcker Anslutningar. Välj sedan de funktioner du vill
+            använda.
+          </p>
+          <ol class="setup-steps">
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="connections">
+                1. Anslut datakällorna
+              </button>
+              <p class="sub">
+                SigEnergy via enhetens inställningar. Tibber för priser. Nibe är valfritt.
+              </p>
+            </li>
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="costs">
+                2. Ange elavtalet
+              </button>
+              <p class="sub">
+                Hämta rörliga inköpskostnader och försäljningsersättning från ditt avtal eller
+                fakturan.
+              </p>
+            </li>
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="tariff">
+                3. Ange effektavgiften
+              </button>
+              <p class="sub">
+                Hämta tider, dagar, månader och toppregel från nätbolagets prislista.
+              </p>
+            </li>
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="car">
+                4. Planera billaddning
+              </button>
+              <p class="sub">
+                Ange bilens kapacitet och laddmål. Förhandsvisning aktiverar ingen laddning.
+              </p>
+            </li>
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="battery">
+                5. Jämför effekttak
+              </button>
+              <p class="sub">Ange simuleringsgränser. Manuella batterivärden används som reserv.</p>
+            </li>
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="solar">
+                6. Prova solfördelning
+              </button>
+              <p class="sub">Ett kort scenario med aktuell nätexport; ingen solprognos.</p>
+            </li>
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="economics">
+                7. Jämför historiska kostnader
+              </button>
+              <p class="sub">Bekräfta mätpunkt, datera villkor och välj ett historiskt scenario.</p>
+            </li>
+            <li>
+              <button type="button" class="hy-nostyle" data-settings-link="data">
+                8. Säkerhetskopiera
+              </button>
+              <p class="sub">Historik och daterade kostnadsversioner exporteras separat.</p>
+            </li>
+          </ol>
+          <dl class="unit-glossary">
+            <dt>kW</dt>
+            <dd>Effekt: hur snabbt el används eller produceras.</dd>
+            <dt>kWh</dt>
+            <dd>Energi: hur mycket el som används eller lagras.</dd>
+            <dt>SoC / laddnivå</dt>
+            <dd>Batteriets laddning i procent. 50 % betyder ungefär halvfullt.</dd>
+            <dt>Verkningsgrad</dt>
+            <dd>Andelen energi som blir kvar efter förluster. 0,90 motsvarar 90 %.</dd>
+          </dl>
+          <p class="note">
+            Appen läser och simulerar. Ingen av inställningarna slår på hårdvarustyrning.
+          </p>
+        </div>
+      </details>
       <div class="category-picker">
         <label for="settingsCategory" class="hy-nostyle">Område</label
         ><select id="settingsCategory" class="hy-nostyle">
@@ -364,8 +446,28 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-connections" tabindex="-1">Anslutningar</h3>
-              <p>SigEnergy, Nibe och Tibber. Ändringar sparas med knappen i respektive avsnitt.</p>
+              <p>Anslut först det du vill läsa av.</p>
             </header>
+            <details class="settings-details">
+              <summary>Så hittar du anslutningsuppgifterna</summary>
+              <div class="details-body">
+                <ol>
+                  <li>
+                    SigEnergy: lägg till anläggningen som en enhet i Homey och ange Modbus-uppgifter
+                    i enhetens avancerade inställningar.
+                  </li>
+                  <li>
+                    Tibber: hämta en personlig API-token i Tibbers utvecklarportal. Home ID behövs
+                    om kontot har flera hem.
+                  </li>
+                  <li>Nibe: aktivera Modbus TCP i värmepumpen och använd dess lokala IP-adress.</li>
+                </ol>
+                <p>
+                  Spara varje anslutning separat. Se aktuell anslutningsstatus under Diagnostik.
+                  Sparade uppgifter betyder inte att anslutningen fungerar.
+                </p>
+              </div>
+            </details>
             <div class="settingsGroup">
               <h3>SigEnergy</h3>
               <p>
@@ -393,10 +495,23 @@
                   style="max-width: 320px"
                   class="hy-nostyle"
               /></label>
-              <label class="hy-nostyle"
-                >Tibber Home ID (krävs vid flera hem)
-                <input id="tibberHomeId" type="text" style="max-width: 320px" class="hy-nostyle"
-              /></label>
+              <details class="settings-details">
+                <summary>Har Tibber-kontot flera hem?</summary>
+                <div class="details-body">
+                  <label class="hy-nostyle"
+                    >Tibber Home ID (krävs vid flera hem)
+                    <input
+                      id="tibberHomeId"
+                      type="text"
+                      style="max-width: 320px"
+                      class="hy-nostyle"
+                  /></label>
+                  <p class="sub">
+                    Home ID finns i Tibbers API Explorer. Behåll ett redan sparat ID om du inte
+                    avser att byta hem.
+                  </p>
+                </div>
+              </details>
               <button id="saveTibber" type="button" class="hy-nostyle">
                 Spara Tibber-inställningar
               </button>
@@ -404,14 +519,21 @@
             </div>
             <div class="settingsGroup">
               <h3>Nibe SMO S40 – lokal avläsning</h3>
-              <label class="hy-nostyle"
-                >IP-adress / värdnamn
-                <input
-                  id="nibeHost"
-                  type="text"
-                  placeholder="Värmepumpens lokala adress"
-                  class="hy-nostyle"
-              /></label>
+              <div class="field-group">
+                <label class="hy-nostyle"
+                  >IP-adress / värdnamn
+                  <input
+                    id="nibeHost"
+                    type="text"
+                    placeholder="Värmepumpens lokala adress"
+                    class="hy-nostyle"
+                    aria-describedby="help-nibeHost"
+                /></label>
+                <p class="field-help" id="help-nibeHost">
+                  Använd värmepumpens adress i hemnätverket. Tomt fält stänger av Nibe-avläsningen
+                  efter sparning.
+                </p>
+              </div>
               <details class="settings-details mt-4">
                 <summary>Avancerade Modbus-parametrar</summary>
                 <div class="details-body">
@@ -476,88 +598,224 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-costs" tabindex="-1">Elavtal</h3>
-              <p>Köp, försäljning och moms. Ändringar sparas med knappen i respektive avsnitt.</p>
+              <p>Använd ditt avtal och din senaste faktura som underlag.</p>
             </header>
+            <details class="settings-details">
+              <summary>Så fyller du i elavtalet</summary>
+              <div class="details-body">
+                <ol>
+                  <li>Ange källa och dagen du kontrollerade uppgifterna.</li>
+                  <li>
+                    Välj vilket inköpspris dina tillägg gäller för: med moms eller rent spotpris
+                    utan moms.
+                  </li>
+                  <li>
+                    Ange bara saknade rörliga tillägg i kr/kWh. 100 öre = 1 kr. Inköpsmoms 0,25
+                    motsvarar 25 %.
+                  </li>
+                  <li>
+                    Försäljning: ange separat ersättning, nätnytta och avgifter som du faktiskt får
+                    eller betalar. Ingen extra inköpsmoms läggs på.
+                  </li>
+                </ol>
+                <p>
+                  Fasta månadsavgifter ingår inte. Historiska jämförelser använder rapporterade
+                  Tibber-priser; elhandelspåslag läggs inte till igen där. Separata nätkomponenter
+                  kräver uttrycklig bekräftelse.
+                </p>
+              </div>
+            </details>
             <div class="settingsGroup" id="costContractPanel">
               <h3>Rörliga kostnader och ersättning</h3>
               <p class="note">
                 Ange dina egna avtalsuppgifter. De används som underlag för indikativa jämförelser,
                 inte som en verifierad faktura eller garanterad besparing.
               </p>
-              <p class="sub">
-                Ange endast rörliga tillägg som inte redan ingår i priset. Inköpsprisets
-                momshantering bestäms av valt prisunderlag. Försäljningsersättningen anges som det
-                belopp du får; appen lägger inte på moms på försäljning. Inga aktuella avtalspriser
-                förifylls.
-              </p>
-              <label class="hy-nostyle"
-                >Avtalskälla / prisunderlag (obligatoriskt)
-                <input id="costSource" type="text" maxlength="300" class="hy-nostyle"
-              /></label>
+
+              <div class="field-group">
+                <label class="hy-nostyle"
+                  >Avtalskälla / prisunderlag (obligatoriskt)
+                  <input
+                    id="costSource"
+                    type="text"
+                    maxlength="300"
+                    class="hy-nostyle"
+                    aria-describedby="help-costSource"
+                    required
+                /></label>
+                <p class="field-help" id="help-costSource">
+                  Beskriv avtalet eller fakturan som uppgifterna kommer från. Ange inga kundnummer.
+                </p>
+              </div>
               <label class="hy-nostyle"
                 >Kontrollerat datum (obligatoriskt)
-                <input id="costCheckedOn" type="date" class="hy-nostyle"
-              /></label>
+                <input id="costCheckedOn" type="date" class="hy-nostyle" required /></label
+              ><button type="button" class="hy-nostyle" id="costSetToday">Ange idag</button>
+              <p class="sub">
+                Välj den dag du faktiskt kontrollerade uppgifterna. Detta är inte avtalets
+                startdatum.
+              </p>
               <label class="hy-nostyle"
                 >Inköpsprisunderlag
-                <select id="costImportPriceBasis" class="hy-nostyle">
+                <select id="costImportPriceBasis" class="hy-nostyle" required>
                   <option value="">Välj vilket pris tilläggen ska läggas på</option>
                   <option value="total-incl-vat">Inköpspris som redan inkluderar moms</option>
                   <option value="spot-ex-vat">Rent spotpris exklusive moms</option>
                 </select>
               </label>
-              <p>
-                Välj rent spotpris för en formel av typen (spotpris + tillägg) × (1 + moms). Ett
-                redan momsinkluderat inköpspris får inget nytt momspåslag; bara saknade tillägg
-                läggs på. Valet ändrar inte appens hämtade Tibber-priser.
-              </p>
+              <details class="settings-details">
+                <summary>Hur påverkar prisunderlaget momsen?</summary>
+                <div class="details-body">
+                  <p>
+                    Välj rent spotpris för en formel av typen (spotpris + tillägg) × (1 + moms). Ett
+                    redan momsinkluderat inköpspris får inget nytt momspåslag; bara saknade tillägg
+                    läggs på. Valet ändrar inte appens hämtade Tibber-priser.
+                  </p>
+                </div>
+              </details>
               <fieldset class="hy-nostyle">
                 <legend>Inköp – tillägg till valt prisunderlag</legend>
                 <label class="hy-nostyle"
                   ><input id="costImportIncludesEnergyTax" type="checkbox" class="hy-nostyle" />
                   Energiskatt ingår redan i importpriset (tilläggsskatt ska vara 0)</label
                 >
-                <label class="hy-nostyle"
-                  >Tillägg energiskatt exkl. moms (kr/kWh)
-                  <input id="costEnergyTax" type="text" inputmode="decimal" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Tillägg rörlig importnätavgift exkl. moms (kr/kWh)
-                  <input id="costGridImport" type="text" inputmode="decimal" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Övriga rörliga inköpstillägg exkl. moms (kr/kWh)
-                  <input id="costOtherImport" type="text" inputmode="decimal" class="hy-nostyle" />
-                </label>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Tillägg energiskatt exkl. moms (kr/kWh)
+                    <input
+                      id="costEnergyTax"
+                      type="text"
+                      inputmode="decimal"
+                      class="hy-nostyle"
+                      required
+                  /></label>
+                  <p
+                    class="unit-preview"
+                    data-unit-preview-for="costEnergyTax"
+                    data-unit="ore"
+                    hidden
+                  ></p>
+                </div>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Tillägg rörlig importnätavgift exkl. moms (kr/kWh)
+                    <input
+                      id="costGridImport"
+                      type="text"
+                      inputmode="decimal"
+                      class="hy-nostyle"
+                      required
+                  /></label>
+                  <p
+                    class="unit-preview"
+                    data-unit-preview-for="costGridImport"
+                    data-unit="ore"
+                    hidden
+                  ></p>
+                </div>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Övriga rörliga inköpstillägg exkl. moms (kr/kWh)
+                    <input
+                      id="costOtherImport"
+                      type="text"
+                      inputmode="decimal"
+                      class="hy-nostyle"
+                      required
+                    />
+                  </label>
+                  <p
+                    class="unit-preview"
+                    data-unit-preview-for="costOtherImport"
+                    data-unit="ore"
+                    hidden
+                  ></p>
+                </div>
                 <p>
                   Här kan leverantörens fasta och rörliga påslag per kWh summeras, om de inte redan
                   ingår i prisunderlaget. Ingen månadsavgift. Alla belopp anges i kronor: öre delas
                   med 100. Punkt och kommatecken går bra.
                 </p>
-                <label class="hy-nostyle"
-                  >Inköpsmoms (0–1; på spotpris och/eller inköpstillägg)
-                  <input id="costVatRate" type="text" inputmode="decimal" class="hy-nostyle"
-                /></label>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Inköpsmoms (0–1; på spotpris och/eller inköpstillägg)
+                    <input
+                      id="costVatRate"
+                      type="text"
+                      inputmode="decimal"
+                      class="hy-nostyle"
+                      aria-describedby="help-costVatRate"
+                      required
+                  /></label>
+                  <p
+                    class="unit-preview"
+                    data-unit-preview-for="costVatRate"
+                    data-unit="percent"
+                    hidden
+                  ></p>
+                  <p class="field-help" id="help-costVatRate">
+                    Ange en andel. 0,25 betyder 25 %. Använd momsen som gäller för ditt underlag.
+                  </p>
+                </div>
               </fieldset>
               <fieldset class="hy-nostyle">
                 <legend>Försäljning – ersättning utan extra inköpsmoms</legend>
-                <label class="hy-nostyle"
-                  >Extra exportersättning / nätnytta utöver säljpriset (kr/kWh)
-                  <input id="costExportBenefit" type="text" inputmode="decimal" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Exportavgift som dras från säljpriset (kr/kWh)
-                  <input id="costExportFee" type="text" inputmode="decimal" class="hy-nostyle"
-                /></label>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Extra exportersättning / nätnytta utöver säljpriset (kr/kWh)
+                    <input
+                      id="costExportBenefit"
+                      type="text"
+                      inputmode="decimal"
+                      class="hy-nostyle"
+                      required
+                  /></label>
+                  <p
+                    class="unit-preview"
+                    data-unit-preview-for="costExportBenefit"
+                    data-unit="ore"
+                    hidden
+                  ></p>
+                </div>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Exportavgift som dras från säljpriset (kr/kWh)
+                    <input
+                      id="costExportFee"
+                      type="text"
+                      inputmode="decimal"
+                      class="hy-nostyle"
+                      required
+                  /></label>
+                  <p
+                    class="unit-preview"
+                    data-unit-preview-for="costExportFee"
+                    data-unit="ore"
+                    hidden
+                  ></p>
+                </div>
                 <p>
                   Försäljning: ersättningen används som angiven, utan att appen lägger på moms.
                   Exportnytta och exportavgift är tillägg utöver det separata försäljningspriset.
                 </p>
               </fieldset>
-              <label class="hy-nostyle"
-                >Antaget batterislitage för kostnadsjämförelse (kr/kWh)
-                <input id="costBatteryWear" type="text" inputmode="decimal" class="hy-nostyle"
-              /></label>
+              <div class="field-group">
+                <label class="hy-nostyle"
+                  >Antaget batterislitage för kostnadsjämförelse (kr/kWh)
+                  <input
+                    id="costBatteryWear"
+                    type="text"
+                    inputmode="decimal"
+                    class="hy-nostyle"
+                    required
+                /></label>
+                <p
+                  class="unit-preview"
+                  data-unit-preview-for="costBatteryWear"
+                  data-unit="ore"
+                  hidden
+                ></p>
+              </div>
               <p class="sub">
                 Slitagevärdet här används för kostnadsjämförelsen. Simuleringens slitageantagande
                 sparas under Batterisimulering. Fasta avgifter ingår inte. Sparat underlag är
@@ -585,8 +843,27 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-tariff" tabindex="-1">Effektavgift</h3>
-              <p>Tider, toppar och pris. Ändringar sparas med knappen i respektive avsnitt.</p>
+              <p>Utgå från nätbolagets regler för ditt abonnemang.</p>
             </header>
+            <details class="settings-details">
+              <summary>Så fyller du i effektavgiften</summary>
+              <div class="details-body">
+                <ol>
+                  <li>Välj vilka timmar, veckodagar och månader som räknas.</li>
+                  <li>
+                    Ange hur många timtoppar som ska ingå och om de måste komma från olika dagar.
+                  </li>
+                  <li>
+                    Ange priset per kW från samma underlag. Kontrollera att momshanteringen stämmer
+                    med den avgift du vill jämföra.
+                  </li>
+                </ol>
+                <p>
+                  Ingen prislista eller tariff fylls i automatiskt. Telges helgdagsval väljer bara
+                  kalenderregeln; övriga regler kommer från ditt avtal.
+                </p>
+              </div>
+            </details>
             <div class="settingsGroup">
               <h3>Effektavgift (konfigurerbar)</h3>
               <p>
@@ -594,20 +871,86 @@
                 förifylld. Beräkningen är preliminär och äldre historik saknar täckningsdata.
               </p>
               <label class="hy-nostyle"
-                >Starttid <input id="tariffStart" type="time" step="3600" class="hy-nostyle"
+                >Starttid
+                <input id="tariffStart" type="time" step="3600" class="hy-nostyle" required
               /></label>
               <label class="hy-nostyle"
-                >Sluttid <input id="tariffEnd" type="time" step="3600" class="hy-nostyle"
+                >Sluttid <input id="tariffEnd" type="time" step="3600" class="hy-nostyle" required
               /></label>
-              <label class="hy-nostyle"
-                >Veckodagar (0=söndag, 1=måndag, ..., 6=lördag)
-                <input
-                  id="tariffWeekdays"
-                  type="text"
-                  placeholder="0–6, separerade med komma"
-                  style="max-width: 200px"
-                  class="hy-nostyle"
-              /></label>
+              <fieldset class="hy-nostyle" id="tariffDayPicker">
+                <legend>Veckodagar då avgiften gäller</legend>
+                <input type="hidden" hidden id="tariffWeekdays" class="hy-nostyle" />
+                <div class="day-options">
+                  <label class="hy-nostyle"
+                    ><input
+                      type="checkbox"
+                      id="tariffDay1"
+                      data-tariff-weekday="1"
+                      class="hy-nostyle"
+                      disabled
+                    />Måndag</label
+                  ><label class="hy-nostyle"
+                    ><input
+                      type="checkbox"
+                      id="tariffDay2"
+                      data-tariff-weekday="2"
+                      class="hy-nostyle"
+                      disabled
+                    />Tisdag</label
+                  ><label class="hy-nostyle"
+                    ><input
+                      type="checkbox"
+                      id="tariffDay3"
+                      data-tariff-weekday="3"
+                      class="hy-nostyle"
+                      disabled
+                    />Onsdag</label
+                  ><label class="hy-nostyle"
+                    ><input
+                      type="checkbox"
+                      id="tariffDay4"
+                      data-tariff-weekday="4"
+                      class="hy-nostyle"
+                      disabled
+                    />Torsdag</label
+                  ><label class="hy-nostyle"
+                    ><input
+                      type="checkbox"
+                      id="tariffDay5"
+                      data-tariff-weekday="5"
+                      class="hy-nostyle"
+                      disabled
+                    />Fredag</label
+                  ><label class="hy-nostyle"
+                    ><input
+                      type="checkbox"
+                      id="tariffDay6"
+                      data-tariff-weekday="6"
+                      class="hy-nostyle"
+                      disabled
+                    />Lördag</label
+                  ><label class="hy-nostyle"
+                    ><input
+                      type="checkbox"
+                      id="tariffDay0"
+                      data-tariff-weekday="0"
+                      class="hy-nostyle"
+                      disabled
+                    />Söndag</label
+                  >
+                </div>
+                <div class="helper-actions">
+                  <button type="button" class="hy-nostyle" data-weekday-preset="weekdays" disabled>
+                    Välj vardagar</button
+                  ><button type="button" class="hy-nostyle" data-weekday-preset="all" disabled>
+                    Välj hela veckan
+                  </button>
+                </div>
+                <p class="sub" id="tariffDayHint">
+                  Välj minst en dag enligt avtalet. Inget sparas förrän du trycker på Spara
+                  effektavgift.
+                </p>
+              </fieldset>
               <label class="hy-nostyle"
                 >Antal toppar per månad
                 <input
@@ -617,14 +960,15 @@
                   max="31"
                   step="1"
                   class="hy-nostyle"
+                  required
               /></label>
               <label class="hy-nostyle"
                 >Effektpris (kr/kW)
-                <input id="tariffRate" type="number" min="0" step="any" class="hy-nostyle"
+                <input id="tariffRate" type="number" min="0" step="any" class="hy-nostyle" required
               /></label>
               <label class="hy-nostyle"
                 >Urval av toppar
-                <select id="tariffDistinctDays" class="hy-nostyle">
+                <select id="tariffDistinctDays" class="hy-nostyle" required>
                   <option value="">Välj regel från ditt avtal</option>
                   <option value="true">Toppar från olika dagar</option>
                   <option value="false">Flera toppar från samma dag tillåts</option>
@@ -681,9 +1025,7 @@
                 helgdagsregel för Telge-tariff.
               </p>
               <p id="tariffConfigStatus" role="status">Läser sparad tariff…</p>
-              <button id="saveTariff" type="button" class="hy-nostyle">
-                Spara tariffparametrar
-              </button>
+              <button id="saveTariff" type="button" class="hy-nostyle">Spara effektavgift</button>
               <p id="tariffMessage" role="status"></p>
             </div>
           </section>
@@ -696,52 +1038,130 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-car" tabindex="-1">Elbil</h3>
-              <p>
-                Laddschema och förhandsvisning. Ändringar sparas med knappen i respektive avsnitt.
-              </p>
+              <p>Börja med bilens kapacitet och de laddmål du behöver.</p>
             </header>
+            <details class="settings-details">
+              <summary>Så ställer du in laddschemat</summary>
+              <div class="details-body">
+                <ol>
+                  <li>
+                    Ange lägsta dagliga laddnivå, klockslag, användbar batterikapacitet och planerad
+                    laddeffekt.
+                  </li>
+                  <li>
+                    Aktivera de dagar som har ett särskilt avresemål. Du kan kopiera måndagens mål
+                    till övriga vardagar.
+                  </li>
+                  <li>
+                    Spara schemat. Öppna därefter förhandsvisningen och ange en nyligen avläst
+                    laddnivå.
+                  </li>
+                </ol>
+                <p>
+                  Grundmålet gäller varje dag. De aktiva avresemålen tillkommer. Schemat är en plan,
+                  inte ett laddkommando.
+                </p>
+              </div>
+            </details>
             <details class="settings-details" open>
               <summary>1. Laddschema och avresemål</summary>
               <div class="details-body">
                 <p>Planering endast. Appen skickar inga laddkommandon.</p>
                 <div class="form-grid">
+                  <div class="field-group">
+                    <label class="hy-nostyle"
+                      >Lägsta dagliga laddnivå (%)
+                      <input
+                        id="minimumSoc"
+                        type="number"
+                        min="0"
+                        max="100"
+                        class="hy-nostyle"
+                        aria-describedby="help-minimumSoc"
+                        required
+                    /></label>
+                    <p class="field-help" id="help-minimumSoc">
+                      Grundmålet gäller varje dag. SoC betyder batteriets laddnivå i procent.
+                    </p>
+                  </div>
                   <label class="hy-nostyle"
-                    >Minsta SoC (%)
-                    <input id="minimumSoc" type="number" min="0" max="100" class="hy-nostyle"
+                    >Grundmålet ska vara nått senast (lokal tid)
+                    <input id="minimumDeadline" type="time" class="hy-nostyle" required
                   /></label>
-                  <label class="hy-nostyle"
-                    >Senast uppnådd (lokal tid)
-                    <input id="minimumDeadline" type="time" class="hy-nostyle"
-                  /></label>
-                  <label class="hy-nostyle"
-                    >Användbar bilbatterikapacitet (kWh)
-                    <input
-                      id="usableBatteryKWh"
-                      type="number"
-                      min="1"
-                      step="0.1"
-                      class="hy-nostyle"
-                  /></label>
-                  <label class="hy-nostyle"
-                    >Maximal planerad laddningseffekt (kW)
-                    <input
-                      id="maxChargingPowerKW"
-                      type="number"
-                      min="0.1"
-                      step="0.1"
-                      class="hy-nostyle"
-                  /></label>
-                  <label class="hy-nostyle"
-                    >Laddverkningsgrad (0–1)
-                    <input
-                      id="chargingEfficiency"
-                      type="number"
-                      min="0.01"
-                      max="1"
-                      step="0.01"
-                      class="hy-nostyle"
-                  /></label>
+                  <div class="field-group">
+                    <label class="hy-nostyle"
+                      >Användbar bilbatterikapacitet (kWh)
+                      <input
+                        id="usableBatteryKWh"
+                        type="number"
+                        min="1"
+                        step="0.1"
+                        class="hy-nostyle"
+                        aria-describedby="help-usableBatteryKWh"
+                        required
+                    /></label>
+                    <p class="field-help" id="help-usableBatteryKWh">
+                      Användbar kapacitet finns i bilens specifikation eller dokumentation. Ange
+                      kWh, inte procent.
+                    </p>
+                  </div>
+                  <div class="field-group">
+                    <label class="hy-nostyle"
+                      >Högsta effekt att planera med (kW)
+                      <input
+                        id="maxChargingPowerKW"
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        class="hy-nostyle"
+                        aria-describedby="help-maxChargingPowerKW"
+                        required
+                    /></label>
+                    <p class="field-help" id="help-maxChargingPowerKW">
+                      Utgå från bilens och laddarens gränser. Detta är ett antagande; appen
+                      kontrollerar inte huvudsäkring eller faser.
+                    </p>
+                  </div>
+                  <div class="field-group">
+                    <label class="hy-nostyle"
+                      >Laddverkningsgrad (0–1)
+                      <input
+                        id="chargingEfficiency"
+                        type="number"
+                        min="0.01"
+                        max="1"
+                        step="0.01"
+                        class="hy-nostyle"
+                        aria-describedby="help-chargingEfficiency"
+                        required
+                    /></label>
+                    <p
+                      class="unit-preview"
+                      data-unit-preview-for="chargingEfficiency"
+                      data-unit="percent"
+                      hidden
+                    ></p>
+                    <p class="field-help" id="help-chargingEfficiency">
+                      Ange en andel mellan 0 och 1. Exempel: 0,90 betyder 90 %; värdet är ett
+                      antagande.
+                    </p>
+                  </div>
                 </div>
+                <p class="sub">
+                  Aktivera bara de dagar som behöver ett särskilt avresemål. Inaktiva mål behåller
+                  sina värden.
+                </p>
+                <div class="helper-actions">
+                  <button type="button" class="hy-nostyle" id="copyWeekdayTargets" disabled>
+                    Kopiera måndag till tis–fre</button
+                  ><button type="button" class="hy-nostyle" id="copyWeekendTarget" disabled>
+                    Kopiera lördag till söndag
+                  </button>
+                </div>
+                <p id="scheduleHelperMessage" class="sub" role="status">
+                  Kopieringen tar med tid, laddmål och om målet är aktivt. Spara schemat för att
+                  använda ändringen.
+                </p>
                 <h3>Dagliga avresemål</h3>
                 <div class="table-scroll">
                   <table>
@@ -768,10 +1188,22 @@
                   Manuell bil-SoC används tills EVDC är verifierad. Planen använder sparat schema
                   och Tibber-priser. Spara schemaändringar innan du beräknar.
                 </p>
-                <label class="hy-nostyle"
-                  >Avläst bil-SoC (%)
-                  <input id="planSoc" type="number" min="0" max="100" class="hy-nostyle"
-                /></label>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Avläst laddnivå i bilen (%)
+                    <input
+                      id="planSoc"
+                      type="number"
+                      min="0"
+                      max="100"
+                      class="hy-nostyle"
+                      aria-describedby="help-planSoc"
+                  /></label>
+                  <p class="field-help" id="help-planSoc">
+                    Läs procenttalet i bilen eller dess app. Värdet är manuellt och behöver vara
+                    aktuellt.
+                  </p>
+                </div>
                 <label class="hy-nostyle"
                   >Avläsningstid (denna enhets lokala tid)
                   <input id="planObservedAt" type="datetime-local" class="hy-nostyle"
@@ -841,10 +1273,31 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-battery" tabindex="-1">Batterisimulering</h3>
-              <p>Effekttak och reserv. Ändringar sparas med knappen i respektive avsnitt.</p>
+              <p>Välj först vilka effekttak simuleringen ska jämföra.</p>
             </header>
+            <details class="settings-details">
+              <summary>Så väljer du batteriantaganden</summary>
+              <div class="details-body">
+                <ol>
+                  <li>
+                    Ange lägsta och högsta nätimporttak och reserv för strömavbrott i modellen.
+                  </li>
+                  <li>Kontrollera söksteg och reservnivåer under Avancerat.</li>
+                  <li>
+                    Kontrollera manuella batterivärden som reserv, även om aktuella SigEnergy-värden
+                    används när de finns.
+                  </li>
+                  <li>Spara och kör beräkningen under Optimering.</li>
+                </ol>
+                <p>
+                  Kapacitet finns i anläggningens batteriuppgifter. Verkningsgrad och slitage är
+                  egna modellantaganden. Parametrarna ändrar inte anläggningens verkliga
+                  effektgränser eller reserv.
+                </p>
+              </div>
+            </details>
             <div class="settingsGroup">
-              <h3>Peak shaving – simulering</h3>
+              <h3>Jämför effekttak för nätimport</h3>
               <label class="hy-nostyle"
                 ><input id="autoBatteryValues" type="checkbox" checked class="hy-nostyle" /> Använd
                 aktuella batterivärden från SigEnergy när de finns</label
@@ -866,6 +1319,7 @@
                     max="20"
                     step="0.1"
                     class="hy-nostyle"
+                    required
                 /></label>
                 <label class="hy-nostyle"
                   >Högsta effekttak (kW)
@@ -876,78 +1330,163 @@
                     max="20"
                     step="0.1"
                     class="hy-nostyle"
+                    required
                 /></label>
+                <details class="settings-details">
+                  <summary>Avancerat: söksteg och reservnivåer</summary>
+                  <div class="details-body">
+                    <p class="sub">
+                      Bestämmer hur många effekttak och reservnivåer som jämförs. Alla parametrar
+                      behöver vara ifyllda när du sparar.
+                    </p>
+                    <div class="form-grid">
+                      <label class="hy-nostyle"
+                        >Steg effekttak (kW)
+                        <input
+                          id="capStepKW"
+                          type="number"
+                          min="0.1"
+                          max="5"
+                          step="0.1"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                      <label class="hy-nostyle"
+                        >Lägsta reservnivå att jämföra (%)
+                        <input
+                          id="reserveMinPercent"
+                          type="number"
+                          min="0"
+                          max="100"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                      <label class="hy-nostyle"
+                        >Högsta reservnivå att jämföra (%)
+                        <input
+                          id="reserveMaxPercent"
+                          type="number"
+                          min="0"
+                          max="100"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                      <label class="hy-nostyle"
+                        >Steg reserv (%)
+                        <input
+                          id="reserveStepPercent"
+                          type="number"
+                          min="1"
+                          max="100"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                    </div>
+                  </div>
+                </details>
                 <label class="hy-nostyle"
-                  >Steg effekttak (kW)
-                  <input
-                    id="capStepKW"
-                    type="number"
-                    min="0.1"
-                    max="5"
-                    step="0.1"
-                    class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Minsta peak shaving-reserv (%)
-                  <input id="reserveMinPercent" type="number" min="0" max="100" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Högsta peak shaving-reserv (%)
-                  <input id="reserveMaxPercent" type="number" min="0" max="100" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Steg reserv (%)
-                  <input id="reserveStepPercent" type="number" min="1" max="100" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Reservkraftsreserv (%)
+                  >Reserv för strömavbrott i modellen (%)
                   <input
                     id="backupReservePercent"
                     type="number"
                     min="0"
                     max="100"
                     class="hy-nostyle"
+                    required
                 /></label>
-                <label class="hy-nostyle"
-                  >Hembatteriets kapacitet (kWh)
-                  <input
-                    id="batteryCapacityKWh"
-                    type="number"
-                    min="1"
-                    step="0.1"
-                    class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Start-SoC i simulering (%)
-                  <input id="initialSocPercent" type="number" min="0" max="100" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Max urladdningseffekt (kW)
-                  <input id="maxDischargeKW" type="number" min="0.1" step="0.1" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Max laddningseffekt (kW)
-                  <input id="maxChargeKW" type="number" min="0.1" step="0.1" class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Tur- och returverkningsgrad (0–1)
-                  <input
-                    id="roundTripEfficiency"
-                    type="number"
-                    min="0.1"
-                    max="1"
-                    step="0.01"
-                    class="hy-nostyle"
-                /></label>
-                <label class="hy-nostyle"
-                  >Antaget batterislitage (kr/kWh)
-                  <input
-                    id="batteryWearSekPerKWh"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    class="hy-nostyle"
-                /></label>
+                <details class="settings-details">
+                  <summary>Manuella batterivärden och förlustantaganden</summary>
+                  <div class="details-body">
+                    <p class="sub">
+                      Dessa värden behövs som reserv när aktuella batteriuppgifter saknas.
+                      Kontrollera dem mot anläggningen; de är inte nya avlästa värden.
+                    </p>
+                    <div class="form-grid">
+                      <label class="hy-nostyle"
+                        >Hembatteriets kapacitet (kWh)
+                        <input
+                          id="batteryCapacityKWh"
+                          type="number"
+                          min="1"
+                          step="0.1"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                      <label class="hy-nostyle"
+                        >Laddnivå vid simuleringsstart (%)
+                        <input
+                          id="initialSocPercent"
+                          type="number"
+                          min="0"
+                          max="100"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                      <label class="hy-nostyle"
+                        >Max urladdningseffekt (kW)
+                        <input
+                          id="maxDischargeKW"
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                      <label class="hy-nostyle"
+                        >Max laddningseffekt (kW)
+                        <input
+                          id="maxChargeKW"
+                          type="number"
+                          min="0.1"
+                          step="0.1"
+                          class="hy-nostyle"
+                          required
+                      /></label>
+                      <div class="field-group">
+                        <label class="hy-nostyle"
+                          >Tur- och returverkningsgrad (0–1)
+                          <input
+                            id="roundTripEfficiency"
+                            type="number"
+                            min="0.1"
+                            max="1"
+                            step="0.01"
+                            class="hy-nostyle"
+                            aria-describedby="help-roundTripEfficiency"
+                            required
+                        /></label>
+                        <p
+                          class="unit-preview"
+                          data-unit-preview-for="roundTripEfficiency"
+                          data-unit="percent"
+                          hidden
+                        ></p>
+                        <p class="field-help" id="help-roundTripEfficiency">
+                          Andel energi kvar efter både laddning och urladdning. 0,90 betyder 90 %,
+                          inte 0,90 %.
+                        </p>
+                      </div>
+                      <div class="field-group">
+                        <label class="hy-nostyle"
+                          >Antaget batterislitage (kr/kWh)
+                          <input
+                            id="batteryWearSekPerKWh"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            class="hy-nostyle"
+                            required
+                        /></label>
+                        <p
+                          class="unit-preview"
+                          data-unit-preview-for="batteryWearSekPerKWh"
+                          data-unit="ore"
+                          hidden
+                        ></p>
+                      </div>
+                    </div>
+                  </div>
+                </details>
               </div>
               <button type="button" id="saveOptimizer" class="hy-nostyle primary">
                 Spara simuleringsparametrar
@@ -968,10 +1507,29 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-solar" tabindex="-1">Solöverskott</h3>
-              <p>
-                Fördelning i ett kort scenario. Ändringar sparas med knappen i respektive avsnitt.
-              </p>
+              <p>Använd när anläggningen har aktuell solproduktion och nätexport.</p>
             </header>
+            <details class="settings-details">
+              <summary>Så provar du solfördelning</summary>
+              <div class="details-body">
+                <ol>
+                  <li>Välj vem som får extra solöverskott först och en kort scenariolängd.</li>
+                  <li>
+                    Markera hemmabatteri och/eller bil bara om de ska ingå. Fyll i fälten som då
+                    öppnas.
+                  </li>
+                  <li>
+                    För bilen behövs en nyligen avläst laddnivå och uttryckliga antaganden om
+                    anslutning och effekt.
+                  </li>
+                  <li>Beräkna och jämför fördelningen. Beräkna igen om antagandena ändras.</li>
+                </ol>
+                <p>
+                  Scenariot använder aktuella flöden och antagna gränser. Det bokar inte framtida
+                  solenergi eller laddning.
+                </p>
+              </div>
+            </details>
             <div id="solarPreviewPanel">
               <h3>Solöverskott – förhandsvisning utan styrning</h3>
               <p>
@@ -987,16 +1545,22 @@
                   <option value="ev-first">Bil först</option>
                 </select></label
               >
-              <label class="hy-nostyle"
-                >Antagen scenariolängd (minuter)
-                <input
-                  id="solarMinutes"
-                  type="number"
-                  min="1"
-                  max="15"
-                  value="5"
-                  class="hy-nostyle"
-              /></label>
+              <div class="field-group">
+                <label class="hy-nostyle"
+                  >Hur länge ska scenariot pågå? (minuter)
+                  <input
+                    id="solarMinutes"
+                    type="number"
+                    min="1"
+                    max="15"
+                    value="5"
+                    class="hy-nostyle"
+                    aria-describedby="help-solarMinutes"
+                /></label>
+                <p class="field-help" id="help-solarMinutes">
+                  Ett kort scenario på 1–15 minuter med oförändrade flöden, ingen framtidsprognos.
+                </p>
+              </div>
               <label class="hy-nostyle"
                 ><input id="solarHomeEnabled" type="checkbox" class="hy-nostyle" /> Inkludera extra
                 laddning av hemmabatteriet</label
@@ -1021,16 +1585,24 @@
                     step="0.1"
                     class="hy-nostyle"
                 /></label>
-                <label class="hy-nostyle"
-                  >Laddverkningsgrad (0–1)
-                  <input
-                    id="solarHomeEfficiency"
-                    type="number"
-                    min="0.01"
-                    max="1"
-                    step="0.01"
-                    class="hy-nostyle"
-                /></label>
+                <div class="field-group">
+                  <label class="hy-nostyle"
+                    >Laddverkningsgrad (0–1)
+                    <input
+                      id="solarHomeEfficiency"
+                      type="number"
+                      min="0.01"
+                      max="1"
+                      step="0.01"
+                      class="hy-nostyle"
+                  /></label>
+                  <p
+                    class="unit-preview"
+                    data-unit-preview-for="solarHomeEfficiency"
+                    data-unit="percent"
+                    hidden
+                  ></p>
+                </div>
               </fieldset>
               <label class="hy-nostyle"
                 ><input id="solarEvConnected" type="checkbox" class="hy-nostyle" /> Bilen antas
@@ -1043,7 +1615,7 @@
                   Spara ändringar ovan före beräkning. EVDC används inte automatiskt.
                 </p>
                 <label class="hy-nostyle"
-                  >Avläst bil-SoC (%)
+                  >Avläst laddnivå i bilen (%)
                   <input id="solarEvSoc" type="number" min="0" max="100" class="hy-nostyle"
                 /></label>
                 <label class="hy-nostyle"
@@ -1123,10 +1695,31 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-economics" tabindex="-1">Ekonomisk jämförelse</h3>
-              <p>
-                Historiska priser och scenarier. Ändringar sparas med knappen i respektive avsnitt.
-              </p>
+              <p>Gör stegen i ordning när avtal och effektavgift är sparade.</p>
             </header>
+            <details class="settings-details">
+              <summary>Så gör du en historisk jämförelse</summary>
+              <div class="details-body">
+                <ol>
+                  <li>
+                    Bekräfta att Tibberhemmet gäller samma mätpunkt och kontrollera historiska köp-
+                    och säljpriser.
+                  </li>
+                  <li>
+                    Publicera en kopia av sparade villkor med deras verkliga giltighetsdatum.
+                    Kontrollerat datum är inte avtalsstart.
+                  </li>
+                  <li>
+                    Välj en historisk period och kontrollera batteriantagandena. Bil/sol-modellen
+                    kräver ytterligare bekräftelser.
+                  </li>
+                </ol>
+                <p>
+                  Luckor fylls inte. Otillräckligt eller ojämförbart underlag kan ge ett okänt
+                  resultat; ett sparat avtal är inte en verifierad besparing.
+                </p>
+              </div>
+            </details>
             <div class="note">
               Historisk modell utan styrning. Börja med att spara
               <button type="button" class="hy-nostyle text-link" data-settings-link="costs">
@@ -1184,17 +1777,23 @@
                   <p id="trade-message" role="status"></p>
                   <p id="trade-costs"></p>
                   <p id="trade-coverage"></p>
-                  <p>
-                    Produktionshistoriken är timvis. Fyra kompletta stängda energikvart grupperas
-                    till en timme, och Tibbers rapporterade effektiva timpris används som
-                    jämförelsetal. Det är en vägledande beräkning från effektprov, inte exakta
-                    kvartspriser, en faktura eller en beräknad batteribesparing. Fasta avgifter,
-                    effektavgift och slitage ingår inte. Luckor fylls inte och ingen styrning sker.
-                  </p>
+                  <details class="settings-details">
+                    <summary>Så beräknas det historiska jämförelsetalet</summary>
+                    <div class="details-body">
+                      <p>
+                        Produktionshistoriken är timvis. Fyra kompletta stängda energikvart
+                        grupperas till en timme, och Tibbers rapporterade effektiva timpris används
+                        som jämförelsetal. Det är en vägledande beräkning från effektprov, inte
+                        exakta kvartspriser, en faktura eller en beräknad batteribesparing. Fasta
+                        avgifter, effektavgift och slitage ingår inte. Luckor fylls inte och ingen
+                        styrning sker.
+                      </p>
+                    </div>
+                  </details>
                 </section>
               </div>
             </details>
-            <details class="settings-details">
+            <details class="settings-details" id="costVersionStep">
               <summary>2. Datera och säkerhetskopiera villkor</summary>
               <div class="details-body">
                 <section id="economicReplayPanel">
@@ -1204,10 +1803,20 @@
                     giltighetsdatum. Kontrollerat datum används inte som avtalsstart. Tidigare
                     versioner ändras inte när formulären ändras.
                   </p>
-                  <label class="hy-nostyle"
-                    >Gäller från (Europe/Stockholm)
-                    <input id="econ-from" type="date" class="hy-nostyle"
-                  /></label>
+                  <div class="field-group">
+                    <label class="hy-nostyle"
+                      >Villkoren gäller från (svensk tid)
+                      <input
+                        id="econ-from"
+                        type="date"
+                        class="hy-nostyle"
+                        aria-describedby="help-econ-from"
+                    /></label>
+                    <p class="field-help" id="help-econ-from">
+                      Använd villkorens verkliga första giltighetsdag. Appen fyller inte i äldre
+                      villkor automatiskt.
+                    </p>
+                  </div>
                   <label class="hy-nostyle"
                     ><input id="econ-date-confirm" type="checkbox" class="hy-nostyle" /> Jag har
                     kontrollerat giltighetsdatumet för de sparade villkoren och
@@ -1228,31 +1837,36 @@
                   </button>
                   <p id="econ-contract-message" role="status"></p>
                   <ol id="econ-contracts"></ol>
-                  <button id="econ-refresh" type="button" class="hy-nostyle">
-                    Läs om sparade versioner och underlag
-                  </button>
-                  <button id="econ-export" type="button" class="hy-nostyle">
-                    Exportera kostnadsversioner
-                  </button>
-                  <label class="hy-nostyle"
-                    >Återläs kostnadsversioner
-                    <input
-                      id="econ-import-file"
-                      type="file"
-                      accept="application/json,.json"
-                      class="hy-nostyle"
-                  /></label>
-                  <label class="hy-nostyle"
-                    ><input id="econ-import-confirm" type="checkbox" class="hy-nostyle" /> Filen
-                    gäller samma anläggning. Befintliga versioner får inte ändras.</label
-                  >
-                  <button id="econ-import" type="button" class="hy-nostyle">
-                    Återläs valda kostnadsversioner
-                  </button>
-                  <p>
-                    Exporten innehåller användarangivna avtalsuppgifter. Förvara filen privat. Den
-                    vanliga historikbackupen innehåller inte dessa kostnadsversioner.
-                  </p>
+                  <details class="settings-details" id="costVersionBackup">
+                    <summary>Säkerhetskopiera eller återläs kostnadsversioner</summary>
+                    <div class="details-body">
+                      <button id="econ-refresh" type="button" class="hy-nostyle">
+                        Läs om sparade versioner och underlag
+                      </button>
+                      <button id="econ-export" type="button" class="hy-nostyle">
+                        Exportera kostnadsversioner
+                      </button>
+                      <label class="hy-nostyle"
+                        >Återläs kostnadsversioner
+                        <input
+                          id="econ-import-file"
+                          type="file"
+                          accept="application/json,.json"
+                          class="hy-nostyle"
+                      /></label>
+                      <label class="hy-nostyle"
+                        ><input id="econ-import-confirm" type="checkbox" class="hy-nostyle" /> Filen
+                        gäller samma anläggning. Befintliga versioner får inte ändras.</label
+                      >
+                      <button id="econ-import" type="button" class="hy-nostyle">
+                        Återläs valda kostnadsversioner
+                      </button>
+                      <p>
+                        Exporten innehåller användarangivna avtalsuppgifter. Förvara filen privat.
+                        Den vanliga historikbackupen innehåller inte dessa kostnadsversioner.
+                      </p>
+                    </div>
+                  </details>
                 </section>
               </div>
             </details>
@@ -1264,9 +1878,16 @@
                     Jämför scenarier för de senaste avslutade timmarna. Detta ändrar ingen laddning
                     eller batteristyrning.
                   </p>
+                  <div class="helper-actions">
+                    <button type="button" class="hy-nostyle" data-econ-hours="24">
+                      Senaste 24 timmarna</button
+                    ><button type="button" class="hy-nostyle" data-econ-hours="168">
+                      Senaste 7 dygnen
+                    </button>
+                  </div>
                   <div class="form-grid">
                     <label class="hy-nostyle"
-                      >Antal timmar
+                      >Historisk period (timmar)
                       <input
                         id="econ-hours"
                         type="number"
@@ -1275,18 +1896,38 @@
                         value="24"
                         class="hy-nostyle"
                     /></label>
-                    <label class="hy-nostyle"
-                      >Effekttak att jämföra (kW, semikolonseparerat)
-                      <input id="econ-caps" value="2;3;4" class="hy-nostyle"
-                    /></label>
+                    <div class="field-group">
+                      <label class="hy-nostyle"
+                        >Effekttak att jämföra (kW, semikolonseparerat)
+                        <input
+                          id="econ-caps"
+                          value="2;3;4"
+                          class="hy-nostyle"
+                          aria-describedby="help-econ-caps"
+                      /></label>
+                      <p class="field-help" id="help-econ-caps">
+                        Skriv ett eller flera tak i kW, separerade med semikolon, till exempel
+                        2;3;4. Inga tak garanteras.
+                      </p>
+                    </div>
                     <label class="hy-nostyle"
                       >Antagen batterikapacitet (kWh)
                       <input id="econ-capacity" inputmode="decimal" class="hy-nostyle"
                     /></label>
-                    <label class="hy-nostyle"
-                      >Energi vid periodens början och slut (kWh)
-                      <input id="econ-initial" inputmode="decimal" class="hy-nostyle"
-                    /></label>
+                    <div class="field-group">
+                      <label class="hy-nostyle"
+                        >Energi vid periodens början och slut (kWh)
+                        <input
+                          id="econ-initial"
+                          inputmode="decimal"
+                          class="hy-nostyle"
+                          aria-describedby="help-econ-initial"
+                      /></label>
+                      <p class="field-help" id="help-econ-initial">
+                        Modellen kräver samma energi vid periodens början och slut för att visa en
+                        kostnadsskillnad.
+                      </p>
+                    </div>
                     <label class="hy-nostyle"
                       >Reservenergi (kWh)
                       <input id="econ-reserve" inputmode="decimal" class="hy-nostyle"
@@ -1299,14 +1940,30 @@
                       >Max urladdning (kW)
                       <input id="econ-discharge" inputmode="decimal" class="hy-nostyle"
                     /></label>
-                    <label class="hy-nostyle"
-                      >Laddverkningsgrad (0–1)
-                      <input id="econ-charge-eta" inputmode="decimal" class="hy-nostyle"
-                    /></label>
-                    <label class="hy-nostyle"
-                      >Urladdningsverkningsgrad (0–1)
-                      <input id="econ-discharge-eta" inputmode="decimal" class="hy-nostyle"
-                    /></label>
+                    <div class="field-group">
+                      <label class="hy-nostyle"
+                        >Laddverkningsgrad (0–1)
+                        <input id="econ-charge-eta" inputmode="decimal" class="hy-nostyle"
+                      /></label>
+                      <p
+                        class="unit-preview"
+                        data-unit-preview-for="econ-charge-eta"
+                        data-unit="percent"
+                        hidden
+                      ></p>
+                    </div>
+                    <div class="field-group">
+                      <label class="hy-nostyle"
+                        >Urladdningsverkningsgrad (0–1)
+                        <input id="econ-discharge-eta" inputmode="decimal" class="hy-nostyle"
+                      /></label>
+                      <p
+                        class="unit-preview"
+                        data-unit-preview-for="econ-discharge-eta"
+                        data-unit="percent"
+                        hidden
+                      ></p>
+                    </div>
                   </div>
                   <label class="hy-nostyle"
                     ><input id="econ-model-confirm" type="checkbox" class="hy-nostyle" /> Jag har
@@ -1381,19 +2038,24 @@
                   </button>
                   <p id="econ-result" role="status"></p>
                   <div id="econ-results"></div>
-                  <p>
-                    Baslinjen har inget aktivt batteri. Modellen tar bort den observerade
-                    batterieffekten från nätenergin och använder samma kvarvarande hus-/solflöde i
-                    alla scenarier. Återladdning och förluster ingår i nät-/exportflödet.
-                    Kostnadsskillnad visas bara när start- och slutenergi matchar och samma pris-,
-                    avtals- och effektunderlag finns för hela perioden.
-                  </p>
-                  <p>
-                    Effektiva historiska timpriser ger en indikativ jämförelse, inte verifierade
-                    priser för hypotetiska kvart. Effektavgiften är preliminär för de observerade
-                    timmarna. Ingen automatisk ekonomisk rangordning, garanterad besparing eller
-                    styrning aktiveras.
-                  </p>
+                  <details class="settings-details">
+                    <summary>Modellens antaganden och begränsningar</summary>
+                    <div class="details-body">
+                      <p>
+                        Baslinjen har inget aktivt batteri. Modellen tar bort den observerade
+                        batterieffekten från nätenergin och använder samma kvarvarande hus-/solflöde
+                        i alla scenarier. Återladdning och förluster ingår i nät-/exportflödet.
+                        Kostnadsskillnad visas bara när start- och slutenergi matchar och samma
+                        pris-, avtals- och effektunderlag finns för hela perioden.
+                      </p>
+                      <p>
+                        Effektiva historiska timpriser ger en indikativ jämförelse, inte verifierade
+                        priser för hypotetiska kvart. Effektavgiften är preliminär för de
+                        observerade timmarna. Ingen automatisk ekonomisk rangordning, garanterad
+                        besparing eller styrning aktiveras.
+                      </p>
+                    </div>
+                  </details>
                 </section>
               </div>
             </details>
@@ -1407,8 +2069,30 @@
             <header class="page-heading">
               <p class="eyebrow">Inställningar</p>
               <h3 id="settings-heading-data" tabindex="-1">Data och backup</h3>
-              <p>Export och återläsning. Ändringar sparas med knappen i respektive avsnitt.</p>
+              <p>Spara en historikfil innan du gör större ändringar.</p>
             </header>
+            <details class="settings-details">
+              <summary>Vad ska säkerhetskopieras?</summary>
+              <div class="details-body">
+                <ul>
+                  <li>
+                    Exportera historik här för mätintervall och tillgängliga Tibbermätarreferenser.
+                  </li>
+                  <li>
+                    Exportera daterade kostnadsversioner separat i steg 2 under Ekonomisk
+                    jämförelse.
+                  </li>
+                  <li>
+                    Tibber-token och anslutningsuppgifter ingår inte i historikfilen. Förvara
+                    exporter privat.
+                  </li>
+                </ul>
+                <p>
+                  Vid återläsning behålls befintliga överlappande mätintervall. Förhandsgranskningen
+                  visar vad som kan läggas till; bekräfta mätpunkt när det efterfrågas.
+                </p>
+              </div>
+            </details>
             <div class="settingsGroup">
               <h3>Lokal energihistorik</h3>
               <p>
@@ -1440,6 +2124,17 @@
                 anslutningsinställningar ändras inte.
               </p>
             </div>
+            <p>
+              Avtalsversioner har en egen export.
+              <button
+                type="button"
+                class="hy-nostyle"
+                data-settings-link="economics"
+                data-settings-detail="costVersionStep costVersionBackup"
+              >
+                Öppna kostnadsversioner
+              </button>
+            </p>
             <details class="settings-details">
               <summary>Datatäckning för ekonomijämförelser</summary>
               <div class="details-body">
@@ -1476,6 +2171,7 @@
       let config;
 
       const settingsNavigation = SettingsNavigation.bind(document);
+      const settingsAssistant = SettingsAssistant.bind(document);
       function showTab(name) {
         settingsNavigation.showTab(name);
       }
@@ -1848,8 +2544,28 @@
             text =
               'Sparad tariff: ' +
               TariffConfig.peakLabel(tariff) +
-              ` · ${tariff.start}–${tariff.end} · veckodagar ${tariff.weekdays.join(', ')} · ` +
-              (tariff.months ? 'månader ' + tariff.months.join(', ') : 'hela året') +
+              ` · ${tariff.start}–${tariff.end} · ${tariff.weekdays.map((day) => ['söndag', 'måndag', 'tisdag', 'onsdag', 'torsdag', 'fredag', 'lördag'][day]).join(', ')} · ` +
+              (tariff.months
+                ? tariff.months
+                    .map(
+                      (month) =>
+                        [
+                          'jan',
+                          'feb',
+                          'mar',
+                          'apr',
+                          'maj',
+                          'jun',
+                          'jul',
+                          'aug',
+                          'sep',
+                          'okt',
+                          'nov',
+                          'dec',
+                        ][month - 1],
+                    )
+                    .join(', ')
+                : 'hela året') +
               (tariff.calendar === 'se-telge'
                 ? ' · Telges helgdagsundantag'
                 : ' · Inga helgdagsundantag') +
@@ -1900,10 +2616,16 @@
             });
           }
           updateMonths();
+          settingsAssistant.refreshWeekdays();
           button.disabled = false;
         });
         button.onclick = () => {
           if (button.disabled) return;
+          if (!input('tariffWeekdays').value.trim()) {
+            input('tariffMessage').textContent = 'Välj minst en veckodag för effektavgiften.';
+            settingsAssistant.reveal(input('tariffDay1'));
+            return;
+          }
           let tariff;
           try {
             tariff = TariffConfig.parseTariffForm({
@@ -2346,6 +3068,7 @@
             el('costMessage').textContent =
               'Ogiltigt sparat kostnadsunderlag. Kontrollera alla fält.';
           }
+          if (typeof settingsAssistant !== 'undefined') settingsAssistant.refreshUnits();
         });
         save.onclick = () => {
           if (save.disabled) return;
@@ -2404,6 +3127,8 @@
       }
       function onHomeyReady(Homey) {
         bindCostSettings(Homey);
+        if (document.addEventListener)
+          document.addEventListener('focusin', () => settingsAssistant.refreshUnits());
         refreshDiagnostics(Homey);
         setInterval(() => refreshDiagnostics(Homey), 15000);
         const optimizerKeys = [
@@ -2428,6 +3153,7 @@
           if (!err && c)
             for (const k of optimizerKeys)
               if (c[k] !== undefined) document.getElementById(k).value = c[k];
+          settingsAssistant.refreshUnits();
         });
         document.getElementById('saveOptimizer').onclick = () => {
           const c = Object.fromEntries(
@@ -2546,6 +3272,8 @@
             document.getElementById(`${day}-time`).value = t.time;
             document.getElementById(`${day}-soc`).value = t.soc;
           }
+          settingsAssistant.refreshSchedule();
+          settingsAssistant.refreshUnits();
         });
         document.getElementById('save').onclick = () => {
           if (document.getElementById('save').disabled) return;
