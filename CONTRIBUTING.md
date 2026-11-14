@@ -90,3 +90,11 @@ precision. Conversions describe the draft without normalizing or changing it.
 The browser test also covers these interactions, existing irregular day selections,
 explicit saves, inactive schedule targets, hidden required fields and read failures.
 Preserve the existing validators and keep advanced fields discoverable when invalid.
+
+Economic comparison input coverage lives in `lib/pricing/comparison-data.js`.
+Keep inspection and replay eligibility predicates aligned. The authenticated
+readiness route returns an allowlisted diagnostic report, never its internal
+context, raw meter/price/contract rows or connection fingerprints. Missing and
+unknown data are different states. Keep window, gap-count and DST tests passing.
+`npm run test:settings-ui` also runs the real scanner through a local synthetic
+browser/API flow, including mode changes, delayed errors and stale response races.

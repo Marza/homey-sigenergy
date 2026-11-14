@@ -419,3 +419,22 @@ body.sigenergy-settings {
     @apply list-disc ml-5 my-3 space-y-2;
   }
 }
+
+body.sigenergy-settings {
+  .details-body ul.readiness-list {
+    @apply list-none m-0;
+  }
+  .readiness-row {
+    @apply rounded-xl border p-3 my-3 text-sm;
+    border-color: var(--line);
+  }
+  .readiness-row p {
+    @apply text-sm my-2;
+  }
+  .readiness-row summary {
+    @apply p-2;
+  }
+  .readiness-row ul {
+    @apply list-disc ml-5 text-sm;
+  }
+}

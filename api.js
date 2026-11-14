@@ -7,12 +7,16 @@ const {
   publishContract,
   restoreTimeline,
 } = require('./lib/pricing/contract-timeline');
+const { checkReadiness } = require('./lib/pricing/comparison-readiness');
 const { compareSolarEv } = require('./lib/pricing/solar-ev-comparison');
 const { compareReplay } = require('./lib/pricing/replay-comparison');
 const { getEnergyHistory } = require('./lib/pricing/energy-history');
 const { previewSolar } = require('./lib/charging/solar-preview');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
+  async inspectEconomicReadiness({ homey, body }) {
+    return checkReadiness(homey, body);
+  },
   async compareSolarEvReplay({ homey, body }) {
     return compareSolarEv(homey, body);
   },
