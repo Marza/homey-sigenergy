@@ -17,6 +17,9 @@ test('authenticated diagnostics distinguish raw source energy from normalized En
     maxAgeMs: 30000,
     meterProfile: PROFILE,
     solarSource: 'combined',
+    selfPvW: 1200,
+    thirdPartyPvW: 3400,
+    pvW: 4600,
     host: 'private-host',
     sourceKey: 'private-key',
     meters: {
@@ -40,6 +43,12 @@ test('authenticated diagnostics distinguish raw source energy from normalized En
   assert.equal(result.sources[0].raw.solar, 76543);
   assert.equal(result.sources[0].published.solar, 0.1);
   assert.equal(result.sources[0].powerFresh, true);
+  assert.equal(result.sources[0].powerReadAt, now);
+  assert.deepEqual(result.sources[0].solarPowerW, {
+    selfPvW: 1200,
+    thirdPartyPvW: 3400,
+    pvW: 4600,
+  });
   assert.ok(!JSON.stringify(result).includes('private'));
   assert.ok(!('unknown' in result.sources[0].raw));
   assert.equal(getCounterDiagnostics(homey, now + 40000).sources[0].powerFresh, false);
@@ -60,5 +69,7 @@ test('missing snapshots expose no invented zero or identifiers', () => {
   assert.equal(result.sources[0].profile, 'disabled');
   assert.deepEqual(result.sources[0].raw, {});
   assert.equal(result.sources[0].readAt, null);
+  assert.equal(result.sources[0].powerReadAt, null);
+  assert.deepEqual(result.sources[0].solarPowerW, {});
   assert.equal(result.sources[0].powerFresh, false);
 });

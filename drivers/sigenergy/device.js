@@ -19,6 +19,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.activeSettings = { ...settings };
     this.energySnapshot = null;
     this.energyMeters = null;
+    // Do not integrate across a reader/source change, even within one minute.
+    this.homey.app?.history?.append({ pvW: null });
     this.lastEnergyProbeAt = null;
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
@@ -77,7 +79,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
       settings = this.activeSettings;
     const current = () => !this.stopped && generation === this.generation;
     try {
-      const data = await reader.snapshot();
+      const data = await reader.snapshot(settings.energySolarSource || 'self');
       if (!current()) return;
       this.energySnapshot = {
         generation: this.generation,
@@ -85,6 +87,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
         maxAgeMs: Math.max(30000, (Number(settings.pollSeconds) || 10) * 3000),
         gridW: data.gridW,
         pvW: data.pvW,
+        selfPvW: data.selfPvW,
+        thirdPartyPvW: data.thirdPartyPvW,
         essW: data.essW,
         soc: data.soc,
         gridMode: data.gridMode,

@@ -87,8 +87,8 @@ function deviceFixture({
       this.config = config;
       readers.push(this);
     }
-    snapshot() {
-      return snapshotRead(this);
+    snapshot(solarSource) {
+      return snapshotRead(this, solarSource);
     }
     energyCounters(profile, solarSource) {
       return energyRead(profile, solarSource);
@@ -362,5 +362,68 @@ test('solar source selection reaches the shared probe and preserves an existing 
   assert.equal(device.getEnergySnapshot().meters.errors.solar, 'source-changed');
   assert.equal(device.getEnergySnapshot().meters.sourceValues.solar, 76543);
   assert.equal(device.getEnergySnapshot().meters.values.imported, 10);
+  await device.onUninit();
+});
+
+test('selected solar watts reach native Energy, plant capability and history, including loss/recovery and source changes', async () => {
+  const { project } = require('../lib/energy/reporting');
+  const { HistoryStore } = require('../lib/history');
+  let third = 3400;
+  const modes = [];
+  const { device, capabilities } = deviceFixture({
+    snapshotRead: async (_reader, mode) => {
+      modes.push(mode);
+      return {
+        ...snapshot,
+        selfPvW: 1000,
+        thirdPartyPvW: mode === 'self' ? null : third,
+        pvW:
+          mode === 'self'
+            ? 1000
+            : third === null
+              ? null
+              : mode === 'combined'
+                ? 1000 + third
+                : third,
+      };
+    },
+  });
+  let now = Date.now();
+  const history = new HistoryStore(new Settings(), () => now++);
+  device.homey.app.history = history;
+  const settings = { ...device.getSettings(), energySolarSource: 'combined' };
+  device.getSettings = () => settings;
+  await device.onInit();
+  await tick();
+  const check = (expected) => {
+    assert.equal(device.getEnergySnapshot().pvW, expected);
+    assert.equal(project('solar', device.getEnergySnapshot())?.power ?? null, expected);
+    assert.equal(capabilities.get('measure_pv_power'), expected);
+    assert.equal(history.lastSamples.get('pvW').value, expected);
+    assert.equal(device.getEnergySnapshot().gridW, 2000);
+    assert.equal(device.getEnergySnapshot().essW, 500);
+    assert.equal(device.available, true);
+  };
+  check(4400);
+  assert.equal(device.getEnergySnapshot().thirdPartyPvW, 3400);
+  now += 10000;
+  third = null;
+  await device.poll();
+  check(null);
+  now += 10000;
+  third = 4000;
+  await device.poll();
+  check(5000);
+  // Neither a failed read nor recovery bridges the missing solar interval.
+  assert.ok([...history.pending.values()].every((row) => !row.pvWh));
+  now += 10000;
+  await device.onSettings({ newSettings: { ...settings, energySolarSource: 'self' } });
+  await tick();
+  check(1000);
+  assert.equal(modes.at(-1), 'self');
+  assert.ok([...history.pending.values()].every((row) => !row.pvWh));
+  now += 10000;
+  await device.poll();
+  assert.ok([...history.pending.values()].some((row) => row.pvWh > 0));
   await device.onUninit();
 });
