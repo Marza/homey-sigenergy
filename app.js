@@ -1,5 +1,6 @@
 'use strict';
 const Homey = require('homey');
+const { TibberData } = require('./lib/pricing/tibber-data');
 const { randomUUID, createHash } = require('node:crypto');
 const { priceStatus, usablePrices } = require('./lib/pricing/coverage');
 const { diagnostics, nibeKey, batteryValues, backupAdvisory } = require('./lib/diagnostics');
@@ -96,6 +97,13 @@ module.exports = class SigenergyApp extends Homey.App {
         ) {
           this.refreshPrices().catch((e) => this.error('Tibber refresh:', e.message));
         }
+      },
+      5 * 60 * 1000,
+    );
+    this.tibberData = new TibberData(this.homey);
+    this.tibberDataTimer = this.homey.setInterval(
+      () => {
+        this.tibberData.sync().catch(() => this.error('Tibber Data API refresh failed'));
       },
       5 * 60 * 1000,
     );
@@ -529,6 +537,8 @@ module.exports = class SigenergyApp extends Homey.App {
   }
   async onUninit() {
     this.stopping = true;
+    this.tibberData?.stop();
+    if (this.tibberDataTimer) this.homey.clearInterval(this.tibberDataTimer);
     if (this.settingsChanged) {
       this.homey.settings.removeListener('set', this.settingsChanged);
       this.homey.settings.removeListener('unset', this.settingsChanged);

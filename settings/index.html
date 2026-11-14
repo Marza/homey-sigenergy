@@ -11,6 +11,7 @@
     <script src="tariff-config.js"></script>
     <script src="cost-model.js"></script>
     <script src="solar-preview.js"></script>
+    <script src="tibber-data.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -667,6 +668,73 @@
       <p id="tariffConfigStatus" role="status">Läser sparad tariff…</p>
       <button id="saveTariff" type="button">Spara tariffparametrar</button>
       <p id="tariffMessage" role="status"></p>
+      <section id="tibberDataPanel">
+        <h3>Tibber köp- och säljpriser – observerad kostnad</h3>
+        <p>
+          Separat OAuth-inloggning till Tibber Data API krävs. Den vanliga Tibber-tokenen fungerar
+          inte här. Registrera en egen publik PKCE-klient hos Tibber med redirect-URI
+          <code>https://callback.athom.com/oauth2/callback</code> och behörigheterna openid,
+          profile, email, offline_access, data-api-user-read, data-api-homes-read och
+          data-api-prices-read.
+        </p>
+        <p>
+          <a
+            href="https://data-api.tibber.com/docs/managing-clients/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Tibbers instruktioner för klientregistrering</a
+          >
+        </p>
+        <label>OAuth Client ID <input id="data-client" type="text" autocomplete="off" /></label>
+        <button id="data-connect" type="button">Förbered Tibber-inloggning</button>
+        <a id="data-login" hidden target="_blank" rel="noopener noreferrer"
+          >Öppna Tibber-inloggning</a
+        >
+        <p id="data-status" role="status"></p>
+        <div id="data-selection" hidden>
+          <label
+            >Tibberhem
+            <select id="data-home"></select
+          ></label>
+          <label
+            ><input id="data-same" type="checkbox" /> Jag bekräftar att hemmet gäller samma mätpunkt
+            som Sigenergy-anläggningen.</label
+          >
+          <button id="data-select" type="button">Välj hem och hämta priser</button>
+        </div>
+        <div id="data-components" hidden>
+          <label
+            ><input id="data-network" type="checkbox" /> Lägg till nät och energiskatt från sparat
+            kostnadsunderlag</label
+          >
+          <label
+            ><input id="data-confirm-network" type="checkbox" /> Jag har kontrollerat att
+            energiskatt, nätavgift och exportnytta inte redan ingår i Tibbers elhandelspriser.
+            Underlagets inköpsmoms gäller också här.</label
+          >
+          <p>
+            Elhandelns påslag ingår redan i Tibbers pris och läggs inte till igen. Nätläget kräver
+            ett underlag med spotpris exklusive moms. Ändrat underlag kräver ny bekräftelse.
+            Försäljningspriset och exportnyttan används utan extra inköpsmoms.
+          </p>
+          <button id="data-save-network" type="button">Spara nätkomponenter</button>
+        </div>
+        <button id="data-refresh" type="button">Kontrollera priser och uppdatera visning</button>
+        <button id="data-disconnect" type="button">Koppla från Data API</button>
+        <p>
+          Hämtningen respekterar väntetid vid fel. Kompletta framtidspriser kontrolleras dagligen,
+          annars varje timme. Frånkoppling raderar denna anslutnings token och priscache lokalt.
+        </p>
+        <p id="data-message" role="status"></p>
+        <p id="data-costs"></p>
+        <p id="data-coverage"></p>
+        <p>
+          Endast stängda kvart med fullständig uppmätt import/export och både köp- och säljpris
+          räknas. Luckor fylls inte med uppskattningar. Beloppen avser täckt period och är ett
+          beräkningsunderlag, ingen faktura eller beräknad batteribesparing. Fasta avgifter,
+          effektavgift och batterislitage ingår inte. Ingen styrning av utrustningen sker.
+        </p>
+      </section>
       <h3>Tibber (priser hämtas via internet, sparas lokalt)</h3>
       <label
         >Tibber API-token
@@ -1899,6 +1967,7 @@
         bindTibberSettings(Homey);
         bindChargingPreview(Homey);
         bindEconomicHistory(Homey);
+        TibberDataSettings.bind(Homey);
         SolarPreview.bind(Homey);
         document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {

@@ -56,6 +56,46 @@
       "method": "GET",
       "path": "/economics/energy-history",
       "public": false
+    },
+    "getTibberDataStatus": {
+      "method": "GET",
+      "path": "/tibber/data/status",
+      "public": false
+    },
+    "connectTibberData": {
+      "method": "POST",
+      "path": "/tibber/data/connect",
+      "public": false
+    },
+    "getTibberDataHomes": {
+      "method": "GET",
+      "path": "/tibber/data/homes",
+      "public": false
+    },
+    "selectTibberDataHome": {
+      "method": "POST",
+      "path": "/tibber/data/home",
+      "public": false
+    },
+    "configureTibberDataComponents": {
+      "method": "POST",
+      "path": "/tibber/data/components",
+      "public": false
+    },
+    "refreshTibberData": {
+      "method": "POST",
+      "path": "/tibber/data/refresh",
+      "public": false
+    },
+    "disconnectTibberData": {
+      "method": "POST",
+      "path": "/tibber/data/disconnect",
+      "public": false
+    },
+    "getObservedCosts": {
+      "method": "GET",
+      "path": "/economics/observed",
+      "public": false
     }
   },
   "platforms": ["local"],

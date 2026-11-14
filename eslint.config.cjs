@@ -34,7 +34,10 @@ module.exports = [
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
     rules,
   },
-  { files: ['lib/source-status.js'], languageOptions: { globals: globals.browser } },
+  {
+    files: ['lib/source-status.js', 'settings/tibber-data.js'],
+    languageOptions: { globals: globals.browser },
+  },
   {
     files: ['settings/**/*.html', 'widgets/**/*.html'],
     plugins: { html },
@@ -48,6 +51,7 @@ module.exports = [
         CostModel: 'readonly',
         ChargingPlanner: 'readonly',
         SolarPreview: 'readonly',
+        TibberDataSettings: 'readonly',
         WidgetLayout: 'readonly',
         PriceCoverage: 'readonly',
         TariffConfig: 'readonly',
