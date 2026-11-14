@@ -27,7 +27,7 @@ function snapshot(values = {}, failures = []) {
 test('widget manifest is registered without Compose and has only one read-only API', () => {
   const app = require('../app.json'),
     definition = require('../widgets/energy-overview/widget.compose.json');
-  assert.equal(app.compatibility, '>=12.3.0');
+  assert.equal(app.compatibility, '>=12.4.5');
   assert.deepEqual(app.widgets['energy-overview'], { id: 'energy-overview', ...definition });
   assert.deepEqual(definition.api, { getOverview: { method: 'GET', path: '/' } });
   assert.equal(definition.height, undefined);

@@ -15,7 +15,7 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | EVDC monitoring | Optional charging power and vehicle SoC reads | Experimental and disabled by default; no charger control |
 | Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Four readings verified against the display on one installation; optional local reads every 30 seconds, no separate Homey device or heat-pump control |
 | Backup advisory | Grid/island/unknown state and a “Backup mode changed” Flow trigger | EV-stop and Nibe-mode tokens are requests, never confirmation of an action |
-| Native Homey Energy | Optional grid, solar and battery power-reporting companions | Initial W/% support; native physical behavior and cumulative kWh remain unverified |
+| Native Homey Energy | Optional grid, solar and battery power-reporting companions | W/% plus opt-in V2.9 cumulative kWh profile; physical counter/history verification pending |
 | Local history | Quarter-hour aggregates, daily summaries, backup-mode events and JSON export | Stored in Homey app settings, not a dedicated database |
 | Tibber prices and EV planning | Cached consumption prices and a manual-SoC charging-plan preview | Authenticated dry run with coverage, deadlines and unmet targets; no charging commands |
 | Peak shaving | Historical replay, configurable caps/reserves, stored advisory recommendations | Illustrative scenarios, not a forecast or guaranteed power limit |
@@ -35,7 +35,7 @@ Homey polling is not fuse protection, load balancing or an outage fail-safe. Kee
 
 ## Prerequisites
 
-- A local Homey installation. The manifest declares SDK 3, local platform only and Homey firmware `>=12.3.0`; this is a declared minimum, not a tested compatibility matrix.
+- A local Homey installation. The manifest declares SDK 3, local platform only and Homey firmware `>=12.4.5`; this is a declared minimum, not a tested compatibility matrix.
 - Sigenergy reachable from Homey over the LAN, with Modbus TCP read access enabled in mySigen and permitted by firmware/network configuration.
 - Verified register addresses, widths, scaling, word order and address-offset convention for your hardware. The current Sigenergy map derives from an [unofficial V2.5 protocol transcription](https://github.com/krzychdre/modbus-sigenergy/blob/main/Sigenergy_Modbus_Protocol_V2.5.md).
 - Git, Node.js and npm on the development computer. Use Node.js 24 (the CI version) and npm. The project requires Node.js 24+ and pins Homey CLI 4.6.3 in its development dependencies. Follow the [official setup requirements](https://apps.developer.homey.app/the-basics/getting-started) for Docker and local execution.
@@ -67,7 +67,7 @@ Use a development computer on the same network as Homey and start Docker when re
 npx --no-install homey app install
 ```
 
-See the [official Homey CLI reference](https://apps.developer.homey.app/the-basics/getting-started/homey-cli) for validation, runtime options and troubleshooting. The commands above use the repository's locked CLI; a global installation is unnecessary. Validation uses the `debug` level for local development, not App Store certification. The widget raises the app minimum to Homey 12.3.0; the declared minimum is not proof of physical compatibility. See [installation verification](docs/installation-verification.md) for observed results and the pending hardware checklist.
+See the [official Homey CLI reference](https://apps.developer.homey.app/the-basics/getting-started/homey-cli) for validation, runtime options and troubleshooting. The commands above use the repository's locked CLI; a global installation is unnecessary. Validation uses the `debug` level for local development, not App Store certification. Native Energy counter mappings raise the app minimum to Homey 12.4.5; the declared minimum is not proof of physical compatibility. See [installation verification](docs/installation-verification.md) for observed results and the pending hardware checklist.
 
 Pair **Sigenergy plant**, then open the device's advanced settings and replace the example host before relying on readings. Pairing does not discover an inverter; it returns one fixed plant identity.
 
@@ -130,9 +130,9 @@ See [dated Telge rules and validation gaps](docs/telge-tariff.md) for the public
 
 Automatic daily Tibber consumption fetching supplies a **separate hourly demand reference** for the current Stockholm month, including available hours before app installation. It re-fetches the elapsed current month and the whole previous month to include delayed values and corrections, retaining the current month plus twelve previous months; failed requests retain the previous snapshot and retry after an hour. Fetching uses the saved Tibber token/home selection and starts within five minutes of app startup when due. The widget displays it alongside, rather than merged into, inverter history. Imported hours retain their hourly resolution/source and cannot supply missing PV, ESS or SoC for battery replay. Missing/delayed Tibber values stay missing. See [hourly consumption reference](docs/tibber-consumption.md) for scope, storage and backup limits.
 
-## Native Homey Energy (initial power-only support)
+## Native Homey Energy
 
-Optional **Sigenergy Energy — grid / solar / battery** devices report fresh power from the existing plant reader through standard Homey capabilities. Pair only the sources you need and exclude duplicate P1/Tibber/solar integrations from Energy. Existing plant pairing, settings and history remain intact. No additional Modbus reads or device commands are added. This is initial native reporting: cumulative kWh registers, AC measurement boundaries and the native whole-house display still require verification. See [setup, source mapping and physical checklist](docs/homey-energy.md). The custom Dashboard widget is separate.
+Optional **Sigenergy Energy — grid / solar / battery** devices report fresh power from the existing plant reader through standard Homey capabilities. Pair only the sources you need and exclude duplicate P1/Tibber/solar integrations from Energy. Existing plant pairing, settings and history remain intact. The companions reuse the existing reader and add no device commands. Optional cumulative kWh uses a documented Sigenergy V2.9 statistics profile, five read-only counter reads at most once per minute and persistent monotonic guards. Enable the profile only after verifying firmware support; it defaults to power-only. Existing companions acquire the kWh fields without re-pairing. Native kWh history, source counter agreement and AC measurement boundaries still require physical verification. See [setup, source mapping and physical checklist](docs/homey-energy.md). The custom Dashboard widget is separate.
 
 ## History, diagnostics and simulations
 

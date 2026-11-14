@@ -2,6 +2,7 @@
 const Homey = require('homey');
 const { SigenergyReader } = require('../../lib/modbus');
 const { readEvdc } = require('../../lib/charging/evdc');
+const { PROFILE, sourceKey, advance } = require('../../lib/energy/meters');
 const { IslandController } = require('../../lib/backup/island-controller');
 module.exports = class SigenergyDevice extends Homey.Device {
   async onInit() {
@@ -17,6 +18,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.generation = (this.generation || 0) + 1;
     this.activeSettings = { ...settings };
     this.energySnapshot = null;
+    this.energyMeters = null;
+    this.lastEnergyProbeAt = null;
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
@@ -133,6 +136,30 @@ module.exports = class SigenergyDevice extends Homey.Device {
         this.setCapabilityValue('measure_ess_capacity', data.capacityKWh),
       ]);
       if (!current()) return;
+      if (
+        settings.energyMetersProfile === PROFILE &&
+        (!this.lastEnergyProbeAt || Date.now() - this.lastEnergyProbeAt >= 60000)
+      ) {
+        this.lastEnergyProbeAt = Date.now();
+        try {
+          const raw = await reader.energyCounters(PROFILE);
+          if (!current()) return;
+          const result = advance(this.getStoreValue('energyCounterState'), {
+            values: raw.values,
+            key: sourceKey(settings),
+            epoch: Number(settings.energyCounterEpoch || 0),
+            now: Date.now(),
+          });
+          // Persist high-water marks before publishing any new cumulative value.
+          await this.setStoreValue('energyCounterState', result.state);
+          if (!current()) return;
+          this.energyMeters = result;
+        } catch {
+          if (!current()) return;
+          this.energyMeters = { readAt: Date.now(), values: {}, errors: {} };
+          this.error('Optional Energy counter read or persistence failed');
+        }
+      }
       if (settings.evdcEnabled) {
         try {
           const evdc = await readEvdc(reader, {
@@ -171,7 +198,13 @@ module.exports = class SigenergyDevice extends Homey.Device {
     }
   }
   getEnergySnapshot() {
-    return this.stopped ? null : this.energySnapshot || null;
+    return this.stopped || !this.energySnapshot
+      ? null
+      : {
+          ...this.energySnapshot,
+          meterProfile: this.activeSettings?.energyMetersProfile,
+          meters: this.energyMeters,
+        };
   }
   async publishBackup(backup) {
     this.homey.settings.set('backupStatus', { ...backup, observedAt: new Date().toISOString() });
@@ -203,6 +236,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
   async onUninit() {
     this.stopped = true;
     this.energySnapshot = null;
+    this.energyMeters = null;
     this.generation = (this.generation || 0) + 1;
     const config = this.homey.settings.get('sourceConfig') || {};
     this.updateSources({

@@ -39,6 +39,9 @@ function fixture(role = 'grid', initial = snapshot()) {
   parents = [parent];
   const Device = createDevice(Homey, role),
     device = new Device();
+  const capabilities = new Set(['measure_power']);
+  device.hasCapability = (id) => capabilities.has(id);
+  device.addCapability = async (id) => capabilities.add(id);
   device.getSettings = () => ({ enabled: true });
   device.getData = () => ({ id: 'energy', sourceId: 'plant' });
   device.setCapabilityValue = async (k, v) => {
@@ -80,13 +83,13 @@ function fixture(role = 'grid', initial = snapshot()) {
     },
   };
 }
-test('native Energy manifest separates grid, solar and battery without control/kWh capabilities or modifying plant pairing', () => {
+test('native Energy manifest separates grid, solar and battery without control capabilities or modifying plant pairing', () => {
   const source = manifest.drivers.find((d) => d.id === 'sigenergy');
   assert.ok(!source.capabilities.includes('measure_power'));
   for (const role of ROLES) {
     const driver = manifest.drivers.find((d) => d.id === 'energy-' + role);
     assert.ok(driver.capabilities.includes('measure_power'));
-    assert.ok(!driver.capabilities.some((c) => /meter_power|target_power|onoff/.test(c)));
+    assert.ok(!driver.capabilities.some((c) => /target_power|onoff/.test(c)));
     assert.equal(driver.pair[0].navigation.next, 'add_devices');
     assert.equal(driver.settings[0].value, true);
     assert.ok(fs.existsSync(path.join(__dirname, '../drivers', driver.id, 'assets/icon.svg')));
@@ -248,4 +251,48 @@ test('failed capability writes mark the device unavailable and a later timer can
   assert.equal(f.values.get('measure_battery'), null);
   f.device.setCapabilityValue = setter;
   await f.device.onUninit();
+});
+
+test('existing Energy devices gain kWh fields once and keep native Energy exclusion configuration', async () => {
+  const { PROFILE, CAPABILITIES } = require('../lib/energy/meters');
+  for (const role of ROLES) {
+    const f = fixture(
+      role,
+      snapshot({
+        meterProfile: PROFILE,
+        meters: {
+          readAt: Date.now(),
+          values: { imported: 12, exported: 3, solar: 24, charged: 5, discharged: 4 },
+          errors: {},
+        },
+      }),
+    );
+    const added = [];
+    f.device.addCapability = async (id) => {
+      added.push(id);
+      f.device.hasCapability = (cap) => added.includes(cap) || cap === 'measure_power';
+    };
+    await f.device.onInit();
+    assert.deepEqual(added, [...Object.values(CAPABILITIES[role]), 'measure_energy_status']);
+    assert.equal(f.values.get('measure_energy_status'), 'ok');
+    for (const cap of Object.values(CAPABILITIES[role]))
+      assert.equal(typeof f.values.get(cap), 'number');
+    await f.device.onUninit();
+    await f.device.onInit();
+    assert.equal(added.length, Object.keys(CAPABILITIES[role]).length + 1);
+    f.set(
+      snapshot({
+        meterProfile: PROFILE,
+        meters: {
+          readAt: Date.now(),
+          values: {},
+          errors: { imported: 'reset-required', exported: 'reset-required' },
+        },
+      }),
+    );
+    await f.device.queueEnergy();
+    assert.equal(f.device.available, true);
+    for (const cap of Object.values(CAPABILITIES[role])) assert.equal(f.values.get(cap), null);
+    await f.device.onUninit();
+  }
 });

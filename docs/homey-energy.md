@@ -1,8 +1,8 @@
-# Native Homey Energy reporting — first implementation for #37
+# Native Homey Energy reporting
 
 ## Scope and data boundary
 
-This adds **opt-in, power-only** native Energy devices. It does not replace the existing Sigenergy plant device or the custom Dashboard widget. Native Energy visibility and whole-house totals still require physical validation; keep [issue #37](https://github.com/Marza/homey-sigenergy/issues/37) open.
+The optional native Energy companions provide power and battery SoC, plus an opt-in cumulative-kWh register profile. The declared app minimum is **Homey >=12.4.5** for the separate import/export Energy mappings. It does not replace the existing Sigenergy plant device or the custom Dashboard widget. Native Energy visibility and whole-house totals still require physical validation; keep [issue #37](https://github.com/Marza/homey-sigenergy/issues/37) open.
 
 The [Homey Energy SDK](https://apps.developer.homey.app/the-basics/devices/energy) distinguishes grid metering, solar generation and home batteries. This implementation uses three separate driver roles with standard `measure_power` values, following those roles:
 
@@ -12,7 +12,7 @@ The [Homey Energy SDK](https://apps.developer.homey.app/the-basics/devices/energ
 | Sigenergy Energy — solar | `solarpanel` | Existing `pvW`: positive solar generation; negative/invalid PV values are unavailable |
 | Sigenergy Energy — battery | `battery`, `homeBattery: true` | Existing `essW`: positive charging, negative discharging; valid SoC is published separately |
 
-The original plant retains its device ID, class, capabilities, connection settings and history. No existing pairing is removed or replaced. No Energy companion is created automatically. Each companion points to its selected existing plant using that plant's pairing-data ID and only reads the parent's live in-memory snapshot. It opens no Modbus connection, adds no register reads and has no command capabilities or listeners. The current native support is **W and battery % only**; no `target_power`, switching, writable battery state or native scheduling is introduced.
+The original plant retains its device ID, class, capabilities, connection settings and history. No existing pairing is removed or replaced. No Energy companion is created automatically. Each companion points to its selected existing plant using that plant's pairing-data ID and only reads the parent's live in-memory snapshot. It opens no Modbus connection, adds no independent register reads and has no command capabilities or listeners. Enabling the counter profile adds five optional reads to the existing plant loop at most once per minute. No `target_power`, switching, writable battery state or native scheduling is introduced.
 
 Homey can use the selected grid/solar/battery roles to form its native energy overview. We do **not** publish `gridW + pvW - essW` as another whole-house meter: doing so would invite duplicate accounting. The existing plant readings were compared against mySigen on one installation, but their AC/DC measurement boundaries, conversion losses, sampling alignment and every import/export/charge/island state are not independently verified. Direct reporting of these readings therefore does not establish calibrated AC house consumption. Physical comparison of the resulting native flows is a required follow-up.
 
@@ -32,12 +32,42 @@ Companions refresh every five seconds, using the existing poll's timestamp and a
 
 A software plausibility bound rejects power magnitudes above 10 MW; it is not a verified inverter rating. Invalid battery SoC is cleared without inventing a percentage. Capability-write failure attempts to clear readings and mark the companion unavailable. Only one refresh is in flight; source generation, disable and shutdown changes are rechecked around asynchronous writes so old results cannot mark the companion available again. A later refresh can recover. If Homey itself rejects a clearing write, the companion is still marked unavailable where possible; this is not a guarantee about how every native client renders stale cached values.
 
-## Why there are no kWh capabilities yet
+## Cumulative kWh profile
 
-The current reader has no verified cumulative import/export/solar or battery charge/discharge energy registers. A current-month Tibber snapshot and 32-day integrated inverter history are not lifetime meters. This PR does not invent counters, reset daily totals into `meter_power` or replay hourly backfill as a live cumulative meter. Consequently native daily/monthly energy totals or features requiring separate imported/exported kWh may remain absent. Reproducible vendor register/firmware evidence and counter-reset behavior are prerequisites for adding those capabilities; no authoritative counter mapping was established during this implementation.
+After merge/release, existing Energy companions acquire the new capabilities with `addCapability` only where missing; pairing IDs and native exclusion settings are preserved. The driver manifest maps separate imported/exported counters for grid and battery, and generated energy for solar, following the [Energy SDK](https://apps.developer.homey.app/the-basics/devices/energy). No automatic profile selection or fallback to another register family occurs.
+
+In the **original Sigenergy plant device's advanced settings**, select **Sigenergy V2.9 new statistics** only after confirming that the installed firmware supports that statistics interface. The default remains **Disabled (power only)**. Each optional read uses a one-second response timeout; transport failure stops that batch instead of repeating all five timeouts. Counter reads are serialized with the shared plant loop and can add latency; they are not a second polling connection. The reader uses the existing connection, input-register function 0x04 and **plant unit 247**. Address offset follows the existing reader setting. Unsupported registers fail independently; they never replace missing energy with zero or fail the fast power snapshot.
+
+The manufacturer-authored **Sigenergy Modbus Protocol V2.9**, released 2026-05-13, table 5-1, printed pages 13–14 (PDF pages 21–22), defines this selected group:
+
+| Quantity | Address | Homey capability |
+| --- | --- | --- |
+| Own PV generation (excluding third-party inverter) | 30236 | Solar: `meter_power` |
+| ESS charged energy | 30244 | Battery: `meter_power.charged` |
+| ESS discharged energy | 30248 | Battery: `meter_power.discharged` |
+| Grid imported energy | 30260 | Grid: `meter_power.imported` |
+| Grid exported energy | 30264 | Grid: `meter_power.exported` |
+
+All five are four-register unsigned 64-bit counters with gain 100 in kWh. The implementation decodes high word first using BigInt, validates before conversion, and keeps integer hundredths in persisted state. Word order and actual counter agreement remain part of physical profile verification. A broad software magnitude ceiling of 10^12 kWh rejects unsupported/sentinel values; it is not a site rating or proof of meter accuracy.
+
+Primary document: [manufacturer PDF mirrored in the reference repository](https://github.com/TypQxQ/Sigenergy-Local-Modbus/blob/main/Modbus_reference_documentation/Sigenergy%20Modbus%20Protocol%20EN_V2.9.pdf). Inspected file SHA-256: `1e4306bcf46735f8432fcec0dae83938fa49107790d02beaf702285961a5d0d8`. The document's note on printed page 14 says the new statistics family starts from zero after firmware enabling it, without inheriting earlier history. The older [V2.5 manufacturer protocol](https://b2b.aprilice.com/se_en/mpattachment/file/download/id/778/), table 5-3, marks 30554–30565 reserved; this implementation does not use those older inverter energy addresses. Document version is not proof that a particular installation supports the profile.
+
+Allow at least two successful counter samples after enabling the profile: the first establishes the native baseline, and this implementation does not supply pre-installation Energy history.
+
+The **Energy counters / Energiräknare** field shows disabled, waiting, current, partial, stale, reset-required, source-changed or invalid. A counter can be unavailable while the companion still reports valid W/SoC. kWh samples older than three minutes are cleared. Counter references are cumulative source measurements, not the prior Tibber month archive, rolling integrated power, daily-reset totals or reconstructed battery savings. Homey must collect differences from valid counter samples; this feature does not backdate native Energy history.
+
+## Restart, reset and connection changes
+
+The original plant stores per-counter raw and published high-water marks with `Device.setStoreValue`, **before** making a new value available to companions. A failed persistence write publishes no new counters. A normal app/Homey restart resumes from the saved marks without adding the lifetime total again. A monotonically increasing real source counter can cover an offline interval. Software checks reject negative deltas, backward time, epoch rollback and implausible jumps (10 MW over elapsed time plus a 1 kWh tolerance); these guards do not establish the inverter's actual rating.
+
+A decreasing counter is withheld while the previous high-water mark stays intact. A single transient low read therefore cannot cause the following recovered reading to be counted twice. To resume after a **verified real reset**, increase **Counter reference generation / Räknarreferensens generation** on the parent plant (0 → 1, later 1 → 2, etc.). This is a local continuity acknowledgement, not a hardware reset. Each counter consumes a new generation on its next valid sample: it holds the last published total and uses the new raw value as the baseline, then adds only subsequent measured increments. Energy across that acknowledged transition is not guessed or backfilled. The published reading may consequently differ from the physical raw lifetime total by a fixed offset.
+
+The same explicit acknowledgement is required after a detected connection/profile-binding change. The binding is a private hash of connection settings, not a verified device serial number: replacing equipment at the same address is not automatically detected. Confirm the correct plant/home and counter meaning before acknowledging. Missing channels retain their old marks until their own next valid acknowledged sample. Reducing the generation is not a reset mechanism.
+
+Device-store continuity survives ordinary app updates that preserve device data. It is **not included in the combined inverter/Tibber history backup**, which covers different stores. Uninstalling/deleting the parent, reinstalling or moving to another Homey requires separate handling of these device references and native Energy history; there is no automatic continuity-recovery claim for that case. Keep #6 open for broader backup/restore scope and physical testing.
 
 ## Verification and remaining acceptance
 
-Automated fixtures cover manifest roles/pairing, source selection, signs and zero, invalid/stale/off-grid data, disable/re-enable, missing/removed sources, restart/stop, failed writes, serialized refresh and replacement during an in-flight write. Parent lifecycle tests verify that the shared source clears on communication loss/reconfiguration/shutdown. Homey debug build validation checks the new drivers; release checks must retain their runtime files/icons.
+Automated fixtures cover manifest roles/pairing, source selection, signs and zero, invalid/stale/off-grid data, disable/re-enable, missing/removed sources, restart/stop, failed writes, serialized refresh and replacement during an in-flight write. Parent lifecycle tests verify that the shared source clears on communication loss/reconfiguration/shutdown. Tests also cover U64 decoding, exact register selection, high-water persistence, partial counter failures, restart, reset acknowledgement and kWh capability migration. Homey debug build validation checks the drivers; release checks must retain their runtime files/icons.
 
-After review and release, record actual Homey firmware and mobile-client version, add the desired companions, inspect native Energy visibility and compare simultaneous readings/directions with mySigen. Check existing-meter exclusion, battery charging/discharging, solar/self-consumption/export, controlled connection loss and recovery, app/Homey restart and companion removal. Native screen behavior and AC balance remain unverified until those observations are recorded. Publish only sanitized evidence. No physical inverter/counter verification is implied by Node tests or a successful build.
+After review and release, record actual Homey firmware and mobile-client version, add the desired companions, inspect native Energy visibility and compare simultaneous readings/directions with mySigen. Check existing-meter exclusion, battery charging/discharging, solar/self-consumption/export, controlled connection loss and recovery, app/Homey restart and companion removal. Native kWh increments, counter/firmware support, reset handling and AC balance require physical verification after release; power visibility alone does not establish these checks. Publish only sanitized evidence. No physical inverter/counter verification is implied by Node tests or a successful build.
