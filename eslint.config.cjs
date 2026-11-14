@@ -35,7 +35,7 @@ module.exports = [
     rules,
   },
   {
-    files: ['lib/source-status.js', 'settings/tibber-data.js'],
+    files: ['lib/source-status.js', 'settings/tibber-history-prices.js'],
     languageOptions: { globals: globals.browser },
   },
   {
@@ -51,7 +51,7 @@ module.exports = [
         CostModel: 'readonly',
         ChargingPlanner: 'readonly',
         SolarPreview: 'readonly',
-        TibberDataSettings: 'readonly',
+        TibberHistoryPricesSettings: 'readonly',
         WidgetLayout: 'readonly',
         PriceCoverage: 'readonly',
         TariffConfig: 'readonly',

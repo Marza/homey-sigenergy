@@ -57,39 +57,24 @@
       "path": "/economics/energy-history",
       "public": false
     },
-    "getTibberDataStatus": {
+    "getTibberHistoryPriceStatus": {
       "method": "GET",
-      "path": "/tibber/data/status",
+      "path": "/tibber/history-prices/status",
       "public": false
     },
-    "connectTibberData": {
+    "confirmTibberHistoryHome": {
       "method": "POST",
-      "path": "/tibber/data/connect",
+      "path": "/tibber/history-prices/confirm",
       "public": false
     },
-    "getTibberDataHomes": {
-      "method": "GET",
-      "path": "/tibber/data/homes",
-      "public": false
-    },
-    "selectTibberDataHome": {
+    "configureTibberHistoryComponents": {
       "method": "POST",
-      "path": "/tibber/data/home",
+      "path": "/tibber/history-prices/components",
       "public": false
     },
-    "configureTibberDataComponents": {
+    "refreshTibberHistoryPrices": {
       "method": "POST",
-      "path": "/tibber/data/components",
-      "public": false
-    },
-    "refreshTibberData": {
-      "method": "POST",
-      "path": "/tibber/data/refresh",
-      "public": false
-    },
-    "disconnectTibberData": {
-      "method": "POST",
-      "path": "/tibber/data/disconnect",
+      "path": "/tibber/history-prices/refresh",
       "public": false
     },
     "getObservedCosts": {

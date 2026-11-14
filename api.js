@@ -6,29 +6,20 @@ const { getEnergyHistory } = require('./lib/pricing/energy-history');
 const { previewSolar } = require('./lib/charging/solar-preview');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
-  async getTibberDataStatus({ homey }) {
-    return homey.app.tibberData.status();
+  async getTibberHistoryPriceStatus({ homey }) {
+    return homey.app.tibberHistoryPrices.status();
   },
-  async connectTibberData({ homey, body }) {
-    return homey.app.tibberData.connect(body);
+  async confirmTibberHistoryHome({ homey, body }) {
+    return homey.app.tibberHistoryPrices.confirm(body);
   },
-  async getTibberDataHomes({ homey }) {
-    return homey.app.tibberData.homes();
+  async configureTibberHistoryComponents({ homey, body }) {
+    return homey.app.tibberHistoryPrices.options(body);
   },
-  async selectTibberDataHome({ homey, body }) {
-    return homey.app.tibberData.selectHome(body);
-  },
-  async configureTibberDataComponents({ homey, body }) {
-    return homey.app.tibberData.options(body);
-  },
-  async refreshTibberData({ homey }) {
-    return homey.app.tibberData.sync();
-  },
-  async disconnectTibberData({ homey }) {
-    return homey.app.tibberData.disconnect();
+  async refreshTibberHistoryPrices({ homey }) {
+    return homey.app.tibberHistoryPrices.sync();
   },
   async getObservedCosts({ homey }) {
-    return homey.app.tibberData.ledger();
+    return homey.app.tibberHistoryPrices.ledger();
   },
   async getEconomicHistory({ homey }) {
     return getEnergyHistory(homey);

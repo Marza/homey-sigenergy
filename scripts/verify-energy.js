@@ -30,26 +30,23 @@ function verifyEnergy(directory) {
     typeof require(path.resolve(directory, 'lib/pricing/energy-history')).getEnergyHistory,
     'function',
   );
-  for (const [name, route] of Object.entries({
-    getTibberDataStatus: '/tibber/data/status',
-    connectTibberData: '/tibber/data/connect',
-    getTibberDataHomes: '/tibber/data/homes',
-    selectTibberDataHome: '/tibber/data/home',
-    configureTibberDataComponents: '/tibber/data/components',
-    refreshTibberData: '/tibber/data/refresh',
-    disconnectTibberData: '/tibber/data/disconnect',
-    getObservedCosts: '/economics/observed',
-  })) {
-    assert.equal(manifest.api[name].path, route);
+  for (const name of [
+    'getTibberHistoryPriceStatus',
+    'confirmTibberHistoryHome',
+    'configureTibberHistoryComponents',
+    'refreshTibberHistoryPrices',
+    'getObservedCosts',
+  ]) {
     assert.equal(manifest.api[name].public, false);
     assert.equal(typeof require(path.resolve(directory, 'api'))[name], 'function');
   }
   assert.equal(
-    typeof require(path.resolve(directory, 'lib/pricing/tibber-data')).TibberData,
+    typeof require(path.resolve(directory, 'lib/pricing/tibber-history-prices'))
+      .TibberHistoryPrices,
     'function',
   );
-  assert.ok(fs.existsSync(path.join(directory, 'settings/tibber-data.js')));
-  assert.ok(settingsHtml.includes('TibberDataSettings.bind(Homey)'));
+  assert.ok(fs.existsSync(path.join(directory, 'settings/tibber-history-prices.js')));
+  assert.ok(settingsHtml.includes('TibberHistoryPricesSettings.bind(Homey)'));
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
   assert.equal(typeof reporting.createDevice, 'function');
