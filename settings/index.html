@@ -10,6 +10,7 @@
     <script src="charging-planner.js"></script>
     <script src="tariff-config.js"></script>
     <script src="cost-model.js"></script>
+    <script src="solar-preview.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -193,6 +194,32 @@
       input:focus-visible {
         outline: 3px solid #5b9ddd;
         outline-offset: 2px;
+      }
+      @media (prefers-color-scheme: dark) {
+        #solarPreviewPanel {
+          color: var(--homey-text-color, #e8edf2);
+        }
+      }
+      #solarPreviewPanel p {
+        color: inherit;
+      }
+      #solarPreviewPanel fieldset {
+        min-width: 0;
+      }
+      #solarPreviewPanel input:not([type='checkbox']) {
+        display: block;
+        width: 100%;
+      }
+      #solarPreviewPanel select {
+        padding: 8px;
+        border-radius: 7px;
+        max-width: 100%;
+        background: transparent;
+        color: inherit;
+      }
+      #solarPreviewPanel td,
+      #solarPreviewPanel th {
+        overflow-wrap: anywhere;
       }
       .note {
         border-left: 3px solid #c3903b;
@@ -686,6 +713,98 @@
         </thead>
         <tbody id="chargingSlots"></tbody>
       </table>
+      <div id="solarPreviewPanel">
+        <h3>Solöverskott – förhandsvisning utan styrning</h3>
+        <p>
+          Fördelar bara extra utrymme i pågående nätexport. Batteriurladdning dras konservativt bort
+          och utrymmet begränsas av avläst solproduktion. Husets förbrukning och pågående laddning
+          är redan belastningar i nätvärdet. Detta är ett kort scenario med oförändrade flöden, inte
+          en solprognos eller en del av laddplanen ovan.
+        </p>
+        <label
+          >Prioritet
+          <select id="solarPriority">
+            <option value="home-first">Hemmabatteri först</option>
+            <option value="ev-first">Bil först</option>
+          </select></label
+        >
+        <label
+          >Antagen scenariolängd (minuter)
+          <input id="solarMinutes" type="number" min="1" max="15" value="5"
+        /></label>
+        <label
+          ><input id="solarHomeEnabled" type="checkbox" /> Inkludera extra laddning av
+          hemmabatteriet</label
+        >
+        <fieldset id="solarHomeFields" disabled>
+          <legend>Antaganden för hemmabatteriet</legend>
+          <p>
+            Aktuell SoC och kapacitet hämtas från anläggningen. Ange antagna gränser; de verkställs
+            inte.
+          </p>
+          <label>Mål-SoC (%) <input id="solarHomeTarget" type="number" min="0" max="100" /></label>
+          <label
+            >Högsta totala laddeffekt (kW, inklusive pågående laddning)
+            <input id="solarHomeMax" type="number" min="0" max="350" step="0.1"
+          /></label>
+          <label
+            >Laddverkningsgrad (0–1)
+            <input id="solarHomeEfficiency" type="number" min="0.01" max="1" step="0.01"
+          /></label>
+        </fieldset>
+        <label
+          ><input id="solarEvConnected" type="checkbox" /> Bilen antas ansluten under
+          scenariot</label
+        >
+        <fieldset id="solarEvFields" disabled>
+          <legend>Manuella bilavläsningar och effektantaganden</legend>
+          <p>
+            Sparad bilbatterikapacitet, laddverkningsgrad och maximal laddeffekt används. Spara
+            ändringar ovan före beräkning. EVDC används inte automatiskt.
+          </p>
+          <label
+            >Avläst bil-SoC (%) <input id="solarEvSoc" type="number" min="0" max="100"
+          /></label>
+          <label
+            >Avläsningstid (denna enhets lokala tid)
+            <input id="solarEvObserved" type="datetime-local"
+          /></label>
+          <button id="solarEvStamp" type="button">Ange aktuell avläsningstid</button>
+          <label>Mål-SoC (%) <input id="solarEvTarget" type="number" min="0" max="100" /></label>
+          <label
+            >Pågående billaddning (kW, ange 0 om ingen)
+            <input id="solarEvCurrent" type="number" min="0" max="350" step="0.1"
+          /></label>
+          <label
+            >Minsta sammanhängande totala laddeffekt (kW)
+            <input id="solarEvMin" type="number" min="0" max="350" step="0.1"
+          /></label>
+          <label
+            >Högsta totala laddeffekt (kW, inklusive pågående laddning)
+            <input id="solarEvMax" type="number" min="0" max="350" step="0.1"
+          /></label>
+        </fieldset>
+        <p>
+          Återstående export i tabellen gäller bara det beräknade solutrymmet, inte eventuell export
+          från batteriet. Resultatet uppdateras var tionde sekund medan det är giltigt. Ingen
+          kostnadsrankning eller kontroll av fas-, nät- eller säkringsgränser utförs.
+        </p>
+        <button id="previewSolar" type="button">Beräkna solfördelning</button>
+        <p id="solarPreviewStatus" role="status"></p>
+        <p id="solarPreviewContext"></p>
+        <p id="solarPreviewAssumptions"></p>
+        <table>
+          <thead>
+            <tr>
+              <th>Fördelning</th>
+              <th>Extra effekt</th>
+              <th>Energi under scenariot</th>
+              <th>Lagrad energi</th>
+            </tr>
+          </thead>
+          <tbody id="solarPreviewRows"></tbody>
+        </table>
+      </div>
     </section>
     <script>
       'use strict';
@@ -1587,6 +1706,7 @@
         bindTariffSettings(Homey);
         bindTibberSettings(Homey);
         bindChargingPreview(Homey);
+        SolarPreview.bind(Homey);
         document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {
           if (err) {

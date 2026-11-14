@@ -8,6 +8,19 @@ function verifyEnergy(directory) {
     'function',
   );
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'app.json')));
+  assert.deepEqual(manifest.api.previewSolar, {
+    method: 'POST',
+    path: '/solar/preview',
+    public: false,
+  });
+  assert.equal(
+    typeof require(path.resolve(directory, 'lib/charging/solar-preview')).previewSolar,
+    'function',
+  );
+  assert.equal(typeof require(path.resolve(directory, 'settings/solar-preview')).bind, 'function');
+  const settingsHtml = fs.readFileSync(path.join(directory, 'settings/index.html'), 'utf8');
+  assert.ok(settingsHtml.includes('src="solar-preview.js"'));
+  assert.ok(settingsHtml.includes('SolarPreview.bind(Homey)'));
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
   assert.equal(typeof reporting.createDevice, 'function');

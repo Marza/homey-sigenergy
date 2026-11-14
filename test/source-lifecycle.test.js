@@ -265,6 +265,7 @@ test('shared Energy snapshots follow plant success, reader replacement, communic
   assert.equal(first.gridW, 2000);
   assert.equal(first.pvW, 1000);
   assert.equal(first.essW, 500);
+  assert.equal(first.capacityKWh, 42);
   assert.ok(Number.isFinite(first.readAt));
   assert.equal(first.generation, device.generation);
   fail = true;

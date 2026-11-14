@@ -46,6 +46,11 @@
       "method": "GET",
       "path": "/energy/counters",
       "public": false
+    },
+    "previewSolar": {
+      "method": "POST",
+      "path": "/solar/preview",
+      "public": false
     }
   },
   "platforms": ["local"],

@@ -91,6 +91,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
         thirdPartyPvW: data.thirdPartyPvW,
         essW: data.essW,
         soc: data.soc,
+        capacityKWh: data.capacityKWh,
         gridMode: data.gridMode,
       };
       const backup = this.island.update(data.gridMode, data.soc);

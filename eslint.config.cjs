@@ -47,6 +47,7 @@ module.exports = [
         Simulator: 'readonly',
         CostModel: 'readonly',
         ChargingPlanner: 'readonly',
+        SolarPreview: 'readonly',
         WidgetLayout: 'readonly',
         PriceCoverage: 'readonly',
         TariffConfig: 'readonly',
