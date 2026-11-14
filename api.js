@@ -2,9 +2,13 @@
 // Manifest routes are authenticated by Homey; none are public.
 const { compareEconomicScenarios } = require('./lib/pricing/economic-comparison');
 const { exportBackup, previewBackup, restoreBackup } = require('./lib/history-backup');
+const { getEnergyHistory } = require('./lib/pricing/energy-history');
 const { previewSolar } = require('./lib/charging/solar-preview');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
+  async getEconomicHistory({ homey }) {
+    return getEnergyHistory(homey);
+  },
   async previewSolar({ homey, body }) {
     return previewSolar(homey, body);
   },

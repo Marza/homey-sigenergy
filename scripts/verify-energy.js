@@ -21,6 +21,15 @@ function verifyEnergy(directory) {
   const settingsHtml = fs.readFileSync(path.join(directory, 'settings/index.html'), 'utf8');
   assert.ok(settingsHtml.includes('src="solar-preview.js"'));
   assert.ok(settingsHtml.includes('SolarPreview.bind(Homey)'));
+  assert.deepEqual(manifest.api.getEconomicHistory, {
+    method: 'GET',
+    path: '/economics/energy-history',
+    public: false,
+  });
+  assert.equal(
+    typeof require(path.resolve(directory, 'lib/pricing/energy-history')).getEnergyHistory,
+    'function',
+  );
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
   assert.equal(typeof reporting.createDevice, 'function');

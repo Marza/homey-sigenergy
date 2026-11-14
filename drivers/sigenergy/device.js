@@ -20,7 +20,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.energySnapshot = null;
     this.energyMeters = null;
     // Do not integrate across a reader/source change, even within one minute.
-    this.homey.app?.history?.append({ pvW: null });
+    this.homey.app?.history?.append({ pvW: null, gridW: null });
     this.lastEnergyProbeAt = null;
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
@@ -128,7 +128,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
           });
       }
       this.homey.app.history?.append({
-        gridW: data.gridW,
+        gridW: data.gridMode === 0 ? data.gridW : null,
         pvW: data.pvW,
         essW: data.essW,
         soc: data.soc,
@@ -196,6 +196,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     } catch (error) {
       if (!current()) return;
       this.energySnapshot = null;
+      this.homey.app.history?.append({ gridW: null });
       this.homey.settings.set('sigenergyError', String(error.message));
       await this.publishBackup(this.island.communicationLost());
       await this.clearEvdc();

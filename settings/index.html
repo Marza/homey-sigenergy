@@ -196,11 +196,13 @@
         outline-offset: 2px;
       }
       @media (prefers-color-scheme: dark) {
-        #solarPreviewPanel {
+        #solarPreviewPanel,
+        #economicHistoryPanel {
           color: var(--homey-text-color, #e8edf2);
         }
       }
-      #solarPreviewPanel p {
+      #solarPreviewPanel p,
+      #economicHistoryPanel p {
         color: inherit;
       }
       #solarPreviewPanel fieldset {
@@ -475,8 +477,8 @@
         <h3>Ekonomiska jämförelser – avtalsunderlag</h3>
         <p class="note">
           Full ekonomisk rankning är inte tillgänglig för historikens nuvarande simulering. Den
-          saknar separata import-/exportflöden och jämförbar batterienergi. Effektavgiften redovisas
-          separat.
+          saknar ännu en komplett jämförbar energimodell och verifierat exportpris. Nya
+          import-/exportvolymer samlas separat. Effektavgiften redovisas separat.
         </p>
         <p class="sub">
           Ange endast rörliga tillägg som inte redan ingår i priset. Importpriset ska inkludera
@@ -522,6 +524,16 @@
         </p>
         <button type="button" id="saveCostContract">Spara kostnadsunderlag</button>
         <p id="costMessage" role="status"></p>
+        <div id="economicHistoryPanel">
+          <h4>Energiunderlag för ekonomijämförelse</h4>
+          <p>
+            Separata köp- och säljvolymer uppskattas från nya effektprov. Äldre nettodata fylls inte
+            i. Uppgifterna är inte fakturans mätarvärden och aktiverar ingen ekonomisk rankning.
+          </p>
+          <button id="refreshEconomicHistory" type="button">Uppdatera energiunderlag</button>
+          <p id="economicHistoryStatus" role="status">Underlaget har inte hämtats.</p>
+          <p id="economicHistoryDetails"></p>
+        </div>
       </div>
       <div class="settingsGroup">
         <h3>Nibe SMO S40 – lokal avläsning</h3>
@@ -1539,6 +1551,49 @@
           });
         };
       }
+      function bindEconomicHistory(Homey) {
+        const button = document.getElementById('refreshEconomicHistory');
+        const status = document.getElementById('economicHistoryStatus');
+        const details = document.getElementById('economicHistoryDetails');
+        let generation = 0;
+        button.onclick = () => {
+          const current = ++generation;
+          button.disabled = true;
+          details.textContent = '';
+          status.textContent = 'Hämtar energiunderlag…';
+          let timeout;
+          if (typeof setTimeout === 'function')
+            timeout = setTimeout(() => {
+              if (current !== generation) return;
+              generation++;
+              button.disabled = false;
+              status.textContent = 'Energiunderlaget kunde inte hämtas. Försök igen.';
+            }, 8000);
+          Homey.api('GET', '/economics/energy-history', null, (error, result) => {
+            if (current !== generation) return;
+            if (typeof clearTimeout === 'function') clearTimeout(timeout);
+            button.disabled = false;
+            if (
+              error ||
+              !['ready', 'partial', 'collecting'].includes(result?.status) ||
+              !Number.isInteger(result.completeQuarters) ||
+              result.completeQuarters < 0
+            ) {
+              status.textContent = 'Energiunderlaget kunde inte läsas. Inga volymer antas.';
+              return;
+            }
+            status.textContent =
+              result.status === 'collecting'
+                ? 'Samlar nya riktningsdata. Inga kompletta kvartar finns ännu.'
+                : `${result.completeQuarters} kompletta kvartar med separata import-/exportvolymer.`;
+            const fmt = (value) =>
+              Number.isFinite(value)
+                ? value.toLocaleString('sv-SE', { maximumFractionDigits: 3 })
+                : '–';
+            details.textContent = `Visad historikperiod: ${localTime(result.windowFrom)}–${localTime(result.windowTo)}. Import ${fmt(result.importKWh)} kWh, export ${fmt(result.exportKWh)} kWh, endast från kompletta kvartar. ${result.excludedQuarters} befintliga kvartar saknar komplett riktningsunderlag; ${result.missingQuarters} kvartar saknas i perioden. Pågående kvart ingår inte. Linjär uppskattning mellan effektprov; ingen bakåtfyllning eller beräknad besparing.`;
+          });
+        };
+      }
       function bindCostSettings(Homey) {
         const fields = {
           energyTaxExVatSekPerKWh: 'costEnergyTax',
@@ -1706,6 +1761,7 @@
         bindTariffSettings(Homey);
         bindTibberSettings(Homey);
         bindChargingPreview(Homey);
+        bindEconomicHistory(Homey);
         SolarPreview.bind(Homey);
         document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {

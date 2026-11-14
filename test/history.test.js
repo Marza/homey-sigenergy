@@ -50,7 +50,7 @@ test('export contains no configuration secrets', () => {
   settings.set('tibberToken', 'secret');
   history.append({ gridW: 100 }, 1800000000000);
   const exported = history.export();
-  assert.equal(exported.schema, 3);
+  assert.equal(exported.schema, 4);
   assert.equal(JSON.stringify(exported).includes('secret'), false);
 });
 test('invalid values are ignored', () => {
