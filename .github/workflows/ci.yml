@@ -20,6 +20,10 @@ jobs:
         run: npm run format:check
       - name: Verify compiled settings stylesheet
         run: npm run check:css
+      - name: Install browser for settings regression
+        run: npx playwright install --with-deps chromium
+      - name: Check settings with late-loading host CSS
+        run: npm run test:settings-ui
       - name: Test and enforce runtime coverage
         run: npm run test:coverage
       - name: Upload coverage report

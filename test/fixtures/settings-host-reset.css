@@ -1,0 +1,58 @@
+/* Synthetic host stylesheet, intentionally unlayered and loaded last.
+ * Models the legacy reset/opt-out behavior; contains no vendor assets.
+ */
+* {
+  margin: 0;
+  padding: 0;
+  outline: none;
+}
+html > body {
+  padding: 16px !important;
+}
+body,
+input {
+  font-size: 15px;
+  line-height: 20px;
+  font-family: sans-serif;
+}
+h1,
+h2,
+h3 {
+  font-size: 14px;
+  font-weight: 400;
+}
+p {
+  font-size: 14px;
+  margin-bottom: 1em;
+}
+p strong {
+  font-weight: 400;
+}
+fieldset:not(.hy-nostyle) {
+  border: 1px solid #eee;
+  padding: 12px;
+}
+fieldset legend,
+label:not(.hy-nostyle) {
+  text-transform: uppercase;
+  font-size: 10px;
+  color: #616161;
+}
+input[type='text']:not(.hy-nostyle),
+input[type='password']:not(.hy-nostyle) {
+  border: none;
+  border-bottom: 1px solid #eaeaea;
+  padding: 3px 0 9px;
+  color: black;
+}
+input[type='checkbox']:not(.hy-nostyle) {
+  appearance: none;
+  background: #939496;
+}
+button:not(.hy-nostyle):not([class*='homey-button']):not([class*='hy-button']) {
+  border: none;
+  background: #e7e7e7;
+  padding: 6px 16px;
+  border-radius: 3px;
+  color: #555;
+}

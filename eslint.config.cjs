@@ -43,6 +43,10 @@ module.exports = [
     languageOptions: { globals: globals.browser },
   },
   {
+    files: ['test/browser/**/*.cjs'],
+    languageOptions: { globals: globals.browser },
+  },
+  {
     files: ['settings/**/*.html', 'widgets/**/*.html'],
     plugins: { html },
     languageOptions: {

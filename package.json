@@ -15,7 +15,8 @@
     "test:coverage": "c8 node --test test/*.test.js",
     "check": "npm run lint && npm run format:check && npm run test:coverage && npm run check:versions && npm run check:css",
     "build:css": "tailwindcss -i settings/tailwind.css -o settings/styles.css --minify",
-    "check:css": "node scripts/check-settings-css.js"
+    "check:css": "node scripts/check-settings-css.js",
+    "test:settings-ui": "node test/browser/settings-styles.cjs"
   },
   "engines": {
     "node": ">=24"
@@ -31,6 +32,7 @@
     "eslint-plugin-html": "8.2.1",
     "globals": "17.14.0",
     "homey": "4.6.3",
+    "playwright": "1.65.1",
     "prettier": "3.10.1",
     "tailwindcss": "4.3.5"
   }
