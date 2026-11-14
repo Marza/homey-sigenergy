@@ -129,3 +129,43 @@ test('a late preview for an older file cannot authorize a different selected fil
   callbacks[1](new Error('Bad second file'));
   assert.equal(v.element('restoreHistory').disabled, true);
 });
+
+test('a changed meter binding requires a deliberate confirmation and resets on file selection', async () => {
+  const calls = [],
+    file = { format: 'com.local.sigenergy.backup', schema: 1 };
+  const v = view((method, route, body, cb) => {
+    calls.push({ route, body });
+    if (route.endsWith('/preview'))
+      cb(null, {
+        slots: 1,
+        daily: 1,
+        conflictingSlots: 0,
+        meterMonths: 2,
+        meterHours: 100,
+        meterBindingRequired: true,
+      });
+    else cb(new Error('Retry'));
+  });
+  v.run('bindHistoryImport(Homey)');
+  const input = v.element('importHistoryFile'),
+    button = v.element('restoreHistory'),
+    binding = v.element('confirmMeterBinding');
+  input.files = [{ size: 100, text: async () => JSON.stringify(file) }];
+  await input.onchange();
+  assert.equal(button.disabled, true);
+  assert.equal(v.element('meterBindingLabel').hidden, false);
+  button.onclick();
+  assert.equal(calls.length, 1);
+  binding.checked = true;
+  binding.onchange();
+  assert.equal(button.disabled, false);
+  button.onclick();
+  assert.deepEqual(JSON.parse(JSON.stringify(calls[1].body)), {
+    backup: file,
+    confirmMeterBinding: true,
+  });
+  input.files = [{ size: 100, text: async () => JSON.stringify(file) }];
+  await input.onchange();
+  assert.equal(binding.checked, false);
+  assert.equal(button.disabled, true);
+});

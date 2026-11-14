@@ -1,6 +1,7 @@
 'use strict';
 // Manifest routes are authenticated by Homey; none are public.
 const { compareEconomicScenarios } = require('./lib/pricing/economic-comparison');
+const { exportBackup, previewBackup, restoreBackup } = require('./lib/history-backup');
 module.exports = {
   async previewEconomics({ homey, body }) {
     return compareEconomicScenarios(body, homey.settings.get('costContract'));
@@ -9,12 +10,12 @@ module.exports = {
     return homey.app.getChargingPreview(body);
   },
   async exportHistory({ homey }) {
-    return homey.app.history.export();
+    return exportBackup(homey);
   },
   async previewHistoryImport({ homey, body }) {
-    return homey.app.history.previewImport(body);
+    return previewBackup(homey, body);
   },
   async importHistory({ homey, body }) {
-    return homey.app.history.import(body);
+    return restoreBackup(homey, body);
   },
 };

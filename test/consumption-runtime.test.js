@@ -52,14 +52,14 @@ function fixture(fetchConsumption, settings = new Settings()) {
   app.pollNibe = app.refreshPrices = async () => {};
   return { app, settings, timers, cleared };
 }
-function state({ now, configRevision }) {
+function state({ now, configRevision, month }) {
   return {
     schema: 1,
     source: 'tibber-consumption',
     resolution: 'HOURLY',
     configRevision,
     fetchedAt: now.toISOString(),
-    ...monthWindow(now),
+    ...monthWindow(now, month),
     hours: [],
   };
 }
@@ -75,11 +75,11 @@ test('daily runtime fetch keeps inverter history intact, persists corrections an
   assert.equal(calls, 0);
   assert.equal(f.app.consumptionTimer.ms, 300000);
   await f.app.refreshConsumption(n);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   assert.equal(f.settings.get('tibberConsumptionSync').status, 'ok');
   assert.equal(JSON.stringify(f.app.history.getSlots()), original);
   await f.app.refreshConsumption(n);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   const restarted = fixture(async (o) => {
     calls++;
     return state(o);
@@ -87,9 +87,9 @@ test('daily runtime fetch keeps inverter history intact, persists corrections an
   await f.app.onUninit();
   await restarted.app.onInit();
   await restarted.app.refreshConsumption(n);
-  assert.equal(calls, 1);
-  await restarted.app.refreshConsumption(new Date(+n + 86400000));
   assert.equal(calls, 2);
+  await restarted.app.refreshConsumption(new Date(+n + 86400000));
+  assert.equal(calls, 4);
   assert.ok(f.cleared.includes(f.app.consumptionTimer));
   await restarted.app.onUninit();
 });
@@ -103,17 +103,17 @@ test('failed refresh preserves last good history, records only safe status and r
   });
   await f.app.onInit();
   await f.app.refreshConsumption(n);
-  const previous = f.settings.get('tibberConsumptionHistory');
+  const previous = f.settings.get('tibberConsumptionArchive');
   fail = true;
   const next = new Date(+n + 86400000);
   await f.app.refreshConsumption(next);
-  assert.equal(f.settings.get('tibberConsumptionHistory'), previous);
+  assert.equal(f.settings.get('tibberConsumptionArchive'), previous);
   assert.equal(f.settings.get('tibberConsumptionSync').status, 'error');
   assert.ok(!JSON.stringify(f.settings.get('tibberConsumptionSync')).includes('private-token'));
   await f.app.refreshConsumption(next);
-  assert.equal(calls, 2);
+  assert.equal(calls, 4);
   await f.app.refreshConsumption(new Date(+next + 3600000));
-  assert.equal(calls, 3);
+  assert.equal(calls, 6);
   await f.app.onUninit();
 });
 test('concurrent requests, changed credentials, disabled token and shutdown cannot publish obsolete results', async () => {
@@ -130,7 +130,7 @@ test('concurrent requests, changed credentials, disabled token and shutdown cann
   f.settings.set('tibberHomeId', 'new-home');
   resolve();
   await pending;
-  assert.equal(f.settings.get('tibberConsumptionHistory'), undefined);
+  assert.equal(f.settings.get('tibberConsumptionArchive'), undefined);
   f.settings.set('tibberToken', '');
   await f.app.refreshConsumption(n);
   assert.equal(f.app.consumptionRefreshing, false);
@@ -139,7 +139,7 @@ test('concurrent requests, changed credentials, disabled token and shutdown cann
   await f.app.onUninit();
   resolve();
   await shutdown;
-  assert.equal(f.settings.get('tibberConsumptionHistory'), undefined);
+  assert.equal(f.settings.get('tibberConsumptionArchive'), undefined);
   await f.app.refreshConsumption(n);
   assert.equal(f.app.consumptionRefreshing, false);
 });
@@ -148,7 +148,7 @@ test('first month hour waits rather than suppressing fetching for the whole day'
   let calls = 0;
   const f = fixture(async (o) => {
     calls++;
-    return monthWindow(o.now).to === monthWindow(o.now).from ? null : state(o);
+    return monthWindow(o.now, o.month).to === monthWindow(o.now, o.month).from ? null : state(o);
   });
   await f.app.onInit();
   const midnight = new Date('2026-12-01T00:05+01:00');
@@ -156,7 +156,80 @@ test('first month hour waits rather than suppressing fetching for the whole day'
   assert.equal(f.settings.get('tibberConsumptionSync').status, 'waiting');
   assert.equal(f.settings.get('tibberConsumptionSync').lastSuccessAt, null);
   await f.app.refreshConsumption(new Date(+midnight + 3600000));
-  assert.equal(calls, 2);
+  assert.equal(calls, 4);
   assert.equal(f.settings.get('tibberConsumptionSync').status, 'ok');
+  await f.app.onUninit();
+});
+
+test('month rollover archives the old reference and previous-month corrections survive a restart', async () => {
+  let value = 1;
+  const f = fixture(async (o) => {
+    const s = state(o);
+    if (s.from === s.to) return null;
+    s.hours = [{ t: s.from, importWh: value }];
+    return s;
+  });
+  await f.app.onInit();
+  await f.app.refreshConsumption(new Date('2026-10-31T12:00Z'));
+  assert.deepEqual(
+    f.settings.get('tibberConsumptionArchive').months.map((e) => e.month),
+    ['2026-09', '2026-10'],
+  );
+  value = 9;
+  await f.app.refreshConsumption(new Date('2026-11-01T12:00Z'));
+  const archive = f.settings.get('tibberConsumptionArchive');
+  assert.deepEqual(
+    archive.months.map((e) => e.month),
+    ['2026-09', '2026-10', '2026-11'],
+  );
+  assert.equal(archive.months.find((e) => e.month === '2026-10').state.hours[0].importWh, 9);
+  assert.equal(archive.months.find((e) => e.month === '2026-09').state.hours[0].importWh, 1);
+  await f.app.onUninit();
+});
+test('failed previous-month refresh keeps its old snapshot while saving a valid current month', async () => {
+  let failPrevious = false;
+  const f = fixture(async (o) => {
+    if (failPrevious && o.month === '2026-10') throw Error('private response');
+    return state(o);
+  });
+  await f.app.onInit();
+  await f.app.refreshConsumption(n);
+  const previous = f.settings
+    .get('tibberConsumptionArchive')
+    .months.find((e) => e.month === '2026-10');
+  failPrevious = true;
+  await f.app.refreshConsumption(new Date(+n + 86400000));
+  const archive = f.settings.get('tibberConsumptionArchive');
+  assert.equal(
+    archive.months.find((e) => e.month === '2026-10'),
+    previous,
+  );
+  assert.equal(
+    archive.months.find((e) => e.month === '2026-11').state.fetchedAt,
+    new Date(+n + 86400000).toISOString(),
+  );
+  assert.equal(f.settings.get('tibberConsumptionSync').status, 'error');
+  await f.app.onUninit();
+});
+
+test('a restore during network fetch cannot be overwritten by an outdated archive read', async () => {
+  const { replaceMonth } = require('../lib/pricing/consumption-archive');
+  const pending = [];
+  const f = fixture((o) => new Promise((resolve) => pending.push(() => resolve(state(o)))));
+  await f.app.onInit();
+  const refresh = f.app.refreshConsumption(n);
+  const revision = f.settings.get('sourceConfig').tibber.revision;
+  f.settings.set(
+    'tibberConsumptionArchive',
+    replaceMonth(null, state({ now: n, configRevision: revision, month: '2026-09' }), n),
+  );
+  pending.shift()();
+  await new Promise((resolve) => setImmediate(resolve));
+  pending.shift()();
+  await refresh;
+  assert.deepEqual(
+    f.settings.get('tibberConsumptionArchive').months.map((e) => e.month),
+    ['2026-09', '2026-10', '2026-11'],
+  );
   await f.app.onUninit();
 });
