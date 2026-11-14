@@ -24,6 +24,7 @@ try {
   require(path.join(directory, 'node_modules/modbus-serial'));
   require('./verify-widget').verifyWidget(directory);
   require('./verify-energy').verifyEnergy(directory);
+  require('./verify-settings').verifySettings(directory);
   // The normal install command performs this same build before uploading to Homey.
   execFileSync(
     process.execPath,

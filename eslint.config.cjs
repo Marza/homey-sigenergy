@@ -50,6 +50,7 @@ module.exports = [
       globals: {
         ...globals.browser,
         Homey: 'readonly',
+        SettingsNavigation: 'readonly',
         SourceStatus: 'readonly',
         Simulator: 'readonly',
         CostModel: 'readonly',
@@ -67,7 +68,7 @@ module.exports = [
       'no-unused-vars': [
         'error',
         {
-          varsIgnorePattern: '^onHomeyReady$',
+          varsIgnorePattern: '^(onHomeyReady|showTab)$',
           argsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
         },

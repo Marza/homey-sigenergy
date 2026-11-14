@@ -48,6 +48,7 @@ function render(file, row, start, canonical = false) {
   vm.runInNewContext(script + '\n' + start, {
     document,
     Homey,
+    SettingsNavigation: require('../settings/navigation'),
     setTimeout: () => 0,
     clearTimeout() {},
     setInterval() {},

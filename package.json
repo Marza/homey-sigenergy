@@ -6,14 +6,16 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "validate": "homey app validate --level debug",
-    "build:homey": "homey app build",
+    "build:homey": "npm run build:css && homey app build",
     "check:versions": "node -e \"const a=require('./app.json');const p=require('./package.json');if(a.version!==p.version)process.exit(1)\"",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix --max-warnings 0",
-    "format": "prettier --write \"**/*.{js,cjs,mjs,json,html,yml,yaml}\" && node scripts/sync-source-status.js",
-    "format:check": "prettier --check \"**/*.{js,cjs,mjs,json,html,yml,yaml}\"",
+    "format": "prettier --write \"**/*.{js,cjs,mjs,json,html,css,yml,yaml}\" && node scripts/sync-source-status.js",
+    "format:check": "prettier --check \"**/*.{js,cjs,mjs,json,html,css,yml,yaml}\"",
     "test:coverage": "c8 node --test test/*.test.js",
-    "check": "npm run lint && npm run format:check && npm run test:coverage && npm run check:versions"
+    "check": "npm run lint && npm run format:check && npm run test:coverage && npm run check:versions && npm run check:css",
+    "build:css": "tailwindcss -i settings/tailwind.css -o settings/styles.css --minify",
+    "check:css": "node scripts/check-settings-css.js"
   },
   "engines": {
     "node": ">=24"
@@ -23,11 +25,13 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@tailwindcss/cli": "4.3.5",
     "c8": "12.0.0",
     "eslint": "10.14.0",
     "eslint-plugin-html": "8.2.1",
     "globals": "17.14.0",
     "homey": "4.6.3",
-    "prettier": "3.10.1"
+    "prettier": "3.10.1",
+    "tailwindcss": "4.3.5"
   }
 }

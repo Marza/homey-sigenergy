@@ -18,6 +18,8 @@ jobs:
         run: npm run lint
       - name: Check formatting
         run: npm run format:check
+      - name: Verify compiled settings stylesheet
+        run: npm run check:css
       - name: Test and enforce runtime coverage
         run: npm run test:coverage
       - name: Upload coverage report
@@ -35,7 +37,7 @@ jobs:
       - name: Validate local development manifest and assets
         run: npm run validate
       - name: Build Homey app with production dependencies
-        run: npm run build:homey && node scripts/verify-widget.js && node scripts/verify-energy.js
+        run: npm run build:homey && node scripts/verify-widget.js && node scripts/verify-energy.js && node scripts/verify-settings.js
       - name: Load packaged Modbus dependency
         run: node -e "require('./.homeybuild/node_modules/modbus-serial')"
 
