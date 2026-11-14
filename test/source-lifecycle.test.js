@@ -428,3 +428,33 @@ test('selected solar watts reach native Energy, plant capability and history, in
   assert.ok([...history.pending.values()].some((row) => row.pvWh > 0));
   await device.onUninit();
 });
+
+test('grid history breaks continuity on off-grid readings, communication loss and reader replacement', async () => {
+  let gridMode = 0,
+    fail = false;
+  const samples = [];
+  const { device } = deviceFixture({
+    snapshotRead: async () => {
+      if (fail) throw Error('offline');
+      return { ...snapshot, gridMode };
+    },
+  });
+  device.homey.app.history.append = (value) => samples.push(value);
+  await device.onInit();
+  await tick();
+  assert.equal(samples.find((s) => s.gridW === 2000).gridW, 2000);
+  gridMode = 1;
+  await device.poll();
+  assert.equal(samples.filter((s) => Object.hasOwn(s, 'gridW')).at(-1).gridW, null);
+  gridMode = 0;
+  fail = true;
+  await device.poll();
+  assert.equal(samples.at(-1).gridW, null);
+  fail = false;
+  await device.poll();
+  assert.equal(samples.filter((s) => Object.hasOwn(s, 'gridW')).at(-1).gridW, 2000);
+  device.startReader({ ...device.getSettings(), host: '192.0.2.11' });
+  assert.equal(samples.at(-1).gridW, null);
+  await tick();
+  await device.onUninit();
+});

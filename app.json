@@ -51,6 +51,11 @@
       "method": "POST",
       "path": "/solar/preview",
       "public": false
+    },
+    "getEconomicHistory": {
+      "method": "GET",
+      "path": "/economics/energy-history",
+      "public": false
     }
   },
   "platforms": ["local"],
