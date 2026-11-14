@@ -350,8 +350,8 @@
           "id": "energySolarSource",
           "type": "dropdown",
           "label": {
-            "en": "Solar kWh source",
-            "sv": "Källa för solenergi (kWh)"
+            "en": "Solar source (W and kWh)",
+            "sv": "Solkälla (W och kWh)"
           },
           "value": "self",
           "values": [
