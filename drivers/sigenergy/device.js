@@ -16,6 +16,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     if (this.reader) this.reader.close();
     this.generation = (this.generation || 0) + 1;
     this.activeSettings = { ...settings };
+    this.energySnapshot = null;
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
@@ -75,6 +76,16 @@ module.exports = class SigenergyDevice extends Homey.Device {
     try {
       const data = await reader.snapshot();
       if (!current()) return;
+      this.energySnapshot = {
+        generation: this.generation,
+        readAt: Date.now(),
+        maxAgeMs: Math.max(30000, (Number(settings.pollSeconds) || 10) * 3000),
+        gridW: data.gridW,
+        pvW: data.pvW,
+        essW: data.essW,
+        soc: data.soc,
+        gridMode: data.gridMode,
+      };
       const backup = this.island.update(data.gridMode, data.soc);
       this.homey.settings.set('sigenergyStatus', {
         readAt: new Date().toISOString(),
@@ -149,6 +160,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
       if (current()) await this.setAvailable();
     } catch (error) {
       if (!current()) return;
+      this.energySnapshot = null;
       this.homey.settings.set('sigenergyError', String(error.message));
       await this.publishBackup(this.island.communicationLost());
       await this.clearEvdc();
@@ -157,6 +169,9 @@ module.exports = class SigenergyDevice extends Homey.Device {
     } finally {
       this.polling = false;
     }
+  }
+  getEnergySnapshot() {
+    return this.stopped ? null : this.energySnapshot || null;
   }
   async publishBackup(backup) {
     this.homey.settings.set('backupStatus', { ...backup, observedAt: new Date().toISOString() });
@@ -187,6 +202,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
   }
   async onUninit() {
     this.stopped = true;
+    this.energySnapshot = null;
     this.generation = (this.generation || 0) + 1;
     const config = this.homey.settings.get('sourceConfig') || {};
     this.updateSources({

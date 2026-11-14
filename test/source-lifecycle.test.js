@@ -245,3 +245,36 @@ test('changing Nibe configuration while a read is pending discards the old resul
   assert.equal(app.getTemperatureContext().outdoorC, -3);
   await app.onUninit();
 });
+
+test('shared Energy snapshots follow plant success, reader replacement, communication loss and shutdown', async () => {
+  let fail = false;
+  const { device } = deviceFixture({
+    snapshotRead: async () => {
+      if (fail) throw Error('offline');
+      return snapshot;
+    },
+  });
+  assert.equal(device.getEnergySnapshot(), null);
+  await device.onInit();
+  await tick();
+  const first = device.getEnergySnapshot();
+  assert.equal(first.gridW, 2000);
+  assert.equal(first.pvW, 1000);
+  assert.equal(first.essW, 500);
+  assert.ok(Number.isFinite(first.readAt));
+  assert.equal(first.generation, device.generation);
+  fail = true;
+  await device.poll();
+  assert.equal(device.getEnergySnapshot(), null);
+  fail = false;
+  await device.poll();
+  assert.ok(device.getEnergySnapshot());
+  const oldGeneration = device.generation;
+  device.startReader({ ...device.getSettings(), pollSeconds: 20 });
+  assert.equal(device.getEnergySnapshot(), null);
+  await tick();
+  assert.ok(device.getEnergySnapshot().generation > oldGeneration);
+  assert.equal(device.getEnergySnapshot().maxAgeMs, 60000);
+  await device.onUninit();
+  assert.equal(device.getEnergySnapshot(), null);
+});

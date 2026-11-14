@@ -42,3 +42,5 @@ The shared charging planner is `lib/charging/planner.js`; the same sync command 
 Widget sizing/fit rules live in `lib/widget-layout.js`; the sync command updates `widgets/energy-overview/public/widget-layout.js`. Measure intrinsic content, preserve overflow when constrained, and avoid intercepting global touch/wheel gestures or accessing the Dashboard parent document.
 
 Cost contract validation is shared by Node and settings through `lib/pricing/cost-model.js`; the sync script generates `settings/cost-model.js`. Preserve explicit component provenance, tax inclusion, directional energy and matching battery boundaries. Economic-preview inputs are user-supplied, and must not unlock runtime financial ranking without a verified source and complete replay basis.
+
+Native Energy companions share `lib/energy/reporting.js` and the existing plant's in-memory snapshot. Keep them free of Modbus connections and control capabilities. Treat source loss as unavailable, preserve signs/real zero, test lifecycle races, and do not add kWh counters without verified source/reset semantics. See `docs/homey-energy.md`.
