@@ -90,8 +90,8 @@ function deviceFixture({
     snapshot() {
       return snapshotRead(this);
     }
-    energyCounters(profile) {
-      return energyRead(profile);
+    energyCounters(profile, solarSource) {
+      return energyRead(profile, solarSource);
     }
     batteryTelemetry() {
       return batteryRead(this);
@@ -325,5 +325,42 @@ test('optional counter probing commits high-water marks before publish and never
   assert.equal(device.getEnergySnapshot().gridW, 2000);
   assert.equal(Object.keys(device.getEnergySnapshot().meters.values).length, 0);
   assert.equal(device.available, true);
+  await device.onUninit();
+});
+
+test('solar source selection reaches the shared probe and preserves an existing native zero until acknowledgement', async () => {
+  const { PROFILE } = require('../lib/energy/meters');
+  let stored;
+  const modes = [];
+  const { device } = deviceFixture({
+    energyRead: async (_profile, mode) => {
+      modes.push(mode);
+      return {
+        values: {
+          solar: mode === 'combined' ? '7654300' : '0',
+          imported: '1000',
+          exported: '1000',
+          charged: '1000',
+          discharged: '1000',
+        },
+      };
+    },
+  });
+  const settings = { ...device.getSettings(), energyMetersProfile: PROFILE, energyCounterEpoch: 0 };
+  device.getSettings = () => settings;
+  device.getStoreValue = () => stored;
+  device.setStoreValue = async (_key, state) => {
+    stored = structuredClone(state);
+  };
+  await device.onInit();
+  await tick();
+  assert.equal(device.getEnergySnapshot().meters.values.solar, 0);
+  await device.onSettings({ newSettings: { ...settings, energySolarSource: 'combined' } });
+  await tick();
+  assert.equal(modes.at(-1), 'combined');
+  assert.equal(device.getEnergySnapshot().solarSource, 'combined');
+  assert.equal(device.getEnergySnapshot().meters.errors.solar, 'source-changed');
+  assert.equal(device.getEnergySnapshot().meters.sourceValues.solar, 76543);
+  assert.equal(device.getEnergySnapshot().meters.values.imported, 10);
   await device.onUninit();
 });

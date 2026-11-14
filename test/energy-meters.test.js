@@ -247,3 +247,76 @@ test('optional meter transport failure stops the batch while one invalid value l
   assert.equal(partial.errors.solar, 'invalid');
   assert.equal(partial.values.imported, '2000');
 });
+
+test('third-party and combined solar modes choose distinct registers and never replace missing components with zero', async () => {
+  const { sumEnergy, solarSourceKey } = require('../lib/energy/meters');
+  const reader = new SigenergyReader({ host: 'fixture', unitId: 247 }),
+    calls = [];
+  reader.read = async (address) => {
+    calls.push(address);
+    return words(address === 30236 ? '0' : address === 30240 ? '7654300' : '1000');
+  };
+  assert.equal((await reader.energyCounters(PROFILE, 'third-party')).values.solar, '7654300');
+  assert.ok(!calls.includes(30236));
+  calls.length = 0;
+  assert.equal((await reader.energyCounters(PROFILE, 'combined')).values.solar, '7654300');
+  assert.ok(calls.includes(30236) && calls.includes(30240));
+  reader.read = async (address) => {
+    if (address === 30236) throw Object.assign(Error('unsupported'), { modbusCode: 2 });
+    return words('2000');
+  };
+  const partial = await reader.energyCounters(PROFILE, 'combined');
+  assert.equal(partial.values.solar, undefined);
+  assert.equal(partial.errors.solar, 'unavailable');
+  assert.equal(partial.values.imported, '2000');
+  assert.equal(sumEnergy(['100', '200']), '300');
+  assert.throws(() => sumEnergy(['100', undefined]));
+  assert.throws(() => sumEnergy(['100000000000000', '1']));
+  await assert.rejects(reader.energyCounters(PROFILE, 'unknown'), /solar/);
+  const settings = { host: 'fixture', unitId: 247 };
+  assert.equal(
+    sourceKey(settings),
+    'a11f600aa7d0a7a674f2c2eeeb1178c461e4eac9abd8acfd7879e68e519053ae',
+  );
+  assert.equal(solarSourceKey(settings), sourceKey(settings));
+  assert.notEqual(
+    solarSourceKey({ ...settings, energySolarSource: 'combined' }),
+    sourceKey(settings),
+  );
+  assert.throws(() => solarSourceKey({ ...settings, energySolarSource: 'unknown' }));
+});
+test('changing solar scope cannot inject a lifetime total into the current Energy day', () => {
+  const { solarSourceKey } = require('../lib/energy/meters');
+  const settings = { host: 'fixture', unitId: 247 };
+  const first = advance(null, { values: { ...values(), solar: '0' }, key, now });
+  const solarKey = solarSourceKey({ ...settings, energySolarSource: 'combined' });
+  const switched = advance(first.state, {
+    values: { ...values('100001'), solar: '7654300' },
+    key,
+    solarKey,
+    now: now + 60000,
+  });
+  assert.equal(switched.values.solar, undefined);
+  assert.equal(switched.errors.solar, 'source-changed');
+  assert.equal(switched.sourceValues.solar, 76543);
+  assert.equal(switched.values.imported, 1000.01);
+  const acknowledged = advance(switched.state, {
+    values: { ...values('100002'), solar: '7654301' },
+    key,
+    solarKey,
+    solarEpoch: 1,
+    now: now + 120000,
+  });
+  assert.equal(acknowledged.values.solar, 0);
+  assert.equal(acknowledged.values.imported, 1000.02);
+  const next = advance(acknowledged.state, {
+    values: { ...values('100003'), solar: '7654311' },
+    key,
+    solarKey,
+    solarEpoch: 1,
+    now: now + 180000,
+  });
+  assert.equal(next.values.solar, 0.1);
+  assert.equal(next.sourceValues.solar, 76543.11);
+  assert.throws(() => advance(first.state, { values: values(), key, solarKey: 'invalid', now }));
+});
