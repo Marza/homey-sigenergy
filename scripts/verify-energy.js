@@ -30,6 +30,23 @@ function verifyEnergy(directory) {
     typeof require(path.resolve(directory, 'lib/pricing/energy-history')).getEnergyHistory,
     'function',
   );
+  for (const name of [
+    'getTibberHistoryPriceStatus',
+    'confirmTibberHistoryHome',
+    'configureTibberHistoryComponents',
+    'refreshTibberHistoryPrices',
+    'getObservedCosts',
+  ]) {
+    assert.equal(manifest.api[name].public, false);
+    assert.equal(typeof require(path.resolve(directory, 'api'))[name], 'function');
+  }
+  assert.equal(
+    typeof require(path.resolve(directory, 'lib/pricing/tibber-history-prices'))
+      .TibberHistoryPrices,
+    'function',
+  );
+  assert.ok(fs.existsSync(path.join(directory, 'settings/tibber-history-prices.js')));
+  assert.ok(settingsHtml.includes('TibberHistoryPricesSettings.bind(Homey)'));
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
   assert.equal(typeof reporting.createDevice, 'function');

@@ -11,6 +11,7 @@
     <script src="tariff-config.js"></script>
     <script src="cost-model.js"></script>
     <script src="solar-preview.js"></script>
+    <script src="tibber-history-prices.js"></script>
     <style>
       :root {
         color-scheme: light dark;
@@ -667,6 +668,50 @@
       <p id="tariffConfigStatus" role="status">Läser sparad tariff…</p>
       <button id="saveTariff" type="button">Spara tariffparametrar</button>
       <p id="tariffMessage" role="status"></p>
+      <section id="tibberHistoryPricePanel">
+        <h3>Tibber – historiska köp- och säljpriser</h3>
+        <p>
+          Den befintliga Tibber-tokenen och samma Tibberhem används. Ingen extra inloggning eller
+          klientregistrering behövs. Ändra anslutningen i de vanliga Tibber-inställningarna nedan.
+        </p>
+        <p id="trade-status" role="status"></p>
+        <label
+          ><input id="trade-same" type="checkbox" /> Jag bekräftar att befintligt Tibberhem gäller
+          samma mätpunkt som Sigenergy.</label
+        >
+        <button id="trade-confirm" type="button">Bekräfta hem och hämta historik</button>
+        <div id="trade-components" hidden>
+          <label
+            ><input id="trade-network" type="checkbox" /> Lägg till nät och energiskatt från sparat
+            kostnadsunderlag</label
+          >
+          <label
+            ><input id="trade-confirm-network" type="checkbox" /> Jag har kontrollerat att skatt,
+            nätavgift och exportnytta debiteras separat från de rapporterade elhandelspriserna.
+            Underlagets moms gäller inköpstilläggen.</label
+          >
+          <p>
+            Nätläget kräver ett underlag med spotpris exklusive moms. Tibber-påslag läggs inte till
+            igen. Försäljning används utan extra inköpsmoms. Ändrat underlag kräver ny bekräftelse.
+          </p>
+          <button id="trade-save-network" type="button">Spara nätkomponenter</button>
+        </div>
+        <button id="trade-refresh" type="button">Kontrollera historik och uppdatera visning</button>
+        <p>
+          Historiken hämtas dagligen; saknade priser och fel prövas igen tidigast efter en timme.
+          Uppgifter från Tibber kan komma med fördröjning.
+        </p>
+        <p id="trade-message" role="status"></p>
+        <p id="trade-costs"></p>
+        <p id="trade-coverage"></p>
+        <p>
+          Produktionshistoriken är timvis. Fyra kompletta stängda energikvart grupperas till en
+          timme, och Tibbers rapporterade effektiva timpris används som jämförelsetal. Det är en
+          vägledande beräkning från effektprov, inte exakta kvartspriser, en faktura eller en
+          beräknad batteribesparing. Fasta avgifter, effektavgift och slitage ingår inte. Luckor
+          fylls inte och ingen styrning sker.
+        </p>
+      </section>
       <h3>Tibber (priser hämtas via internet, sparas lokalt)</h3>
       <label
         >Tibber API-token
@@ -1899,6 +1944,7 @@
         bindTibberSettings(Homey);
         bindChargingPreview(Homey);
         bindEconomicHistory(Homey);
+        TibberHistoryPricesSettings.bind(Homey);
         SolarPreview.bind(Homey);
         document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {

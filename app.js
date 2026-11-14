@@ -1,5 +1,6 @@
 'use strict';
 const Homey = require('homey');
+const { TibberHistoryPrices } = require('./lib/pricing/tibber-history-prices');
 const { randomUUID, createHash } = require('node:crypto');
 const { priceStatus, usablePrices } = require('./lib/pricing/coverage');
 const { diagnostics, nibeKey, batteryValues, backupAdvisory } = require('./lib/diagnostics');
@@ -99,7 +100,16 @@ module.exports = class SigenergyApp extends Homey.App {
       },
       5 * 60 * 1000,
     );
-    // Defer first consumption fetch to the timer; do not delay app startup on historical data.
+    // Historical fetches run on timers without delaying startup.
+    this.tibberHistoryPrices = new TibberHistoryPrices(this.homey);
+    this.tibberHistoryPricesTimer = this.homey.setInterval(
+      () => {
+        this.tibberHistoryPrices
+          .sync()
+          .catch(() => this.error('Tibber historical price refresh failed'));
+      },
+      5 * 60 * 1000,
+    );
     this.consumptionTimer = this.homey.setInterval(
       () => this.refreshConsumption().catch(() => this.error('Tibber consumption refresh failed')),
       5 * 60 * 1000,
@@ -529,6 +539,8 @@ module.exports = class SigenergyApp extends Homey.App {
   }
   async onUninit() {
     this.stopping = true;
+    this.tibberHistoryPrices?.stop();
+    if (this.tibberHistoryPricesTimer) this.homey.clearInterval(this.tibberHistoryPricesTimer);
     if (this.settingsChanged) {
       this.homey.settings.removeListener('set', this.settingsChanged);
       this.homey.settings.removeListener('unset', this.settingsChanged);
