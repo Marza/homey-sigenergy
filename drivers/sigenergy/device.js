@@ -2,7 +2,7 @@
 const Homey = require('homey');
 const { SigenergyReader } = require('../../lib/modbus');
 const { readEvdc } = require('../../lib/charging/evdc');
-const { PROFILE, sourceKey, advance } = require('../../lib/energy/meters');
+const { PROFILE, sourceKey, solarSourceKey, advance } = require('../../lib/energy/meters');
 const { IslandController } = require('../../lib/backup/island-controller');
 module.exports = class SigenergyDevice extends Homey.Device {
   async onInit() {
@@ -142,12 +142,15 @@ module.exports = class SigenergyDevice extends Homey.Device {
       ) {
         this.lastEnergyProbeAt = Date.now();
         try {
-          const raw = await reader.energyCounters(PROFILE);
+          const raw = await reader.energyCounters(PROFILE, settings.energySolarSource || 'self');
           if (!current()) return;
           const result = advance(this.getStoreValue('energyCounterState'), {
             values: raw.values,
             key: sourceKey(settings),
+            solarKey: solarSourceKey(settings),
             epoch: Number(settings.energyCounterEpoch || 0),
+            solarEpoch:
+              Number(settings.energyCounterEpoch || 0) + Number(settings.energySolarReference || 0),
             now: Date.now(),
           });
           // Persist high-water marks before publishing any new cumulative value.
@@ -203,6 +206,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
       : {
           ...this.energySnapshot,
           meterProfile: this.activeSettings?.energyMetersProfile,
+          solarSource: this.activeSettings?.energySolarSource || 'self',
           meters: this.energyMeters,
         };
   }

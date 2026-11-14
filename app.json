@@ -41,6 +41,11 @@
       "method": "POST",
       "path": "/charging/preview",
       "public": false
+    },
+    "getEnergyCounters": {
+      "method": "GET",
+      "path": "/energy/counters",
+      "public": false
     }
   },
   "platforms": ["local"],
@@ -336,6 +341,49 @@
           "label": {
             "en": "Counter reference generation (increase only after verifying reset/source change)",
             "sv": "Räknarreferensens generation (öka först efter verifierad återställning/källändring)"
+          },
+          "value": 0,
+          "min": 0,
+          "step": 1
+        },
+        {
+          "id": "energySolarSource",
+          "type": "dropdown",
+          "label": {
+            "en": "Solar kWh source",
+            "sv": "Källa för solenergi (kWh)"
+          },
+          "value": "self",
+          "values": [
+            {
+              "id": "self",
+              "label": {
+                "en": "Sigenergy own PV only",
+                "sv": "Endast Sigenergys egen PV"
+              }
+            },
+            {
+              "id": "third-party",
+              "label": {
+                "en": "Third-party inverter only",
+                "sv": "Endast tredjepartsinverter"
+              }
+            },
+            {
+              "id": "combined",
+              "label": {
+                "en": "Own PV + third-party inverter",
+                "sv": "Egen PV + tredjepartsinverter"
+              }
+            }
+          ]
+        },
+        {
+          "id": "energySolarReference",
+          "type": "number",
+          "label": {
+            "en": "Confirmed solar-source changes (increase by 1 after verification)",
+            "sv": "Bekräftade byten av solkälla (öka med 1 efter kontroll)"
           },
           "value": 0,
           "min": 0,

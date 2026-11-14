@@ -3,6 +3,10 @@ const fs = require('node:fs'),
   path = require('node:path'),
   assert = require('node:assert/strict');
 function verifyEnergy(directory) {
+  assert.equal(
+    typeof require(path.resolve(directory, 'lib/energy/diagnostics')).getCounterDiagnostics,
+    'function',
+  );
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'app.json')));
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
