@@ -1,0 +1,321 @@
+@import 'tailwindcss' source(none);
+@source "./*.html";
+@source "./*.js";
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+    --surface: #ffffff;
+    --canvas: #f4f7f8;
+    --ink: #1e3039;
+    --muted: #536974;
+    --line: #d7e2e5;
+    --soft: #edf4f4;
+    --accent: #14685f;
+    --accent-soft: #e3f3ef;
+    --note: #986322;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface: #1e2b32;
+      --canvas: #142027;
+      --ink: #ecf3f5;
+      --muted: #b1c4cd;
+      --line: #3c5059;
+      --soft: #293c43;
+      --accent: #8bd9c5;
+      --accent-soft: #23463f;
+      --note: #f4c16f;
+    }
+  }
+  * {
+    box-sizing: border-box;
+  }
+  [hidden] {
+    display: none !important;
+  }
+  body {
+    @apply mx-auto max-w-6xl p-4 sm:p-6 text-base leading-relaxed antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--homey-background-color, var(--canvas));
+    color: var(--homey-text-color, var(--ink));
+  }
+  h2 {
+    @apply text-2xl font-bold tracking-tight mb-3;
+  }
+  h3 {
+    @apply text-lg font-semibold mb-3;
+  }
+  h4 {
+    @apply font-semibold mt-5 mb-2;
+  }
+  p {
+    @apply my-3;
+  }
+  label {
+    @apply block text-sm font-medium mt-4 mb-1;
+  }
+  input:not([type='checkbox']),
+  select {
+    @apply block w-full rounded-xl border px-3 py-2.5 mt-1 text-base;
+    min-height: 44px;
+    max-width: 100% !important;
+    border-color: var(--line);
+    background: var(--surface);
+    color: inherit;
+  }
+  input[type='checkbox'] {
+    @apply inline-block align-middle mr-2;
+    width: 20px;
+    height: 20px;
+    accent-color: var(--accent);
+  }
+  label:has(input[type='checkbox']) {
+    @apply flex items-start gap-2 py-1;
+  }
+  label input[type='checkbox'] {
+    @apply shrink-0 mt-0.5;
+  }
+  button {
+    @apply inline-flex items-center justify-center rounded-xl border px-4 py-2.5 mt-3 text-sm font-semibold;
+    min-height: 44px;
+    border-color: var(--line);
+    background: var(--surface);
+    color: inherit;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) {
+    background: var(--soft);
+  }
+  button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  summary:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 3px;
+  }
+  button.primary,
+  button[id^='save'],
+  #econ-run,
+  #previewCharging,
+  #previewSolar {
+    background: var(--accent);
+    color: var(--surface);
+    border-color: transparent;
+  }
+  button.primary:hover:not(:disabled),
+  button[id^='save']:hover:not(:disabled),
+  #econ-run:hover:not(:disabled),
+  #previewCharging:hover:not(:disabled),
+  #previewSolar:hover:not(:disabled) {
+    filter: brightness(0.9);
+    background: var(--accent);
+  }
+  fieldset {
+    @apply min-w-0 rounded-xl border p-4 my-5;
+    border-color: var(--line);
+  }
+  fieldset:disabled {
+    opacity: 0.65;
+  }
+  legend {
+    @apply px-2 text-sm font-semibold;
+  }
+  table {
+    @apply w-full text-sm border-collapse;
+  }
+  th,
+  td {
+    @apply text-left p-2 border-b;
+    border-color: var(--line);
+  }
+  th {
+    @apply font-semibold;
+    color: var(--muted);
+  }
+  td input:not([type='checkbox']) {
+    min-width: 5.5rem;
+  }
+  summary {
+    @apply cursor-pointer p-4 font-semibold;
+    min-height: 48px;
+  }
+  summary::marker {
+    color: var(--accent);
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply text-xs font-bold uppercase tracking-widest mb-1 mt-0;
+    color: var(--accent);
+  }
+  .sub,
+  .muted {
+    @apply text-sm;
+    color: var(--muted);
+  }
+  .pill {
+    @apply rounded-full px-3 py-1.5 text-xs font-semibold;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .tabs {
+    @apply flex flex-wrap gap-1.5 mb-6 p-1.5 rounded-2xl border;
+    border-color: var(--line);
+    background: var(--surface);
+  }
+  .tab {
+    @apply m-0 border-0 rounded-xl grow;
+    background: transparent;
+  }
+  .tab[aria-selected='true'] {
+    background: var(--accent);
+    color: var(--surface);
+  }
+  .tab[aria-selected='true']:hover {
+    background: var(--accent);
+  }
+  .cards {
+    @apply grid grid-cols-2 lg:grid-cols-4 gap-3;
+  }
+  .card,
+  .section,
+  .settingsGroup {
+    @apply rounded-2xl border p-4 sm:p-5 mb-4;
+    border-color: var(--line);
+    background: var(--surface);
+  }
+  .card .value {
+    @apply text-3xl font-bold tracking-tight my-1;
+  }
+  .card .label {
+    @apply text-sm;
+    color: var(--muted);
+  }
+  .statusline {
+    @apply flex flex-wrap justify-between items-center gap-2;
+  }
+  .status {
+    @apply font-semibold;
+  }
+  .warning {
+    color: var(--note);
+  }
+  .ok {
+    color: var(--accent);
+  }
+  .empty {
+    color: var(--muted);
+  }
+  .chart {
+    @apply w-full block;
+    height: 155px;
+  }
+  .legend {
+    @apply flex flex-wrap gap-3 text-xs;
+  }
+  .dot {
+    @apply inline-block rounded-full mr-1;
+    width: 9px;
+    height: 9px;
+  }
+  .note {
+    @apply border-l-2 pl-3 text-sm my-4;
+    border-color: var(--note);
+  }
+  .metric {
+    font-variant-numeric: tabular-nums;
+  }
+  .settings-layout {
+    @apply grid gap-6 md:grid-cols-[13rem_minmax(0,1fr)];
+  }
+  .settings-menu {
+    @apply hidden md:flex flex-col gap-1 self-start sticky top-4;
+  }
+  .settings-menu button {
+    @apply block text-left m-0 border-0 w-full;
+    background: transparent;
+  }
+  .settings-menu button span {
+    @apply block;
+  }
+  .settings-menu button small {
+    @apply block text-xs font-normal mt-0.5;
+    color: var(--muted);
+  }
+  .settings-menu button[aria-current='page'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .category-picker {
+    @apply md:hidden sticky top-0 z-10 pt-2 pb-4 mb-3;
+    background: var(--homey-background-color, var(--canvas));
+  }
+  .category-picker label {
+    @apply mt-0;
+  }
+  .category-picker select {
+    @apply font-semibold;
+  }
+  .page-heading {
+    @apply mb-5;
+  }
+  .page-heading h3 {
+    @apply text-2xl font-bold tracking-tight mb-1;
+    scroll-margin-top: 110px;
+  }
+  .page-heading p:last-child {
+    @apply text-sm mt-2;
+    color: var(--muted);
+  }
+  .settings-details {
+    @apply rounded-2xl border mb-4;
+    border-color: var(--line);
+    background: var(--surface);
+  }
+  .settings-details[open] > summary {
+    @apply border-b;
+    border-color: var(--line);
+  }
+  .details-body {
+    @apply px-4 pb-4 sm:px-5 sm:pb-5;
+  }
+  .details-body > .settingsGroup {
+    @apply border-0 p-0 mt-4 mb-0;
+  }
+  .form-grid {
+    @apply grid sm:grid-cols-2 gap-x-5;
+  }
+  .table-scroll {
+    @apply max-w-full overflow-x-auto my-4;
+  }
+  .text-link {
+    @apply inline p-0 m-0 border-0 rounded text-sm underline;
+    min-height: 0;
+    color: var(--accent);
+    background: transparent;
+  }
+  .settings-page {
+    @apply min-w-0;
+    overflow-wrap: anywhere;
+  }
+  .settings-page > #solarPreviewPanel {
+    @apply rounded-2xl border p-4 sm:p-5;
+    border-color: var(--line);
+    background: var(--surface);
+  }
+  #econ-results article {
+    @apply rounded-xl border p-4 mt-3;
+    border-color: var(--line);
+  }
+  #days td:first-child {
+    @apply font-medium;
+  }
+  #tariffMonthOptions label {
+    @apply m-0;
+  }
+}

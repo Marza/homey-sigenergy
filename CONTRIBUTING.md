@@ -44,3 +44,23 @@ Widget sizing/fit rules live in `lib/widget-layout.js`; the sync command updates
 Cost contract validation is shared by Node and settings through `lib/pricing/cost-model.js`; the sync script generates `settings/cost-model.js`. Preserve explicit component provenance, tax inclusion, directional energy and matching battery boundaries. Economic-preview inputs are user-supplied, and must not unlock runtime financial ranking without a verified source and complete replay basis.
 
 Native Energy companions share `lib/energy/reporting.js` and the existing plant's in-memory snapshot. Keep them free of Modbus connections and control capabilities. Treat source loss as unavailable, preserve signs/real zero, test lifecycle races, and keep kWh behind a documented register profile, preserve integer high-water state before publication, and test reset/source-change acknowledgement. Never substitute rolling history or Tibber imports for cumulative counters. See `docs/homey-energy.md`.
+
+## Settings interface
+
+The settings page is grouped into categories. Navigation only hides and shows existing
+sections; switching categories does not save, discard, or re-create form inputs. Keep
+existing input IDs and save handlers stable. Use native labels, keyboard navigation,
+visible focus indicators, and layouts that work in narrow and dark webviews.
+
+Tailwind CSS and its CLI are locked development dependencies. Edit
+`settings/tailwind.css` and local HTML/JavaScript, then run `npm run build:css` and
+commit the generated `settings/styles.css`. Explicit `@source` rules scan only the
+settings HTML and JavaScript. Use complete class names for generated elements.
+The app loads the compiled stylesheet locally; it needs no Tailwind CDN or runtime.
+
+`npm run check:css` rejects stale compiled CSS in CI. `npm run build:homey` rebuilds
+it before packaging. `node scripts/verify-settings.js` checks the packaged settings
+assets, and release verification repeats that check on the extracted archive.
+An extracted release can be installed without the Tailwind development tools.
+Verify navigation and form saves in light/dark modes at phone and desktop widths;
+synthetic browser checks do not establish physical Homey or iOS compatibility.

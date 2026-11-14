@@ -93,6 +93,7 @@ function view(file) {
   const context = vm.createContext({
     document,
     Homey,
+    SettingsNavigation: require('../settings/navigation'),
     Date: Clock,
     setTimeout: () => 0,
     clearTimeout() {},

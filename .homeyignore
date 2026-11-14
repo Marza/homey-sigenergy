@@ -8,3 +8,5 @@ scripts/
 dist/
 coverage/
 eslint.config.cjs
+
+settings/tailwind.css

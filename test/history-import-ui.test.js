@@ -39,7 +39,14 @@ function view(api) {
     fs.readFileSync(path.join(__dirname, '../lib/source-status.js'), 'utf8') +
     '\n' +
     [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
-  const context = vm.createContext({ document, Homey, Blob, URL, setTimeout() {} });
+  const context = vm.createContext({
+    document,
+    Homey,
+    SettingsNavigation: require('../settings/navigation'),
+    Blob,
+    URL,
+    setTimeout() {},
+  });
   vm.runInContext(script, context);
   return {
     element: (id) => document.getElementById(id),
