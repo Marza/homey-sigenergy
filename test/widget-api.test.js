@@ -54,8 +54,8 @@ test('snapshot excludes credentials, addresses, unknown fields and all but the l
       slots: [
         {
           t: now,
-          counts: { gridW: 1, pvW: 1, soc: 1, secret },
-          sum: { gridW: 2000, pvW: 500, soc: 70, secret },
+          counts: { gridW: 1, pvW: 1, soc: 1, essW: 2, secret },
+          sum: { gridW: 2000, pvW: 500, soc: 70, essW: 4800, secret },
           secret,
         },
         { t: now - 900000, secret },
@@ -93,6 +93,8 @@ test('snapshot excludes credentials, addresses, unknown fields and all but the l
     },
   });
   assert.equal(r.schema, 1);
+  assert.equal(r.values.historyState.slots[0].sum.essW, 4800);
+  assert.equal(r.values.historyState.slots[0].counts.essW, 2);
   assert.equal(r.values.historyState.slots.length, 1);
   assert.equal(r.values.historyState.slots[0].t, now);
   assert.equal(r.values.nibeStatus.readings.outdoorC, 3);
@@ -198,6 +200,7 @@ test('actual widget bridge needs no settings API, handles network failure/recove
   assert.equal(v.ready, 1);
   assert.match(v.elements.get('state').textContent, /Kunde inte läsa/);
   assert.equal(v.elements.get('soc').textContent, '–');
+  assert.equal(v.elements.get('batteryPower').textContent, '–');
   v.timers[0]();
   v.pending[1].resolve(snapshot());
   await flush();

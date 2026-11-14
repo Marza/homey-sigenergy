@@ -33,8 +33,8 @@ function view(file) {
       slots: [
         {
           t: now - 1000,
-          counts: { gridW: 1, pvW: 1, soc: 1 },
-          sum: { gridW: 2000, pvW: 1000, soc: 60 },
+          counts: { gridW: 1, pvW: 1, soc: 1, essW: 1 },
+          sum: { gridW: 2000, pvW: 1000, soc: 60, essW: -1200 },
         },
       ],
       daily: [],
@@ -124,22 +124,26 @@ for (const [file, grid, outdoor] of [
   test(`${file}: success → failure → recovery → disabled clears cached readings`, () => {
     const v = view(file);
     assert.notEqual(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.match(v.text('batteryPower'), /Urladdar/);
     assert.match(v.text(outdoor), /[−-]2/);
     v.values.sigenergyError = 'timeout';
     v.values.nibeError = 'ECONNREFUSED';
     v.refresh();
     assert.equal(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.equal(v.text('batteryPower'), '–');
     assert.equal(v.text(outdoor), '–');
     assert.match(v.text(file.startsWith('widgets/') ? 'outdoorState' : 'nibeUpdated'), /nekades/);
     v.values.sigenergyError = null;
     v.values.nibeError = null;
     v.refresh();
     assert.notEqual(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.match(v.text('batteryPower'), /Urladdar/);
     assert.match(v.text(outdoor), /[−-]2/);
     v.values.sourceConfig.sigenergy.enabled = false;
     v.values.nibeHost = '';
     v.refresh();
     assert.equal(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.equal(v.text('batteryPower'), '–');
     assert.equal(v.text(outdoor), '–');
   });
   test(`${file}: stale, future, empty and failed history never retain previous figures`, () => {
@@ -147,29 +151,36 @@ for (const [file, grid, outdoor] of [
     v.advance(120000);
     v.refresh();
     assert.equal(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.equal(v.text('batteryPower'), '–');
     assert.equal(v.text(outdoor), '–');
     v.advance(-120000);
     v.values.sigenergyStatus.readAt = new Date(Date.now() + 600000).toISOString();
     v.refresh();
     assert.equal(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.equal(v.text('batteryPower'), '–');
     v.values.sigenergyStatus.readAt = new Date(Date.now() - 1000).toISOString();
     v.refresh();
     assert.notEqual(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.match(v.text('batteryPower'), /Urladdar/);
     v.failures.add('historyState');
     v.refresh();
     assert.equal(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.equal(v.text('batteryPower'), '–');
     v.failures.clear();
     v.refresh();
     assert.notEqual(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.match(v.text('batteryPower'), /Urladdar/);
     v.values.historyState.slots = [];
     v.refresh();
     assert.equal(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.equal(v.text('batteryPower'), '–');
   });
   test(`${file}: failed settings reads and changed Nibe configuration hide cached values`, () => {
     const v = view(file);
     v.failures.add('sourceConfig');
     v.refresh();
     assert.equal(v.text(grid), '–');
+    if (file.startsWith('widgets/')) assert.equal(v.text('batteryPower'), '–');
     assert.equal(v.text(outdoor), '–');
     v.failures.clear();
     v.values.nibePort = 503;
