@@ -197,12 +197,14 @@
       }
       @media (prefers-color-scheme: dark) {
         #solarPreviewPanel,
-        #economicHistoryPanel {
+        #economicHistoryPanel,
+        #costContractPanel {
           color: var(--homey-text-color, #e8edf2);
         }
       }
       #solarPreviewPanel p,
-      #economicHistoryPanel p {
+      #economicHistoryPanel p,
+      #costContractPanel p {
         color: inherit;
       }
       #solarPreviewPanel fieldset {
@@ -473,7 +475,7 @@
         </button>
         <p id="optimizerMessage" role="status"></p>
       </div>
-      <div class="settingsGroup">
+      <div class="settingsGroup" id="costContractPanel">
         <h3>Ekonomiska jämförelser – avtalsunderlag</h3>
         <p class="note">
           Full ekonomisk rankning är inte tillgänglig för historikens nuvarande simulering. Den
@@ -481,47 +483,75 @@
           import-/exportvolymer samlas separat. Effektavgiften redovisas separat.
         </p>
         <p class="sub">
-          Ange endast rörliga tillägg som inte redan ingår i priset. Importpriset ska inkludera
-          moms. Exportersättningen är ett separat signerat belopp efter tillämplig moms. Inga
-          aktuella avtalspriser förifylls.
+          Ange endast rörliga tillägg som inte redan ingår i priset. Inköpsprisets momshantering
+          bestäms av valt prisunderlag. Försäljningsersättningen anges som det belopp du får; appen
+          lägger inte på moms på försäljning. Inga aktuella avtalspriser förifylls.
         </p>
         <label
-          >Avtalskälla / prisunderlag <input id="costSource" type="text" maxlength="300"
+          >Avtalskälla / prisunderlag (obligatoriskt)
+          <input id="costSource" type="text" maxlength="300"
         /></label>
-        <label>Kontrollerat datum <input id="costCheckedOn" type="date" /></label>
+        <label>Kontrollerat datum (obligatoriskt) <input id="costCheckedOn" type="date" /></label>
+        <label
+          >Inköpsprisunderlag
+          <select id="costImportPriceBasis">
+            <option value="">Välj vilket pris tilläggen ska läggas på</option>
+            <option value="total-incl-vat">Inköpspris som redan inkluderar moms</option>
+            <option value="spot-ex-vat">Rent spotpris exklusive moms</option>
+          </select>
+        </label>
+        <p>
+          Välj rent spotpris för en formel av typen (spotpris + tillägg) × (1 + moms). Ett redan
+          momsinkluderat inköpspris får inget nytt momspåslag; bara saknade tillägg läggs på. Valet
+          ändrar inte appens hämtade Tibber-priser.
+        </p>
         <label
           ><input id="costImportIncludesEnergyTax" type="checkbox" /> Energiskatt ingår redan i
           importpriset (tilläggsskatt ska vara 0)</label
         >
         <label
           >Tillägg energiskatt exkl. moms (kr/kWh)
-          <input id="costEnergyTax" type="number" min="0" step="any"
+          <input id="costEnergyTax" type="text" inputmode="decimal"
         /></label>
         <label
           >Tillägg rörlig importnätavgift exkl. moms (kr/kWh)
-          <input id="costGridImport" type="number" min="0" step="any"
+          <input id="costGridImport" type="text" inputmode="decimal"
         /></label>
         <label
-          >Exportnytta efter tillämplig moms (kr/kWh)
-          <input id="costExportBenefit" type="number" step="any"
+          >Övriga rörliga inköpstillägg exkl. moms (kr/kWh)
+          <input id="costOtherImport" type="text" inputmode="decimal" />
+        </label>
+        <p>
+          Här kan leverantörens fasta och rörliga påslag per kWh summeras, om de inte redan ingår i
+          prisunderlaget. Ingen månadsavgift. Alla belopp anges i kronor: öre delas med 100. Punkt
+          och kommatecken går bra.
+        </p>
+        <label
+          >Extra exportersättning / nätnytta utöver säljpriset (kr/kWh)
+          <input id="costExportBenefit" type="text" inputmode="decimal"
         /></label>
         <label
-          >Exportavgift efter tillämplig moms (kr/kWh)
-          <input id="costExportFee" type="number" min="0" step="any"
+          >Exportavgift som dras från säljpriset (kr/kWh)
+          <input id="costExportFee" type="text" inputmode="decimal"
         /></label>
+        <p>
+          Försäljning: ersättningen används som angiven, utan att appen lägger på moms. Exportnytta
+          och exportavgift är tillägg utöver det separata försäljningspriset.
+        </p>
         <label
-          >Momssats för tillägg (0–1)
-          <input id="costVatRate" type="number" min="0" max="1" step="any"
+          >Inköpsmoms (0–1; på spotpris och/eller inköpstillägg)
+          <input id="costVatRate" type="text" inputmode="decimal"
         /></label>
         <label
           >Antaget batterislitage för kostnadsjämförelse (kr/kWh)
-          <input id="costBatteryWear" type="number" min="0" step="any"
+          <input id="costBatteryWear" type="text" inputmode="decimal"
         /></label>
         <p class="sub">
           Slitagevärdet här används för kostnadsjämförelsen. Simuleringens slitageantagande sparas
           separat ovan. Fasta avgifter ingår inte. Sparat underlag är användarangivet och verifieras
           inte av appen.
         </p>
+        <p id="costFormula" role="status"></p>
         <button type="button" id="saveCostContract">Spara kostnadsunderlag</button>
         <p id="costMessage" role="status"></p>
         <div id="economicHistoryPanel">
@@ -1596,34 +1626,115 @@
       }
       function bindCostSettings(Homey) {
         const fields = {
-          energyTaxExVatSekPerKWh: 'costEnergyTax',
-          gridImportExVatSekPerKWh: 'costGridImport',
-          gridExportBenefitSekPerKWh: 'costExportBenefit',
-          gridExportFeeSekPerKWh: 'costExportFee',
-          vatRate: 'costVatRate',
-          batteryWearSekPerKWh: 'costBatteryWear',
+          energyTaxExVatSekPerKWh: ['costEnergyTax', 'Tillägg energiskatt'],
+          gridImportExVatSekPerKWh: ['costGridImport', 'Rörlig importnätavgift'],
+          otherImportExVatSekPerKWh: ['costOtherImport', 'Övriga inköpstillägg'],
+          gridExportBenefitSekPerKWh: ['costExportBenefit', 'Exportnytta'],
+          gridExportFeeSekPerKWh: ['costExportFee', 'Exportavgift'],
+          vatRate: ['costVatRate', 'Inköpsmoms'],
+          batteryWearSekPerKWh: ['costBatteryWear', 'Batterislitage'],
         };
         const el = (id) => document.getElementById(id),
           save = el('saveCostContract');
+        let generation = 0,
+          timeout,
+          editRevision = 0;
+        const cancelTimeout = () => {
+          if (typeof clearTimeout === 'function') clearTimeout(timeout);
+        };
+        const parse = (id, label) => {
+          const value = String(el(id).value ?? '').trim();
+          if (!value) throw new Error(`Fyll i ${label}; ange 0 endast om tillägget saknas.`);
+          if (!/^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)$/.test(value))
+            throw new Error(`Ange ett giltigt tal i ${label} (punkt eller kommatecken).`);
+          const number = Number(value.replace(',', '.'));
+          if (!Number.isFinite(number)) throw new Error(`Ogiltigt tal i ${label}.`);
+          return number;
+        };
+        const read = () => {
+          const date = el('costCheckedOn');
+          const checkedOn = /^\d{4}-\d{2}-\d{2}$/.test(date.value)
+            ? date.value
+            : date.valueAsDate instanceof Date && Number.isFinite(date.valueAsDate.getTime())
+              ? date.valueAsDate.toISOString().slice(0, 10)
+              : date.value;
+          const value = {
+            schema: 2,
+            currency: 'SEK',
+            source: el('costSource').value,
+            checkedOn,
+            importPriceBasis: el('costImportPriceBasis').value,
+            importIncludesEnergyTax: el('costImportIncludesEnergyTax').checked,
+            ...Object.fromEntries(
+              Object.entries(fields).map(([key, [id, label]]) => [key, parse(id, label)]),
+            ),
+          };
+          return CostModel.validateCostContract(value);
+        };
+        const formula = () => {
+          try {
+            const c = read();
+            const extra =
+              c.gridImportExVatSekPerKWh +
+              c.otherImportExVatSekPerKWh +
+              (c.importIncludesEnergyTax ? 0 : c.energyTaxExVatSekPerKWh);
+            const fmt = (n) =>
+              Number(n.toFixed(6)).toLocaleString('sv-SE', { maximumFractionDigits: 6 });
+            const buying =
+              c.importPriceBasis === 'spot-ex-vat'
+                ? `${fmt(1 + c.vatRate)} × (spotpris + ${fmt(extra)} kr/kWh)`
+                : `inköpspris inkl. moms + ${fmt(extra * (1 + c.vatRate))} kr/kWh`;
+            el('costFormula').textContent =
+              `Köp: ${buying}. Försäljning: angiven ersättning + ${fmt(c.gridExportBenefitSekPerKWh)} − ${fmt(c.gridExportFeeSekPerKWh)} kr/kWh, utan nytt momspåslag. Ingen automatisk prishämtning eller ekonomisk rankning aktiveras.`;
+          } catch {
+            el('costFormula').textContent =
+              'Fyll i källa, datum, prisunderlag och alla belopp för att se formeln.';
+          }
+        };
+        const changed = () => {
+          editRevision++;
+          const spot = el('costImportPriceBasis').value === 'spot-ex-vat';
+          el('costImportIncludesEnergyTax').disabled = spot;
+          if (spot) el('costImportIncludesEnergyTax').checked = false;
+          el('costMessage').textContent = 'Ändringar är inte sparade.';
+          formula();
+        };
+        for (const id of [
+          'costSource',
+          'costCheckedOn',
+          'costImportPriceBasis',
+          'costImportIncludesEnergyTax',
+          ...Object.values(fields).map((v) => v[0]),
+        ]) {
+          el(id).oninput = changed;
+          el(id).onchange = changed;
+        }
         save.disabled = true;
         Homey.get('costContract', (error, value) => {
           if (error) {
-            el('costMessage').textContent = 'Kostnadsunderlaget kunde inte läsas.';
+            el('costMessage').textContent =
+              'Kostnadsunderlaget kunde inte läsas. Öppna sidan igen innan du sparar.';
             return;
           }
           save.disabled = false;
           if (!value) {
             el('costMessage').textContent = 'Inget kostnadsunderlag sparat.';
+            formula();
             return;
           }
           try {
             const c = CostModel.validateCostContract(value);
-            for (const [key, id] of Object.entries(fields)) el(id).value = c[key];
+            for (const [key, [id]] of Object.entries(fields)) el(id).value = c[key] ?? 0;
             el('costSource').value = c.source;
             el('costCheckedOn').value = c.checkedOn;
+            el('costImportPriceBasis').value = c.importPriceBasis || 'total-incl-vat';
             el('costImportIncludesEnergyTax').checked = c.importIncludesEnergyTax;
+            el('costImportIncludesEnergyTax').disabled = c.importPriceBasis === 'spot-ex-vat';
             el('costMessage').textContent =
-              'Användarangivet underlag. Full jämförelse kräver matchande energi och separata import-/exportpriser.';
+              c.schema === 1
+                ? 'Äldre underlag läst med oförändrad prisbetydelse. Övriga inköpstillägg är 0 tills du ändrar dem.'
+                : 'Sparat underlag inläst. Ingen styrning eller full ekonomisk rankning.';
+            formula();
           } catch {
             el('costMessage').textContent =
               'Ogiltigt sparat kostnadsunderlag. Kontrollera alla fält.';
@@ -1633,28 +1744,54 @@
           if (save.disabled) return;
           let c;
           try {
-            if (Object.values(fields).some((id) => String(el(id).value).trim() === ''))
-              throw new Error('Fyll i alla kostnadsfält; ange 0 endast när tillägget saknas.');
-            c = CostModel.validateCostContract({
-              schema: 1,
-              currency: 'SEK',
-              source: el('costSource').value,
-              checkedOn: el('costCheckedOn').value,
-              importIncludesEnergyTax: el('costImportIncludesEnergyTax').checked,
-              ...Object.fromEntries(
-                Object.entries(fields).map(([key, id]) => [key, Number(el(id).value)]),
-              ),
-            });
+            if (!String(el('costSource').value || '').trim())
+              throw new Error('Fyll i Avtalskälla / prisunderlag ovanför datumfältet.');
+            if (!el('costCheckedOn').value && !el('costCheckedOn').valueAsDate)
+              throw new Error('Fyll i Kontrollerat datum.');
+            if (!el('costImportPriceBasis').value) throw new Error('Välj Inköpsprisunderlag.');
+            c = read();
           } catch (error) {
             el('costMessage').textContent = error.message;
             return;
           }
+          const current = ++generation,
+            revision = editRevision;
           save.disabled = true;
+          el('costMessage').textContent = 'Sparar och kontrollerar…';
+          if (typeof setTimeout === 'function')
+            timeout = setTimeout(() => {
+              if (current !== generation) return;
+              generation++;
+              save.disabled = false;
+              el('costMessage').textContent =
+                'Sparbekräftelse saknas. Värdena kan ha sparats; öppna sidan igen och kontrollera innan du försöker på nytt.';
+            }, 8000);
           Homey.set('costContract', c, (error) => {
-            save.disabled = false;
-            el('costMessage').textContent = error
-              ? error.message
-              : 'Kostnadsunderlag sparat. Ingen styrning eller full ekonomisk rankning aktiverad.';
+            if (current !== generation) return;
+            if (error) {
+              cancelTimeout();
+              save.disabled = false;
+              el('costMessage').textContent = error.message;
+              return;
+            }
+            Homey.get('costContract', (readError, saved) => {
+              if (current !== generation) return;
+              cancelTimeout();
+              save.disabled = false;
+              let verified = false;
+              try {
+                verified =
+                  !readError &&
+                  JSON.stringify(CostModel.validateCostContract(saved)) === JSON.stringify(c);
+              } catch {
+                /* Never claim success without reading back the saved contract. */
+              }
+              el('costMessage').textContent = !verified
+                ? 'Underlaget skickades men kunde inte bekräftas genom återläsning. Öppna sidan igen och kontrollera.'
+                : revision !== editRevision
+                  ? 'Underlaget från sparningen är bekräftat, men senare ändringar i fälten är inte sparade.'
+                  : 'Kostnadsunderlag sparat och återläst. Ingen styrning eller full ekonomisk rankning aktiverad.';
+            });
           });
         };
       }

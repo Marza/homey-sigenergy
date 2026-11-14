@@ -328,7 +328,12 @@ test('cost form preserves explicit contract values and validates blanks/tax basi
   assert.equal(v.element('costImportIncludesEnergyTax').checked, true);
   assert.equal(v.element('costVatRate').value, 0.25);
   v.element('saveCostContract').onclick();
-  assert.deepEqual(v.values.costContract, costContract());
+  assert.deepEqual(v.values.costContract, {
+    ...costContract(),
+    schema: 2,
+    importPriceBasis: 'total-incl-vat',
+    otherImportExVatSekPerKWh: 0,
+  });
   assert.match(v.element('costMessage').textContent, /Ingen styrning/);
   const before = v.writes.length;
   v.element('costVatRate').value = '';

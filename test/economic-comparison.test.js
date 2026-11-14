@@ -116,7 +116,7 @@ for (const [name, mutate, reason] of [
   [
     'unknown schema',
     (i) => {
-      i.schema = 2;
+      i.schema = 3;
     },
     'provenance',
   ],
