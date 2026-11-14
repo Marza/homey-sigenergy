@@ -45,7 +45,7 @@ test('combined backup round trip includes archive, no token/config/sync, support
   const f = fixture(),
     file = exportBackup(f.homey);
   assert.equal(file.meter.months[0].month, '2026-10');
-  assert.equal(file.history.schema, 5);
+  assert.equal(file.history.schema, 6);
   assert.ok(!JSON.stringify(file).includes('private-token'));
   const before = JSON.stringify([...f.map]);
   const preview = previewBackup(f.homey, file);

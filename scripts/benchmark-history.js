@@ -20,6 +20,7 @@ const slots = Array.from({ length: SLOT_RETENTION }, (_, i) => ({
   evWh: 1750,
   coverageMs: SLOT_MS,
   essCoverageMs: SLOT_MS,
+  fieldCoverageMs: { gridW: SLOT_MS, pvW: SLOT_MS, essW: SLOT_MS, evW: SLOT_MS },
   importWh: 1000,
   exportWh: 0,
   directionalCoverageMs: SLOT_MS,
@@ -36,7 +37,7 @@ const settings = {
 const store = new HistoryStore(settings, () => now);
 const file = {
   format: FORMAT,
-  schema: 5,
+  schema: 6,
   timezone: TIMEZONE,
   exportedAt: new Date(now).toISOString(),
   slots,

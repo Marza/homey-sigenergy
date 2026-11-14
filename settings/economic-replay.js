@@ -7,6 +7,18 @@
     let state = null,
       run = 0;
     const messages = {
+      'ambiguous-solar-plant': 'Exakt en parad Sigenergy-anläggning krävs för sol/bil-modellen.',
+      'confirm-historical-ev-baseline':
+        'Bekräfta det hypotetiska laddscenariot och att perioden saknar befintlig billaddning.',
+      'incomplete-solar-ev-window':
+        'Perioden saknar komplett solunderlag, har inkonsekventa solvärden eller innehåller uppmätt billaddning.',
+      'ev-target-below-saved-minimum': 'Bilens mål måste minst motsvara sparad minsta SoC.',
+      'ev-deadline-unmet':
+        'Bilens laddmål kunde inte nås före den antagna avgången. Kostnadsskillnaden hålls därför okänd.',
+      'invalid-solar-comparison-input':
+        'Sol/bil-modellen tillåter 1–168 timmar och högst 10 olika effekttak.',
+      'invalid-solar-ev-assumptions':
+        'Kontrollera solmålet, sparade bilinställningar, bilens SoC, laddeffekter och tidsfönster.',
       'contract-inputs-changed':
         'Sparade villkor har ändrats. Läs om versionerna och kontrollera underlaget innan du publicerar.',
       'confirm-contract-provenance': 'Bekräfta giltighetsdatum och prisernas kostnadsinnehåll.',
@@ -18,7 +30,7 @@
       'incomplete-comparison-window':
         'Perioden saknar komplett energi-, batteri-, pris- eller avtalsunderlag.',
       'terminal-energy-not-restored':
-        'Batteriet kunde inte återladdas till startenergin inom perioden.',
+        'Husbatteriets slutenergi matchar inte startenergin. Välj en längre period eller justera antagandena.',
       'insufficient-demand-peaks': 'Det finns för få timtoppar för den sparade effekttariffen.',
       'tariff-changed-within-month':
         'Effekttariffen ändras inom samma månad. En sådan månadsavgift kan inte jämföras här.',
@@ -32,6 +44,17 @@
       'invalid-comparison-data': 'Kontrollera indata, sparade villkor och batteriparametrar.',
       'invalid-battery-assumptions':
         'Kontrollera kapacitet, startenergi, reserv, effekter och verkningsgrader.',
+    };
+    const missingLabels = {
+      energyQuarters: 'energi',
+      batteryCoverageQuarters: 'batteritäckning',
+      contractQuarters: 'avtal',
+      purchasePriceQuarters: 'köppris',
+      productionPriceQuarters: 'säljpris',
+      solarCoverageQuarters: 'soltäckning',
+      solarEnergyQuarters: 'solenergi',
+      knownEvChargingQuarters: 'befintlig billaddning',
+      inconsistentSolarQuarters: 'inkonsekventa solvärden',
     };
     const explain = (reason) => messages[reason] || reason || 'Underlaget är otillräckligt.';
     function api(method, path, body = null) {
@@ -155,15 +178,58 @@
       'charge-eta',
       'discharge-eta',
       'model-confirm',
+      'solar-enabled',
+      'solar-target',
+      'ev-initial',
+      'ev-target',
+      'ev-min',
+      'ev-max',
+      'ev-arrival',
+      'ev-departure',
+      'ev-history-confirm',
+      'ev-absent-confirm',
     ];
     for (const id of inputs) {
       el(id).oninput = clearResults;
       el(id).onchange = clearResults;
     }
+    const solarModeChanged = () => {
+      el('solar-fields').disabled = !el('solar-enabled').checked;
+      if (el('solar-enabled').checked && !el('ev-departure').value)
+        el('ev-departure').value = el('hours').value;
+      clearResults();
+    };
+    el('solar-enabled').oninput = solarModeChanged;
+    el('solar-enabled').onchange = solarModeChanged;
+    Homey.get('chargingConfig', (error, c) => {
+      if (
+        error ||
+        !c ||
+        ![c.usableBatteryKWh, c.chargingEfficiency, c.maxChargingPowerKW, c.minimumSoc].every(
+          Number.isFinite,
+        )
+      ) {
+        el('ev-config').textContent =
+          'Spara och kontrollera bilens laddinställningar innan sol/bil-modellen används.';
+        return;
+      }
+      el('ev-config').textContent =
+        'Sparad bilkapacitet ' +
+        fmt(c.usableBatteryKWh) +
+        ' kWh, laddverkningsgrad ' +
+        fmt(c.chargingEfficiency) +
+        ', maxeffekt ' +
+        fmt(c.maxChargingPowerKW) +
+        ' kW och minsta mål-SoC ' +
+        fmt(c.minimumSoc) +
+        ' % används. Spara ändrade bilinställningar före jämförelsen.';
+      if (!el('ev-max').value) el('ev-max').value = String(c.maxChargingPowerKW);
+    });
     Homey.get('optimizerConfig', (error, c) => {
       if (error || !c) return;
       const values = {
         capacity: c.batteryCapacityKWh,
+        'solar-target': c.batteryCapacityKWh,
         initial: (c.batteryCapacityKWh * c.initialSocPercent) / 100,
         reserve:
           (c.batteryCapacityKWh * Math.max(c.backupReservePercent, c.reserveMinPercent)) / 100,
@@ -202,22 +268,35 @@
             dischargeEfficiency: num('discharge-eta'),
           },
         };
-        const r = await api('POST', '/economics/replay', body);
+        const coupled = el('solar-enabled').checked;
+        if (coupled) {
+          body.battery.solarTargetKWh = num('solar-target');
+          body.ev = {
+            initialSoc: num('ev-initial'),
+            targetSoc: num('ev-target'),
+            minPowerKW: num('ev-min'),
+            maxPowerKW: num('ev-max'),
+            availableFromHours: num('ev-arrival'),
+            deadlineHours: num('ev-departure'),
+            confirmHistoricalTask: el('ev-history-confirm').checked,
+            confirmNoExistingEvCharging: el('ev-absent-confirm').checked,
+          };
+        }
+        const r = await api(
+          'POST',
+          coupled ? '/economics/solar-ev-replay' : '/economics/replay',
+          body,
+        );
         if (generation !== run) return;
         if (!Array.isArray(r?.candidates)) {
           el('result').textContent =
             explain(r?.reason) +
             (r?.missing
-              ? ' Saknade kvart: energi ' +
-                r.missing.energyQuarters +
-                ', batteritäckning ' +
-                r.missing.batteryCoverageQuarters +
-                ', avtal ' +
-                r.missing.contractQuarters +
-                ', köppris ' +
-                r.missing.purchasePriceQuarters +
-                ', säljpris ' +
-                r.missing.productionPriceQuarters +
+              ? ' Saknade/uteslutna kvart: ' +
+                Object.entries(r.missing)
+                  .filter(([k, v]) => missingLabels[k] && Number.isInteger(v))
+                  .map(([k, v]) => missingLabels[k] + ' ' + v)
+                  .join(', ') +
                 '.'
               : '');
           return;
@@ -259,6 +338,45 @@
           )
         )
           throw Error('Ogiltigt beräkningssvar.');
+        if (
+          coupled &&
+          (r.mode !== 'coupled-solar-ev' ||
+            r.candidates.length !== capsKW.length * 2 ||
+            !capsKW.every((cap) =>
+              ['home-first', 'ev-first'].every(
+                (strategy) =>
+                  r.candidates.filter((c) => c.capKW === cap && c.strategy === strategy).length ===
+                  1,
+              ),
+            ) ||
+            !r.evAssumptions ||
+            !['capacityKWh', 'efficiency', 'minPowerKW', 'maxPowerKW'].every((k) =>
+              Number.isFinite(r.evAssumptions[k]),
+            ) ||
+            r.candidates.some(
+              (c) =>
+                !['home-first', 'ev-first'].includes(c.strategy) ||
+                !c.ev ||
+                !c.solar ||
+                ![
+                  'targetStoredKWh',
+                  'finalStoredKWh',
+                  'inputKWh',
+                  'lossesKWh',
+                  'unmetKWh',
+                  'deadlineHours',
+                ].every((k) => Number.isFinite(c.ev[k])) ||
+                ![
+                  'generationKWh',
+                  'toHouseKWh',
+                  'toEvKWh',
+                  'toHomeKWh',
+                  'exportKWh',
+                  'evNonSolarKWh',
+                ].every((k) => Number.isFinite(c.solar[k])),
+            ))
+        )
+          throw Error('Ogiltigt sol/bil-svar.');
         const date = (t) => new Date(t).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' });
         el('result').textContent =
           'Period ' +
@@ -267,11 +385,33 @@
           date(r.to) +
           '. Indikativ modell; ingen ekonomisk rangordning. ' +
           r.contractVersions.length +
-          ' kostnadsversioner.';
+          ' kostnadsversioner.' +
+          (coupled
+            ? ' Historiskt exempel med hypotetisk bil: referensen laddar tidigt med passivt husbatteri. Samma laddmål och avgång jämförs.'
+            : '');
+        if (coupled)
+          el('result').textContent +=
+            ' Bilantaganden: ' +
+            fmt(r.evAssumptions.capacityKWh) +
+            ' kWh, laddverkningsgrad ' +
+            fmt(r.evAssumptions.efficiency) +
+            ', aktiv laddeffekt ' +
+            fmt(r.evAssumptions.minPowerKW) +
+            '–' +
+            fmt(r.evAssumptions.maxPowerKW) +
+            ' kW.';
         for (const c of r.candidates) {
           const card = document.createElement('article'),
             title = document.createElement('h4');
-          title.textContent = 'Effekttak ' + fmt(c.capKW) + ' kW';
+          title.textContent =
+            (c.strategy
+              ? c.strategy === 'home-first'
+                ? 'Batteri först · '
+                : 'Bil först · '
+              : '') +
+            'Effekttak ' +
+            fmt(c.capKW) +
+            ' kW';
           card.appendChild(title);
           const line = (text) => {
             const p = document.createElement('p');
@@ -279,7 +419,7 @@
             card.appendChild(p);
           };
           line(
-            'Laddat ' +
+            'Husbatteri: laddat ' +
               fmt(c.chargedKWh) +
               ' kWh, levererat ' +
               fmt(c.dischargedKWh) +
@@ -293,8 +433,43 @@
               fmt(c.uncoveredKWh) +
               ' kWh.',
           );
+          if (c.ev) {
+            line(
+              'Bilens lagrade energi vid avgång: ' +
+                fmt(c.ev.finalStoredKWh) +
+                ' / ' +
+                fmt(c.ev.targetStoredKWh) +
+                ' kWh. Antagen avgång efter ' +
+                fmt(c.ev.deadlineHours) +
+                ' timmar. Bilens laddenergi ' +
+                fmt(c.ev.inputKWh) +
+                ' kWh, laddförluster ' +
+                fmt(c.ev.lossesKWh) +
+                ' kWh, ej uppnått mål ' +
+                fmt(c.ev.unmetKWh) +
+                ' kWh.',
+            );
+            line(
+              'Vald solproduktion ' +
+                fmt(c.solar.generationKWh) +
+                ' kWh. Före laddförluster: direkt till hushåll ' +
+                fmt(c.solar.toHouseKWh) +
+                ' kWh, till bil ' +
+                fmt(c.solar.toEvKWh) +
+                ' kWh, till husbatteri ' +
+                fmt(c.solar.toHomeKWh) +
+                ' kWh, kvarvarande export ' +
+                fmt(c.solar.exportKWh) +
+                ' kWh. Bilens övriga matning ' +
+                fmt(c.solar.evNonSolarKWh) +
+                ' kWh kan komma från nät eller husbatteri.',
+            );
+          }
           for (const [key, label] of [
-            ['baseline', 'Utan aktivt batteri'],
+            [
+              'baseline',
+              coupled ? 'Referens: bilen laddas tidigt, passivt husbatteri' : 'Utan aktivt batteri',
+            ],
             ['scenario', 'Med modellerat batteri'],
           ]) {
             const v = c[key];

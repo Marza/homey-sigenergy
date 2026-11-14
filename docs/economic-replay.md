@@ -23,7 +23,7 @@ Restore requires explicit confirmation of the same installation and the expected
 
 New ESS integrations record `essCoverageMs` independently from grid coverage. The battery replay requires every selected, closed quarter to have full grid coverage, full directional import/export coverage, and full ESS coverage with finite consistent energy values. Missing legacy ESS coverage is never inferred from observation counts, net coverage or a finite `essWh`. Historical data remains intact; only newly covered quarters qualify. A quarter spanning the upgrade or a restart/outage may remain partial.
 
-History exports now use **version 5**, adding optional quarter-level `essCoverageMs`. Stored state/daily schema 3 and quarter schema 2 remain compatible. Valid exports 1–4 are still accepted; they do not acquire missing battery coverage. Version 4 and earlier cannot carry this field. Keep a pre-upgrade history backup for downgrade: older app versions cannot restore a version-5 export. Ordinary combined backups remain wrapper schema 1, with a version-5 `history` member. Cost terms still use their separate export.
+History exports now use **version 6**, carrying independent `fieldCoverageMs`; version 5 introduced optional quarter-level `essCoverageMs`. Stored state/daily schema 3 and quarter schema 2 remain compatible. Valid exports 1–5 are still accepted; they do not acquire missing battery coverage. Version 4 and earlier cannot carry this field. Keep a pre-upgrade history backup for downgrade: older app versions cannot restore a version-6 export. Ordinary combined backups remain wrapper schema 1, with a version-6 `history` member. Cost terms still use their separate export.
 
 ## Shared battery model and energy balance
 
@@ -54,3 +54,7 @@ A total and `indicativeNetDifferenceSek` are returned only when all intervals ha
 All new routes are private (`public: false`): GET/POST `/economics/contracts`, POST `/economics/contracts/restore`, and POST `/economics/replay`. They use local snapshots only; replay makes no network calls or hardware writes. Inputs are bounded to 32 days/3,072 quarters and 20 scenarios; terms are separately bounded.
 
 Synthetic tests cover date/DST boundaries, frozen drafts/tariffs, concurrent publication, idempotent/conflicting restore, independent ESS coverage/versioned export, signed flows, reserve/power/efficiency, recharge/export opportunity cost, conservation, terminal depletion, negative prices, missing data, tariff changes and UI late-response/error handling. A local synthetic browser/API run exercises the settings flow and component display. These do not establish physical billing agreement, AC measurement boundaries, usable battery capacity or native mobile-client acceptance. Those checks remain after review, release and installation; issue #10 remains open for them and for a counterfactual-compatible price source.
+
+## Coupled solar and EV mode
+
+The optional [coupled solar/EV replay](coupled-solar-ev.md) extends this same context and price evaluation with a confirmed hypothetical EV task and two solar priorities. It needs independently covered PV and a period confirmed to exclude existing EV charging, retains identical terminal goals, and stays indicative without automatic ranking. The battery-only mode retains its existing behavior.

@@ -101,6 +101,11 @@
       "method": "POST",
       "path": "/economics/replay",
       "public": false
+    },
+    "compareSolarEvReplay": {
+      "method": "POST",
+      "path": "/economics/solar-ev-replay",
+      "public": false
     }
   },
   "platforms": ["local"],

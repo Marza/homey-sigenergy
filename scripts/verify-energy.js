@@ -52,6 +52,7 @@ function verifyEnergy(directory) {
     'publishCostContract',
     'restoreCostContracts',
     'compareBatteryReplay',
+    'compareSolarEvReplay',
   ]) {
     assert.equal(manifest.api[name].public, false);
     assert.equal(typeof require(path.resolve(directory, 'api'))[name], 'function');
@@ -62,6 +63,11 @@ function verifyEnergy(directory) {
   );
   assert.ok(fs.existsSync(path.join(directory, 'settings/economic-replay.js')));
   assert.ok(settingsHtml.includes('EconomicReplaySettings.bind(Homey)'));
+  assert.equal(
+    typeof require(path.resolve(directory, 'lib/optimization/coupled-solar-replay')).replaySolarEv,
+    'function',
+  );
+  assert.ok(settingsHtml.includes('econ-solar-enabled'));
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
   assert.equal(typeof reporting.createDevice, 'function');

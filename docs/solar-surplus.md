@@ -36,3 +36,7 @@ A preview expires at the earliest of source freshness, 30 seconds after calculat
 ## Validation
 
 Synthetic unit/API/UI fixtures cover signed power and battery-export exclusion, zero/missing/stale/ambiguous sources, both priorities, current-charge reservation, target/capacity limits, EV minimums, manual-data expiry, no-price operation, input validation, no writes, refresh, timeout and late-reply invalidation. Packaged checks include the authenticated route and browser/backend modules. Software tests and package checks do not establish physical calibration or native Homey client behavior. No private household readings or installation observations belong in these fixtures.
+
+## Coupled historical comparison
+
+The separate [coupled solar/EV replay](coupled-solar-ev.md) in the economic settings connects historical PV, home-battery state, an explicitly hypothetical EV task and the existing dated cost/tariff model. It compares home-first/EV-first strategies and remaining export under identical goals. This extends the simulator; it does not replace this short live incremental preview or turn its manual priorities into an economic recommendation.

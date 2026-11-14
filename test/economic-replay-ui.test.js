@@ -67,16 +67,23 @@ function view() {
   };
   let failure = null;
   const Homey = {
-    get: (_k, cb) =>
-      cb(null, {
-        batteryCapacityKWh: 10,
-        initialSocPercent: 50,
-        reserveMinPercent: 10,
-        backupReservePercent: 15,
-        maxChargeKW: 4,
-        maxDischargeKW: 4,
-        roundTripEfficiency: 0.81,
-      }),
+    get: (key, cb) =>
+      key === 'chargingConfig'
+        ? cb(null, {
+            usableBatteryKWh: 10,
+            chargingEfficiency: 0.9,
+            maxChargingPowerKW: 3,
+            minimumSoc: 30,
+          })
+        : cb(null, {
+            batteryCapacityKWh: 10,
+            initialSocPercent: 50,
+            reserveMinPercent: 10,
+            backupReservePercent: 15,
+            maxChargeKW: 4,
+            maxDischargeKW: 4,
+            roundTripEfficiency: 0.81,
+          }),
     api: (method, path, body, cb) => {
       if (failure) {
         cb(Error(failure));
@@ -86,7 +93,7 @@ function view() {
         if (path === '/economics/contracts/restore') cb(null, restoreTimeline(homey, body));
         else if (path === '/economics/contracts')
           cb(null, method === 'GET' ? timelineStatus(homey) : publishContract(homey, body));
-        else requests.push({ body, cb });
+        else requests.push({ body, cb, path });
       } catch (e) {
         cb(e);
       }
@@ -244,7 +251,7 @@ test('edits invalidate pending results and gaps/unrestored energy never leave an
   assert.ok(
     v
       .field('results')
-      .children[0].children.some((c) => c.textContent.includes('kunde inte återladdas')),
+      .children[0].children.some((c) => c.textContent.includes('slutenergi matchar inte')),
   );
 });
 test('failed API, malformed inputs and missing callbacks cannot leave controls stuck or stale money visible', async () => {
@@ -275,4 +282,121 @@ test('malformed comparison response cannot render NaN or stale cost cards', asyn
   await p;
   assert.match(v.field('result').textContent, /Ogiltigt beräkningssvar/);
   assert.equal(v.field('results').children.length, 0);
+});
+
+function enableSolar(v) {
+  v.field('solar-enabled').checked = true;
+  v.field('solar-enabled').onchange();
+  for (const [id, value] of Object.entries({
+    hours: '12',
+    caps: '5',
+    'solar-target': '10',
+    'ev-initial': '20',
+    'ev-target': '40',
+    'ev-min': '1,4',
+    'ev-max': '3',
+    'ev-arrival': '0',
+    'ev-departure': '12',
+  }))
+    v.field(id).value = value;
+  v.field('ev-history-confirm').checked = true;
+  v.field('ev-absent-confirm').checked = true;
+}
+function coupledResult() {
+  const r = result();
+  r.mode = 'coupled-solar-ev';
+  r.evAssumptions = { capacityKWh: 10, efficiency: 0.9, minPowerKW: 1.4, maxPowerKW: 3 };
+  r.candidates = Array.from({ length: 2 }, (_, i) => ({
+    ...structuredClone(r.candidates[0]),
+    capKW: 5,
+    strategy: i ? 'ev-first' : 'home-first',
+    ev: {
+      targetStoredKWh: 4,
+      finalStoredKWh: 4,
+      inputKWh: 2.22,
+      lossesKWh: 0.22,
+      unmetKWh: 0,
+      deadlineHours: 12,
+    },
+    solar: {
+      generationKWh: 4,
+      toHouseKWh: 1,
+      toEvKWh: 1,
+      toHomeKWh: 1,
+      exportKWh: 1,
+      evNonSolarKWh: 1.22,
+    },
+  }));
+  return r;
+}
+test('coupled UI posts explicit historical EV assumptions and displays both strategies and solar allocation', async () => {
+  const v = view();
+  await tick();
+  enableSolar(v);
+  assert.equal(v.field('solar-fields').disabled, false);
+  assert.match(v.field('ev-config').textContent, /10 kWh/);
+  const p = v.field('run').onclick();
+  assert.equal(v.requests[0].path, '/economics/solar-ev-replay');
+  assert.equal(v.requests[0].body.ev.minPowerKW, 1.4);
+  assert.equal(v.requests[0].body.ev.confirmNoExistingEvCharging, true);
+  v.requests[0].cb(null, coupledResult());
+  await p;
+  assert.equal(v.field('results').children.length, 2);
+  assert.match(v.field('results').children[0].children[0].textContent, /Batteri först/);
+  assert.match(v.field('results').children[1].children[0].textContent, /Bil först/);
+  assert.ok(
+    v
+      .field('results')
+      .children[0].children.some((c) => c.textContent.includes('Vald solproduktion')),
+  );
+  v.field('solar-enabled').checked = false;
+  v.field('solar-enabled').onchange();
+  assert.equal(v.field('solar-fields').disabled, true);
+  assert.equal(v.field('results').children.length, 0);
+});
+test('coupled UI withholds truncated strategies, missing solar values and unachieved EV goals', async () => {
+  const v = view();
+  await tick();
+  enableSolar(v);
+  let p = v.field('run').onclick();
+  let r = coupledResult();
+  r.candidates.pop();
+  v.requests[0].cb(null, r);
+  await p;
+  assert.match(v.field('result').textContent, /Ogiltigt sol\/bil/);
+  assert.equal(v.field('results').children.length, 0);
+  p = v.field('run').onclick();
+  r = coupledResult();
+  delete r.candidates[0].solar.generationKWh;
+  v.requests[1].cb(null, r);
+  await p;
+  assert.match(v.field('result').textContent, /Ogiltigt sol\/bil/);
+  p = v.field('run').onclick();
+  r = coupledResult();
+  for (const c of r.candidates) {
+    c.indicativeNetDifferenceSek = null;
+    c.reason = 'ev-deadline-unmet';
+    c.ev.unmetKWh = 2;
+  }
+  v.requests[2].cb(null, r);
+  await p;
+  assert.ok(
+    v
+      .field('results')
+      .children[0].children.some((c) => c.textContent.includes('laddmål kunde inte nås')),
+  );
+});
+test('coupled missing-data details show independent solar and existing EV-load exclusions', async () => {
+  const v = view();
+  await tick();
+  enableSolar(v);
+  const p = v.field('run').onclick();
+  v.requests[0].cb(null, {
+    status: 'unavailable',
+    reason: 'incomplete-solar-ev-window',
+    missing: { solarCoverageQuarters: 4, knownEvChargingQuarters: 2 },
+  });
+  await p;
+  assert.match(v.field('result').textContent, /soltäckning 4/);
+  assert.match(v.field('result').textContent, /befintlig billaddning 2/);
 });

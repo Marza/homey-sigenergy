@@ -396,7 +396,7 @@ test('new battery coverage is independently integrated and survives export 5, re
   assert.equal(row.essCoverageMs, Q);
   close(row.essWh, 250);
   const exported = h.export();
-  assert.equal(exported.schema, 5);
+  assert.equal(exported.schema, 6);
   const freshMap = new Map(),
     fresh = new HistoryStore(
       { get: (k) => freshMap.get(k), set: (k, v) => freshMap.set(k, v) },
@@ -404,10 +404,13 @@ test('new battery coverage is independently integrated and survives export 5, re
     );
   fresh.import(exported);
   assert.equal(fresh.getSlots()[0].essCoverageMs, Q);
-  assert.throws(() => parseExport({ ...exported, schema: 4 }, now), /schema 5/);
+  assert.throws(() => parseExport({ ...exported, schema: 4 }, now), /schema [56]/);
   const legacy = structuredClone(exported);
   legacy.schema = 4;
-  for (const s of legacy.slots) delete s.essCoverageMs;
+  for (const s of legacy.slots) {
+    delete s.essCoverageMs;
+    delete s.fieldCoverageMs;
+  }
   assert.doesNotThrow(() => parseExport(legacy, now));
   const invalid = structuredClone(exported);
   invalid.slots[0].essCoverageMs = Q + 1;

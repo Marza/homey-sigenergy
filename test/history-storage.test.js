@@ -135,7 +135,7 @@ test('versioned export round trips, preview does not write, and repeated merges 
   source.store.append({ gridW: 3600 }, JAN + 10000);
   source.store.event('backup-mode', { mode: 'on-grid' }, JAN);
   const file = source.store.export();
-  assert.equal(file.schema, 5);
+  assert.equal(file.schema, 6);
   assert.equal(file.format, 'com.local.sigenergy.history');
   const target = setup(JAN + 20000);
   const before = target.writes.length;
