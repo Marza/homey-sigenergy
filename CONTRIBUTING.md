@@ -64,3 +64,17 @@ assets, and release verification repeats that check on the extracted archive.
 An extracted release can be installed without the Tailwind development tools.
 Verify navigation and form saves in light/dark modes at phone and desktop widths;
 synthetic browser checks do not establish physical Homey or iOS compatibility.
+
+The Homey settings SDK loads its unlayered legacy stylesheet after the app CSS.
+App-owned form elements use the SDK's `hy-nostyle` opt-out. Keep Tailwind-composed
+settings rules unlayered and scoped to `body.sigenergy-settings`; placing them in
+`@layer components` would let the host reset override borders, padding and focus.
+Do not modify Homey's `homey-form-*` classes or add a blanket `!important` reset.
+
+Run `npx playwright install chromium` once, then `npm run test:settings-ui`.
+The browser regression loads a synthetic, unlayered host reset last and checks
+all categories at phone and desktop widths, in light and dark modes. It verifies
+four-sided field borders, contrast, spacing, touch targets and keyboard focus.
+CI installs Chromium and runs this check. Vendor CSS and household data are not
+included in the fixture. For a local SDK comparison, `SETTINGS_HOST_CSS` can point
+to a private stylesheet bundle; do not commit that file or private screenshots.

@@ -10,6 +10,7 @@
     --ink: #1e3039;
     --muted: #536974;
     --line: #d7e2e5;
+    --field-line: #77929e;
     --soft: #edf4f4;
     --accent: #14685f;
     --accent-soft: #e3f3ef;
@@ -22,24 +23,39 @@
       --ink: #ecf3f5;
       --muted: #b1c4cd;
       --line: #3c5059;
+      --field-line: #75939f;
       --soft: #293c43;
       --accent: #8bd9c5;
       --accent-soft: #23463f;
       --note: #f4c16f;
     }
   }
+}
+
+/* Homey injects unlayered legacy CSS after the app stylesheet. Keep these
+ * Tailwind-composed rules unlayered and scoped to our settings body so that
+ * the host reset cannot remove spacing, borders or keyboard focus indicators.
+ * Controls use Homey's hy-nostyle opt-out rather than overriding its classes.
+ */
+body.sigenergy-settings {
+  @apply mx-auto max-w-6xl p-4 sm:p-6 text-base leading-relaxed antialiased;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--homey-background-color, var(--canvas));
+  color: var(--homey-text-color, var(--ink));
   * {
     box-sizing: border-box;
   }
   [hidden] {
     display: none !important;
   }
-  body {
-    @apply mx-auto max-w-6xl p-4 sm:p-6 text-base leading-relaxed antialiased;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--homey-background-color, var(--canvas));
-    color: var(--homey-text-color, var(--ink));
+
+  h1 {
+    @apply text-3xl font-bold tracking-tight mb-0;
   }
+  strong {
+    @apply font-semibold;
+  }
+
   h2 {
     @apply text-2xl font-bold tracking-tight mb-3;
   }
@@ -50,19 +66,39 @@
     @apply font-semibold mt-5 mb-2;
   }
   p {
-    @apply my-3;
+    @apply my-3 text-base font-normal;
   }
   label {
     @apply block text-sm font-medium mt-4 mb-1;
+    text-transform: none;
+    color: inherit;
   }
   input:not([type='checkbox']),
   select {
-    @apply block w-full rounded-xl border px-3 py-2.5 mt-1 text-base;
+    @apply block w-full appearance-none rounded-xl border-2 border-solid px-3 py-2.5 mt-1 text-base leading-6 font-normal;
+    font-family: inherit;
+    height: auto;
+    box-shadow: none;
     min-height: 44px;
     max-width: 100% !important;
-    border-color: var(--line);
+    border-color: var(--field-line);
     background: var(--surface);
     color: inherit;
+  }
+  select {
+    appearance: auto;
+  }
+  input:not([type='checkbox']):hover:not(:disabled),
+  select:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  input:not([type='checkbox']):focus,
+  select:focus {
+    border-color: var(--accent);
+  }
+  input:disabled,
+  select:disabled {
+    background: var(--soft);
   }
   input[type='checkbox'] {
     @apply inline-block align-middle mr-2;
@@ -123,6 +159,8 @@
   }
   legend {
     @apply px-2 text-sm font-semibold;
+    text-transform: none;
+    color: inherit;
   }
   table {
     @apply w-full text-sm border-collapse;
@@ -148,7 +186,10 @@
   }
 }
 
-@layer components {
+body.sigenergy-settings {
+  .header {
+    @apply flex flex-wrap items-center justify-between gap-4 mb-6;
+  }
   .eyebrow {
     @apply text-xs font-bold uppercase tracking-widest mb-1 mt-0;
     color: var(--accent);
