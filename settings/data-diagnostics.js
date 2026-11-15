@@ -54,6 +54,63 @@
           timeZoneName: 'shortOffset',
         }).format(value)
       : '–';
+  const nonnegative = (n) => Number.isSafeInteger(n) && n >= 0;
+  function validQuality(q, from, to) {
+    if (
+      q?.schema !== 1 ||
+      q.from !== from ||
+      q.to !== to ||
+      !nonnegative(q.totalMs) ||
+      q.totalMs !== to - from ||
+      q.totalMs === 0 ||
+      !q.channels ||
+      !q.hourlyGrid
+    )
+      return false;
+    for (const key of ['grid', 'battery', 'solar']) {
+      const c = q.channels[key];
+      if (!c || typeof c.available !== 'boolean') return false;
+      const values = [c.observedMs, c.counterEstimatedMs, c.unknownMs];
+      if (
+        c.available
+          ? !values.every(nonnegative) || values.reduce((a, b) => a + b, 0) !== q.totalMs
+          : values.some((n) => n !== null)
+      )
+        return false;
+    }
+    const h = q.hourlyGrid;
+    const values = [h.sampledHours, h.withCounterEstimateHours, h.tibberHours, h.unknownHours];
+    return (
+      typeof h.available === 'boolean' &&
+      h.from === Math.floor(from / 3600000) * 3600000 &&
+      h.to === Math.floor(to / 3600000) * 3600000 &&
+      h.totalHours === (h.to - h.from) / 3600000 &&
+      nonnegative(h.totalHours) &&
+      (h.available
+        ? values.every(nonnegative) && values.reduce((a, b) => a + b, 0) === h.totalHours
+        : values.every((n) => n === null)) &&
+      ['grid', 'battery', 'solar'].every(
+        (k) => q.channels[k].available === q.channels.grid.available,
+      ) &&
+      (!h.available || q.channels.grid.available)
+    );
+  }
+  function duration(ms) {
+    if (ms > 0 && ms < 1000) return '<1 s';
+    const seconds = Math.floor(ms / 1000);
+    return [
+      seconds >= 3600 ? Math.floor(seconds / 3600) + ' h' : '',
+      seconds >= 60 ? Math.floor((seconds % 3600) / 60) + ' min' : '',
+      seconds % 60 || seconds === 0 ? (seconds % 60) + ' s' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+  }
+  // Truncate: positive unknown coverage must never round observed coverage up to 100%.
+  const percent = (ms, total) =>
+    new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 2 }).format(
+      Math.floor((ms / total) * 10000) / 100,
+    ) + ' %';
   function bind(Homey) {
     const el = (id) => document.getElementById('gap-' + id);
     let generation = 0;
@@ -99,7 +156,8 @@
           !Array.isArray(report.events) ||
           !report.storage ||
           !Number.isSafeInteger(report.from) ||
-          !Number.isSafeInteger(report.to)
+          !Number.isSafeInteger(report.to) ||
+          !validQuality(report.quality, report.from, report.to)
         )
           throw Error('invalid-report');
         const paragraph = (parent, text) => {
@@ -116,7 +174,7 @@
           el('results').appendChild(box);
           return box;
         };
-        const showRanges = (title, group, unit) => {
+        const showRanges = (title, group, unit, coverage) => {
           if (!group || !Number.isInteger(group.missing) || !Array.isArray(group.ranges))
             throw Error('invalid-report');
           const box = section(title);
@@ -126,6 +184,35 @@
               ? 'Historiken kunde inte läsas.'
               : group.missing + ' saknade eller ofullständiga ' + unit + '.',
           );
+          if (coverage) {
+            if (!coverage.available) paragraph(box, 'Tidstäckningen är inte tillgänglig.');
+            else {
+              const parts = [
+                ['Observerat', 'observedMs', 'observed'],
+                ['Räknarestimat', 'counterEstimatedMs', 'estimated'],
+                ['Okänd tid', 'unknownMs', 'unknown'],
+              ];
+              const bar = document.createElement('div');
+              bar.className = 'coverage-bar';
+              bar.setAttribute('aria-hidden', 'true');
+              for (const [label, key, className] of parts) {
+                const segment = document.createElement('span');
+                segment.className = 'coverage-' + className;
+                segment.style.width = (coverage[key] / report.quality.totalMs) * 100 + '%';
+                bar.appendChild(segment);
+                paragraph(
+                  box,
+                  label +
+                    ': ' +
+                    duration(coverage[key]) +
+                    ' (' +
+                    percent(coverage[key], report.quality.totalMs) +
+                    ').',
+                );
+              }
+              box.appendChild(bar);
+            }
+          }
           if (group.ranges.length) {
             const details = document.createElement('details');
             details.className = 'settings-details';
@@ -162,26 +249,49 @@
           }
         };
         for (const source of ['grid', 'battery', 'solar'])
-          showRanges(sources[source], report.gaps[source], 'kvart');
+          showRanges(
+            sources[source],
+            report.gaps[source],
+            'råa kvart',
+            report.quality.channels[source],
+          );
         showRanges('Köppriser från Tibber', report.prices.consumption, 'hela timmar');
         showRanges('Säljpriser från Tibber', report.prices.production, 'hela timmar');
-        if (report.recovery) {
-          const recovered = section('Kompletterat energiunderlag');
+        const hourly = report.quality.hourlyGrid;
+        const recovered = section('Nätenergi – källor för hela timmar');
+        paragraph(
+          recovered,
+          time(hourly.from) +
+            ' – ' +
+            time(hourly.to) +
+            '. Totalt ' +
+            hourly.totalHours +
+            ' avslutade timmar.',
+        );
+        if (!hourly.available) paragraph(recovered, 'Timunderlaget kunde inte kontrolleras.');
+        else {
           paragraph(
             recovered,
-            'Timmar kompletterade från Tibber: ' +
-              (report.recovery.tibberFilledHours || 0) +
-              '. Kvart med räknaråterhämtning: ' +
-              report.recovery.counterQuarters +
-              '. Kompletta nätenergikvart efter återhämtning: ' +
-              report.recovery.effectiveGridQuarters +
+            'Enbart observerade Sigenergy-kvart: ' +
+              hourly.sampledHours +
+              ' timmar. Timmar med räknarestimat: ' +
+              hourly.withCounterEstimateHours +
+              '. Timmar kompletterade från Tibber: ' +
+              hourly.tibberHours +
+              '. Okända timmar: ' +
+              hourly.unknownHours +
               '.',
           );
+        }
+        if (report.recovery)
           paragraph(
             recovered,
-            'Räknaråterhämtning är ett märkt energiestimat. Diagrammens effektprov och råa täckning fylls inte i. Tibbers timunderlag ersätter inte saknade batteri- eller solkvart.',
+            'Kvart med räknaråterhämtning: ' + report.recovery.counterQuarters + '.',
           );
-        }
+        paragraph(
+          recovered,
+          'Varje timme räknas en gång. En timme med räknarestimat kan också innehålla observerad tid. Tibber fyller endast nätets timunderlag, inte tidstäckningen för nät, batteri eller sol.',
+        );
         const prices = section('Tibbers hämtningsläge');
         const priceStates = {
           ok: 'Komplett svar vid senaste hämtning',
@@ -279,5 +389,5 @@
       }
     };
   }
-  return { bind };
+  return { bind, validQuality, duration, percent };
 });

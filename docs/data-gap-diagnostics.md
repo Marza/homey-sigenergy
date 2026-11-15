@@ -24,3 +24,15 @@ The normal history snapshot and its retention are unchanged: up to 32 days of qu
 ## Energy recovery
 
 See [energy-gap recovery](gap-recovery.md) for small same-quarter counter estimates and explicitly sourced Tibber hourly fallback. Raw missing-period counts remain visible; recovered energy is shown separately, without creating power or SoC samples.
+
+## Time coverage and hourly provenance
+
+For each selected quarter-aligned window, the grid, battery and solar cards separately partition the entire elapsed duration into **observed**, **counter-estimated** and **unknown** time. Partial quarters contribute their valid integration duration instead of treating the entire quarter as missing. The existing raw incomplete-quarter counts and incident ranges remain visible, so they can include quarters whose energy was subsequently estimated.
+
+Observed time means valid power-to-energy integration, not continuous direct measurement. Grid coverage requires directional import/export metadata; legacy net-only readings, sample counts or averages cannot establish it. Battery and solar require their own duration metadata and valid energy integrals. Zero energy is valid when its duration is known. Missing or malformed duration/energy metadata remains unknown. Validated counter corrections contribute only their additional duration, without double counting observed time or changing raw samples. Malformed recovery metadata receives no estimated credit.
+
+A separate whole-hour grid section partitions its displayed hour-aligned window into fully sampled Sigenergy hours, Sigenergy hours containing a counter estimate, Tibber meter hours and unknown hours. Each hour appears in exactly one bucket. An hour containing an estimate can also include sampled quarters; this bucket does not mean the whole hour was estimated. Tibber requires the existing confirmed connection and both directional meter volumes. These hours never increase quarter coverage for grid, battery or solar.
+
+Durations are calculated in integer milliseconds; each channel's three durations sum to the selected elapsed window. The UI truncates percentages to avoid rounding incomplete observed coverage up to 100%. Very short positive durations remain visible. The rolling window uses elapsed time across daylight-saving transitions, with local offsets displayed. The open quarter is excluded. Results use the saved history snapshot and cached Tibber data; pending samples may not appear until the next history checkpoint. No network fetch or measurement write is performed by this report.
+
+Unreadable or structurally ambiguous history (including duplicate quarter timestamps) is unavailable, rather than presented as zero coverage. Older records without independent duration evidence remain unknown. Neither high coverage nor a completed hourly fallback establishes forecast accuracy, financial comparability or readiness for hardware control.

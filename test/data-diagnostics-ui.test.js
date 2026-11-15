@@ -13,6 +13,8 @@ function view() {
     value: '24',
     disabled: false,
     textContent: '',
+    style: {},
+    setAttribute() {},
     children: [],
     appendChild(c) {
       this.children.push(c);
@@ -80,4 +82,26 @@ test('new diagnostic results replace old cards and malformed/failed reads cannot
   v.requests[2].cb(Error('PRIVATE_TOKEN'));
   await p;
   assert.doesNotMatch(v.field('status').textContent, /PRIVATE/);
+});
+
+test('time coverage displays independent durations and rejects a contradictory fresh report', async () => {
+  const v = view();
+  const f = fixture({ hours: 1 });
+  f.rows[0].essCoverageMs -= 60000;
+  const r = new DataDiagnostics(f.homey.settings, () => f.now).report(f.homey, { hours: 1 });
+  const text = (node) => [node.textContent, ...node.children.map(text)].join(' ');
+  let p = v.field('refresh').onclick();
+  v.requests[0].cb(null, r);
+  await p;
+  const rendered = text(v.field('results'));
+  assert.match(rendered, /Observerat: 59 min/);
+  assert.match(rendered, /Okänd tid: 1 min/);
+  assert.match(rendered, /Timmar med räknarestimat: 0/);
+  assert.match(rendered, /inte tidstäckningen/);
+  r.quality.channels.battery.observedMs++;
+  p = v.field('refresh').onclick();
+  v.requests[1].cb(null, r);
+  await p;
+  assert.equal(v.field('results').children.length, 0);
+  assert.match(v.field('status').textContent, /kunde inte/);
 });
