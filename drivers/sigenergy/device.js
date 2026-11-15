@@ -1,6 +1,7 @@
 'use strict';
 const Homey = require('homey');
 const { SigenergyReader } = require('../../lib/modbus');
+const { readFailureReason } = require('../../lib/data-diagnostics');
 const { readEvdc } = require('../../lib/charging/evdc');
 const { PROFILE, sourceKey, solarSourceKey, advance } = require('../../lib/energy/meters');
 const { IslandController } = require('../../lib/backup/island-controller');
@@ -13,6 +14,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.startReader();
   }
   startReader(settings = this.getSettings()) {
+    const reason = this.reader ? 'connection-changed' : 'reader-started';
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();
     this.generation = (this.generation || 0) + 1;
@@ -20,7 +22,12 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.energySnapshot = null;
     this.energyMeters = null;
     // Do not integrate across a reader/source change, even within one minute.
-    this.homey.app?.history?.append({ pvW: null, gridW: null });
+    this.homey.app?.history?.append(
+      { pvW: null, gridW: null, essW: null, evW: null },
+      undefined,
+      reason,
+    );
+    this.pollFailure = null;
     this.lastEnergyProbeAt = null;
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
@@ -52,6 +59,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
       'evdcError',
     ])
       this.homey.settings.set(key, null);
+    this.homey.app?.dataDiagnostics?.record('plant', reason);
     const cleared = this.clearEvdc();
     this.timer = this.homey.setInterval(() => {
       this.poll().catch((error) => this.error(error));
@@ -72,8 +80,17 @@ module.exports = class SigenergyDevice extends Homey.Device {
     );
   }
   async poll() {
-    if (this.polling || this.stopped) return;
+    if (this.stopped) return;
+    if (this.polling) {
+      const now = Date.now();
+      if (Number.isFinite(this.pollStartedAt) && now - this.pollStartedAt > 60000)
+        this.homey.app.dataDiagnostics?.record('plant', 'slow-poll', this.pollStartedAt, now);
+      return;
+    }
     this.polling = true;
+    const pollStartedAt = Date.now();
+    this.pollStartedAt = pollStartedAt;
+    let snapshotRead = false;
     const reader = this.reader,
       generation = this.generation,
       settings = this.activeSettings;
@@ -81,6 +98,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     try {
       const data = await reader.snapshot(settings.energySolarSource || 'self');
       if (!current()) return;
+      snapshotRead = true;
       this.energySnapshot = {
         generation: this.generation,
         readAt: Date.now(),
@@ -127,12 +145,16 @@ module.exports = class SigenergyDevice extends Homey.Device {
             values: { ...previous.values, capacityKWh: data.capacityKWh, soc: data.soc },
           });
       }
-      this.homey.app.history?.append({
-        gridW: data.gridMode === 0 ? data.gridW : null,
-        pvW: data.pvW,
-        essW: data.essW,
-        soc: data.soc,
-      });
+      this.homey.app.history?.append(
+        {
+          gridW: data.gridMode === 0 ? data.gridW : null,
+          pvW: data.pvW,
+          essW: data.essW,
+          soc: data.soc,
+        },
+        undefined,
+        data.gridMode === 0 ? 'invalid-sample' : 'off-grid',
+      );
       await Promise.all([
         this.setCapabilityValue('measure_battery', data.soc),
         this.setCapabilityValue('measure_grid_power', data.gridW),
@@ -192,18 +214,37 @@ module.exports = class SigenergyDevice extends Homey.Device {
           this.error('EVDC probe failed:', error.message);
         }
       }
-      if (current()) await this.setAvailable();
+      if (current()) {
+        await this.setAvailable();
+        if (this.pollFailure) {
+          this.homey.app.dataDiagnostics?.record(
+            'plant',
+            this.pollFailure.reason,
+            this.pollFailure.from,
+            Date.now(),
+          );
+          this.pollFailure = null;
+        }
+      }
     } catch (error) {
       if (!current()) return;
       this.energySnapshot = null;
-      this.homey.app.history?.append({ gridW: null });
+      const reason = snapshotRead ? 'plant-processing-error' : readFailureReason(error);
+      const from = this.pollFailure?.reason === reason ? this.pollFailure.from : pollStartedAt;
+      this.pollFailure = { reason, from };
+      this.homey.app.dataDiagnostics?.record('plant', reason, from, Date.now());
+      this.homey.app.history?.append({ gridW: null, essW: null, pvW: null }, undefined, reason);
       this.homey.settings.set('sigenergyError', String(error.message));
       await this.publishBackup(this.island.communicationLost());
       await this.clearEvdc();
       if (!current()) return;
       await this.setUnavailable(`Modbus read failed: ${error.message}`);
     } finally {
+      const endedAt = Date.now();
+      if (endedAt - pollStartedAt > 60000)
+        this.homey.app.dataDiagnostics?.record('plant', 'slow-poll', pollStartedAt, endedAt);
       this.polling = false;
+      this.pollStartedAt = null;
     }
   }
   getEnergySnapshot() {

@@ -15,6 +15,7 @@ const { compareScenarios } = require('./lib/optimization/advanced-simulator');
 const { recommend } = require('./lib/optimization/recommendation');
 const { evaluateTariffScenarios } = require('./lib/optimization/tariff-optimizer');
 const { HistoryStore } = require('./lib/history');
+const { DataDiagnostics } = require('./lib/data-diagnostics');
 const { validateState: validateMeterHistory } = require('./lib/pricing/consumption-history');
 const { calculateDemandCharge, validateTariff } = require('./lib/demand-tariff');
 const { SmoS40Reader } = require('./lib/nibe/smo-s40');
@@ -45,7 +46,9 @@ module.exports = class SigenergyApp extends Homey.App {
     this.homey.settings.set('sourceConfig', previousTibber ? { tibber: previousTibber } : {});
     this.homey.settings.set('backupStatus', null);
     this.configurePrices();
-    this.history = new HistoryStore(this.homey.settings);
+    this.dataDiagnostics = new DataDiagnostics(this.homey.settings);
+    this.dataDiagnostics.record('app', 'app-started');
+    this.history = new HistoryStore(this.homey.settings, () => Date.now(), this.dataDiagnostics);
     this.recommendationTimer = this.homey.setInterval(
       () => this.refreshRecommendation(),
       15 * 60 * 1000,
@@ -57,6 +60,8 @@ module.exports = class SigenergyApp extends Homey.App {
         this.syncBackupAdvisories();
       } catch (e) {
         this.error('History flush:', e.message);
+      } finally {
+        this.dataDiagnostics.flush();
       }
     }, 60 * 1000);
     if (!this.homey.settings.get('chargingConfig'))
@@ -538,6 +543,7 @@ module.exports = class SigenergyApp extends Homey.App {
     };
   }
   async onUninit() {
+    this.dataDiagnostics?.record('app', 'app-stopped');
     this.stopping = true;
     this.tibberHistoryPrices?.stop();
     if (this.tibberHistoryPricesTimer) this.homey.clearInterval(this.tibberHistoryPricesTimer);

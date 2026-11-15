@@ -435,26 +435,90 @@ test('grid history breaks continuity on off-grid readings, communication loss an
   const samples = [];
   const { device } = deviceFixture({
     snapshotRead: async () => {
-      if (fail) throw Error('offline');
+      if (fail) throw Object.assign(Error('PRIVATE address'), { code: 'ETIMEDOUT' });
       return { ...snapshot, gridMode };
     },
   });
-  device.homey.app.history.append = (value) => samples.push(value);
+  const reasons = [],
+    events = [];
+  device.homey.app.dataDiagnostics = { record: (...args) => events.push(args) };
+  device.homey.app.history.append = (value, _ms, reason) => {
+    samples.push(value);
+    reasons.push(reason);
+  };
   await device.onInit();
   await tick();
   assert.equal(samples.find((s) => s.gridW === 2000).gridW, 2000);
   gridMode = 1;
   await device.poll();
   assert.equal(samples.filter((s) => Object.hasOwn(s, 'gridW')).at(-1).gridW, null);
+  assert.equal(reasons.filter(Boolean).at(-1), 'off-grid');
   gridMode = 0;
   fail = true;
   await device.poll();
   assert.equal(samples.at(-1).gridW, null);
+  assert.equal(samples.at(-1).essW, null);
+  assert.equal(samples.at(-1).pvW, null);
+  assert.equal(reasons.filter(Boolean).at(-1), 'modbus-timeout');
   fail = false;
   await device.poll();
   assert.equal(samples.filter((s) => Object.hasOwn(s, 'gridW')).at(-1).gridW, 2000);
   device.startReader({ ...device.getSettings(), host: '192.0.2.11' });
   assert.equal(samples.at(-1).gridW, null);
+  assert.equal(samples.at(-1).essW, null);
+  assert.equal(reasons.filter(Boolean).at(-1), 'connection-changed');
+  assert.ok(events.some((e) => e[0] === 'plant' && e[1] === 'connection-changed'));
   await tick();
+  await device.onUninit();
+});
+
+test('diagnostics record initial read failures before any valid sample and distinguish publication failures', async () => {
+  let fail = true;
+  const { device } = deviceFixture({
+    snapshotRead: async () => {
+      if (fail) throw Object.assign(Error('PRIVATE_ADDRESS'), { code: 'ECONNREFUSED' });
+      return snapshot;
+    },
+  });
+  const events = [];
+  device.homey.app.dataDiagnostics = { record: (...args) => events.push(args) };
+  await device.onInit();
+  await tick();
+  assert.ok(events.some((e) => e[0] === 'plant' && e[1] === 'modbus-refused'));
+  assert.equal(device.pollFailure.reason, 'modbus-refused');
+  fail = false;
+  await device.poll();
+  assert.equal(device.pollFailure, null);
+  device.setCapabilityValue = async () => {
+    throw Error('PRIVATE_VALUE');
+  };
+  await device.poll();
+  assert.equal(device.pollFailure.reason, 'plant-processing-error');
+  assert.doesNotMatch(JSON.stringify(events), /PRIVATE/);
+  await device.onUninit();
+});
+
+test('an ongoing blocked polling loop is diagnosed without starting overlapping Modbus reads', async () => {
+  let release,
+    reads = 0;
+  const { device } = deviceFixture({
+    snapshotRead: () => {
+      reads++;
+      return new Promise((resolve) => {
+        release = resolve;
+      });
+    },
+  });
+  const events = [];
+  device.homey.app.dataDiagnostics = { record: (...args) => events.push(args) };
+  await device.onInit();
+  await tick();
+  device.pollStartedAt = Date.now() - 61000;
+  await device.poll();
+  assert.equal(reads, 1);
+  assert.ok(events.some((e) => e[0] === 'plant' && e[1] === 'slow-poll' && e[3] - e[2] >= 61000));
+  release(snapshot);
+  await tick();
+  assert.equal(device.polling, false);
   await device.onUninit();
 });

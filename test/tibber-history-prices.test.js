@@ -269,7 +269,7 @@ test('service reuses configured credentials and bound single-home price cache; c
   f.data.tibberToken = '';
   assert.equal(f.service.status().configured, false);
 });
-test('sync serializes, preserves good cache on error and respects hourly/daily backoff', async () => {
+test('sync serializes, preserves good cache on error and respects retry backoff', async () => {
   const f = fixture();
   f.service.confirm({ confirmSamePlant: true });
   await Promise.all([f.service.sync(), f.service.sync()]);
@@ -440,4 +440,69 @@ test('missing hourly prices do not produce totals and private routes delegate to
     Object.keys(manifest.api).some((k) => /connectTibberData|disconnectTibberData/.test(k)),
     false,
   );
+});
+
+test('successful historical prices refresh after a new closed hour and upgrade old daily deadlines', async () => {
+  let calls = 0;
+  const f = fixture(async (_u, o) => {
+    calls++;
+    const v = JSON.parse(o.body).variables;
+    if (!v) return response({ data: { viewer: { homes: [{ id: 'synthetic-home' }] } } });
+    const end = Date.parse(Buffer.from(v.before, 'base64').toString());
+    const times = Array.from({ length: v.last }, (_, i) => end - (v.last - i) * H);
+    return response({
+      data: {
+        viewer: {
+          home: home(
+            times.map((t) => node(t)),
+            times.map((t) => node(t, 'production')),
+          ),
+        },
+      },
+    });
+  });
+  f.service.confirm({ confirmSamePlant: true });
+  await f.service.sync();
+  assert.equal(f.service.status().nextAttemptAt, NOW + H + 5 * 60000);
+  f.data.tibberHistoryPriceSync.nextAttemptAt = NOW + 24 * H;
+  assert.equal(f.service.status().nextAttemptAt, NOW + H + 5 * 60000);
+  f.setNow(NOW + H + 4 * 60000);
+  await f.service.sync();
+  assert.equal(calls, 2);
+  f.setNow(NOW + H + 5 * 60000);
+  await Promise.all([f.service.sync(), f.service.sync()]);
+  assert.equal(calls, 4);
+  assert.equal(f.service.status().priceHours, 2);
+  assert.equal(f.service.status().syncStatus, 'ok');
+});
+test('partial price replies preserve previously reported directions, accept corrections and obey rate limits', async () => {
+  const f = fixture();
+  const events = [];
+  f.homey.app.dataDiagnostics = { record: (...args) => events.push(args) };
+  f.service.confirm({ confirmSamePlant: true });
+  await f.service.sync();
+  f.setNow(NOW + H + 5 * 60000);
+  f.service.fetch = async (_u, o) =>
+    response({
+      data: JSON.parse(o.body).variables
+        ? { viewer: { home: home([node(T, 'consumption', 1.8), node(NOW)], null) } }
+        : { viewer: { homes: [{ id: 'synthetic-home' }] } },
+    });
+  await f.service.sync();
+  const rows = f.data.tibberHistoryPriceCache.rows;
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].consumption.price, 1.8);
+  assert.equal(rows[0].production.price, -0.2);
+  assert.equal(rows[1].production, undefined);
+  assert.equal(f.service.status().syncStatus, 'partial');
+  assert.ok(events.some((e) => e[1] === 'prices-partial'));
+  f.setNow(NOW + 2 * H + 5 * 60000);
+  f.service.fetch = async () => response({}, 429, '7200');
+  await f.service.sync();
+  assert.equal(f.service.status().nextAttemptAt, NOW + 4 * H + 5 * 60000);
+  assert.ok(events.some((e) => e[1] === 'prices-rate-limited'));
+  const snapshot = JSON.stringify(f.data.tibberHistoryPriceCache);
+  f.setNow(NOW + 3 * H + 5 * 60000);
+  await f.service.sync();
+  assert.equal(JSON.stringify(f.data.tibberHistoryPriceCache), snapshot);
 });

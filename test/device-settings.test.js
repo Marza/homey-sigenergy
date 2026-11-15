@@ -23,6 +23,7 @@ test('settings change connects with new settings before Homey updates getSetting
       module,
       require(id) {
         if (id === 'homey') return { Device: class {} };
+        if (id === '../../lib/data-diagnostics') return require('../lib/data-diagnostics');
         if (id === '../../lib/modbus') return { SigenergyReader: Reader };
         if (id === '../../lib/energy/meters') return require('../lib/energy/meters');
         if (id === '../../lib/charging/evdc') return {};

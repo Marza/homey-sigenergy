@@ -1,0 +1,262 @@
+(function (root, factory) {
+  'use strict';
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.DataDiagnosticsSettings = factory();
+})(globalThis, function () {
+  'use strict';
+  const labels = {
+    'app-started': 'Appen startade; mätkedjan börjar om',
+    'app-stopped': 'Appen stoppades',
+    'reader-started': 'Anslutningsläsaren startade',
+    'connection-changed': 'Anslutningsinställningar eller mätkälla ändrades',
+    'invalid-sample': 'Ogiltigt eller saknat mätvärde',
+    'sample-delay': 'Mer än 60 sekunder mellan giltiga mätvärden',
+    'modbus-timeout': 'Modbus svarade inte i tid',
+    'modbus-unreachable': 'Modbus-adressen kunde inte nås',
+    'modbus-refused': 'Modbus-anslutningen avvisades',
+    'modbus-read-error': 'Modbus-avläsningen misslyckades',
+    'plant-processing-error': 'Bearbetning eller publicering av anläggningsdata misslyckades',
+    'off-grid': 'Nätenergin pausades eftersom nätläge inte var on-grid',
+    'slow-poll': 'Ett avläsningsvarv tog mer än 60 sekunder',
+    'history-write-failed': 'Historiken kunde inte sparas; bufferten behölls',
+    'history-write-recovered': 'Historiken kunde sparas igen',
+    'history-imported': 'Historik återlästes; mätkedjan börjar om',
+    'prices-updated': 'Tibbers prisunderlag hämtades komplett för begärd period',
+    'prices-partial': 'Tibber saknade priser i svaret',
+    'prices-rate-limited': 'Tibber begränsade anropsfrekvensen',
+    'prices-authorization': 'Tibber nekade behörighet',
+    'prices-request-failed': 'Tibbers prishämtning misslyckades',
+  };
+  const sources = {
+    app: 'App',
+    plant: 'Anläggning',
+    grid: 'Nät',
+    battery: 'Batteri',
+    solar: 'Sol',
+    ev: 'Bil',
+    storage: 'Lagring',
+    prices: 'Tibber',
+  };
+  const time = (value) =>
+    Number.isSafeInteger(value)
+      ? new Intl.DateTimeFormat('sv-SE', {
+          timeZone: 'Europe/Stockholm',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          timeZoneName: 'shortOffset',
+        }).format(value)
+      : '–';
+  function bind(Homey) {
+    const el = (id) => document.getElementById('gap-' + id);
+    let generation = 0;
+    function clear() {
+      generation++;
+      el('results').replaceChildren();
+      el('status').textContent = 'Perioden ändrades. Uppdatera diagnostiken.';
+      el('refresh').disabled = false;
+    }
+    el('hours').onchange = clear;
+    el('refresh').onclick = async () => {
+      const current = ++generation;
+      el('results').replaceChildren();
+      el('refresh').disabled = true;
+      el('status').textContent = 'Hämtar diagnostik…';
+      try {
+        const report = await new Promise((resolve, reject) => {
+          let done = false;
+          const timer = setTimeout(() => {
+            if (!done) {
+              done = true;
+              reject(Error('timeout'));
+            }
+          }, 15000);
+          Homey.api(
+            'POST',
+            '/diagnostics/data-gaps',
+            { hours: Number(el('hours').value) },
+            (error, result) => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              if (error) reject(error);
+              else resolve(result);
+            },
+          );
+        });
+        if (current !== generation) return;
+        if (
+          report?.schema !== 1 ||
+          !report.gaps ||
+          !report.prices ||
+          !Array.isArray(report.events) ||
+          !report.storage ||
+          !Number.isSafeInteger(report.from) ||
+          !Number.isSafeInteger(report.to)
+        )
+          throw Error('invalid-report');
+        const paragraph = (parent, text) => {
+          const p = document.createElement('p');
+          p.textContent = text;
+          parent.appendChild(p);
+        };
+        const section = (title) => {
+          const box = document.createElement('section');
+          box.className = 'settingsGroup';
+          const h = document.createElement('h4');
+          h.textContent = title;
+          box.appendChild(h);
+          el('results').appendChild(box);
+          return box;
+        };
+        const showRanges = (title, group, unit) => {
+          if (!group || !Number.isInteger(group.missing) || !Array.isArray(group.ranges))
+            throw Error('invalid-report');
+          const box = section(title);
+          paragraph(
+            box,
+            group.available === false
+              ? 'Historiken kunde inte läsas.'
+              : group.missing + ' saknade eller ofullständiga ' + unit + '.',
+          );
+          if (group.ranges.length) {
+            const details = document.createElement('details');
+            details.className = 'settings-details';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Visa perioder och registrerade händelser';
+            details.appendChild(summary);
+            const list = document.createElement('ul');
+            for (const r of group.ranges) {
+              if (
+                !Number.isSafeInteger(r.from) ||
+                !Number.isSafeInteger(r.to) ||
+                !Array.isArray(r.reasons)
+              )
+                throw Error('invalid-report');
+              const li = document.createElement('li');
+              li.textContent =
+                time(r.from) +
+                ' – ' +
+                time(r.to) +
+                '. ' +
+                (r.reasons.length
+                  ? 'Registrerat vid perioden: ' +
+                    r.reasons.map((code) => labels[code] || 'Okänd händelse').join('; ')
+                  : 'Ingen orsak registrerad för perioden.');
+              list.appendChild(li);
+            }
+            details.appendChild(list);
+            box.appendChild(details);
+            if (group.truncated)
+              paragraph(
+                box,
+                'Visar de första 100 perioderna. Välj en kortare period för fler detaljer.',
+              );
+          }
+        };
+        for (const source of ['grid', 'battery', 'solar'])
+          showRanges(sources[source], report.gaps[source], 'kvart');
+        showRanges('Köppriser från Tibber', report.prices.consumption, 'hela timmar');
+        showRanges('Säljpriser från Tibber', report.prices.production, 'hela timmar');
+        const prices = section('Tibbers hämtningsläge');
+        const priceStates = {
+          ok: 'Komplett svar vid senaste hämtning',
+          partial: 'Ofullständigt svar',
+          'waiting-for-energy': 'Väntar på energihistorik',
+          fetching: 'Hämtning pågår',
+          'rate-limited': 'Anropsbegränsning',
+          'authorization-required': 'Behörighet saknas',
+          'network-error': 'Nätverksfel',
+          'upstream-unavailable': 'Tibber tillfälligt otillgängligt',
+          'history-fetch-failed': 'Hämtningen misslyckades',
+          'invalid-history': 'Svaret kunde inte användas',
+        };
+        paragraph(prices, priceStates[report.prices.status] || 'Prisstatus saknas.');
+        paragraph(
+          prices,
+          'Prisperiod: ' + time(report.prices.from) + ' – ' + time(report.prices.to) + '.',
+        );
+        paragraph(
+          prices,
+          'Senast hämtat: ' +
+            time(report.prices.fetchedAt) +
+            '. Nästa försök tidigast: ' +
+            time(report.prices.nextAttemptAt) +
+            '. Tibber kan rapportera priser med fördröjning.',
+        );
+        const storage = section('Lagring och orsakslogg');
+        paragraph(
+          storage,
+          report.storage.readable
+            ? 'Historiken kan läsas. Sparad: ' +
+                time(report.storage.lastSavedAt) +
+                '. Revision: ' +
+                (report.storage.revision ?? '–') +
+                '. Storlek: ' +
+                Math.round(report.storage.bytes / 1024) +
+                ' KiB av ' +
+                Math.round(report.storage.limitBytes / 1024) +
+                ' KiB. Buffrade kvart: ' +
+                report.storage.pendingQuarters +
+                '.'
+            : 'Historiken kunde inte läsas.',
+        );
+        paragraph(
+          storage,
+          'Orsakslogg från ' +
+            time(report.recordingSince) +
+            '. ' +
+            (report.journalHealthy
+              ? 'Loggens lagring är tillgänglig.'
+              : 'Orsaksloggen kunde inte läsas eller sparas; visningen kan vara ofullständig.'),
+        );
+        if (report.droppedEvents)
+          paragraph(storage, 'Äldre händelser har tagits bort på grund av loggens storleksgräns.');
+        const events = section('Registrerade händelser i vald period');
+        if (!report.events.length)
+          paragraph(events, 'Inga registrerade händelser. Äldre luckor får ingen antagen orsak.');
+        else {
+          const details = document.createElement('details');
+          details.className = 'settings-details';
+          const summary = document.createElement('summary');
+          summary.textContent = 'Visa registrerade händelser (' + report.events.length + ')';
+          details.appendChild(summary);
+          const list = document.createElement('ul');
+          for (const e of report.events) {
+            const li = document.createElement('li');
+            li.textContent =
+              time(e.from) +
+              (e.to !== e.from ? ' – ' + time(e.to) : '') +
+              ': ' +
+              (sources[e.source] || 'Okänd källa') +
+              ' — ' +
+              (labels[e.reason] || 'Okänd händelse');
+            list.appendChild(li);
+          }
+          details.appendChild(list);
+          events.appendChild(details);
+        }
+        el('status').textContent =
+          'Diagnostik hämtad ' +
+          time(report.generatedAt) +
+          '. Mätkvart: ' +
+          time(report.from) +
+          ' – ' +
+          time(report.to) +
+          '. Priser kontrolleras för hela avslutade timmar.';
+      } catch {
+        if (current === generation) {
+          el('results').replaceChildren();
+          el('status').textContent =
+            'Diagnostiken kunde inte hämtas. Försök igen; tidigare resultat har dolts.';
+        }
+      } finally {
+        if (current === generation) el('refresh').disabled = false;
+      }
+    };
+  }
+  return { bind };
+});
