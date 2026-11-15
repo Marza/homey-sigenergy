@@ -15,6 +15,7 @@
     <script src="tibber-history-prices.js"></script>
     <script src="economic-replay.js"></script>
     <script src="economic-readiness.js"></script>
+    <script src="data-diagnostics.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="navigation.js"></script>
     <script src="settings-assistant.js"></script>
@@ -1772,8 +1773,9 @@
                     Kontrollera historik och uppdatera visning
                   </button>
                   <p>
-                    Historiken hämtas dagligen; saknade priser och fel prövas igen tidigast efter en
-                    timme. Uppgifter från Tibber kan komma med fördröjning.
+                    Prishistoriken hämtas efter varje ny avslutad timme med fem minuters
+                    fördröjning. Saknade priser och fel prövas normalt igen efter en timme.
+                    Uppgifter från Tibber kan komma med fördröjning.
                   </p>
                   <p id="trade-message" role="status"></p>
                   <p id="trade-costs"></p>
@@ -2163,6 +2165,32 @@
                 Öppna kostnadsversioner
               </button>
             </p>
+            <div class="settingsGroup" id="dataDiagnosticsPanel">
+              <h3>Mätluckor och händelser</h3>
+              <p>
+                Se ofullständiga mätkvart, saknade priser och registrerade händelser. Tider visas i
+                svensk tid. Äldre luckor kan sakna registrerad orsak. Händelser i samma period visar
+                vad appen observerat och bevisar inte ensamma orsaken till hela luckan.
+              </p>
+              <label class="hy-nostyle"
+                >Period
+                <select id="gap-hours" class="hy-nostyle">
+                  <option value="24">Senaste dygnet</option>
+                  <option value="72">Senaste tre dygnen</option>
+                  <option value="168">Senaste veckan</option>
+                  <option value="768">Senaste 32 dygnen</option>
+                </select>
+              </label>
+              <button id="gap-refresh" type="button" class="hy-nostyle">
+                Uppdatera diagnostik
+              </button>
+              <p id="gap-status" role="status">Diagnostiken har inte hämtats.</p>
+              <div id="gap-results"></div>
+              <p>
+                Orsaksloggen registrerar nya händelser från denna version och behåller högst 500
+                händelser i 32 dygn. Diagnostiken ändrar inga mätvärden och fyller inte i luckor.
+              </p>
+            </div>
             <details class="settings-details">
               <summary>Datatäckning för ekonomijämförelser</summary>
               <div class="details-body">
@@ -3263,6 +3291,7 @@
         TibberHistoryPricesSettings.bind(Homey);
         EconomicReplaySettings.bind(Homey);
         EconomicReadinessSettings.bind(Homey);
+        DataDiagnosticsSettings.bind(Homey);
         SolarPreview.bind(Homey);
         document.getElementById('save').disabled = true;
         Homey.get('chargingConfig', (err, value) => {

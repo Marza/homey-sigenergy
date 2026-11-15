@@ -111,6 +111,11 @@
       "method": "POST",
       "path": "/economics/readiness",
       "public": false
+    },
+    "getDataDiagnostics": {
+      "method": "POST",
+      "path": "/diagnostics/data-gaps",
+      "public": false
     }
   },
   "platforms": ["local"],

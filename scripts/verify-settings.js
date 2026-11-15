@@ -13,6 +13,8 @@ function verifySettings(directory) {
   assert.equal(typeof require(path.resolve(folder, 'settings-assistant.js')).bind, 'function');
   assert.match(html, /<script src="economic-readiness.js"/);
   assert.equal(typeof require(path.resolve(folder, 'economic-readiness.js')).bind, 'function');
+  assert.match(html, /<script src="data-diagnostics.js"/);
+  assert.equal(typeof require(path.resolve(folder, 'data-diagnostics.js')).bind, 'function');
   assert.doesNotMatch(html, /(?:src|href)="https?:/, 'Settings assets must be local');
 }
 if (require.main === module) verifySettings(process.argv[2] || '.homeybuild');
