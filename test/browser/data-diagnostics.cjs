@@ -128,6 +128,25 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Timmar kompletterade från Tibber: 1/);
       assert.match(text, /Kvart med räknaråterhämtning: 1/);
       assert.match(text, /Säljpriser/);
+      assert.match(text, /Observerat: 23 h 45 min/);
+      assert.match(text, /Räknarestimat: 2 min/);
+      assert.match(text, /Okänd tid: 13 min/);
+      assert.match(text, /Enbart observerade Sigenergy-kvart: 23 timmar/);
+      assert.match(text, /Okända timmar: 0/);
+      assert.equal(await page.locator('.coverage-bar').count(), 3);
+      const bars = await page.locator('.coverage-bar').evaluateAll((bs) =>
+        bs.map((b) => ({
+          width: b.getBoundingClientRect().width,
+          sum: [...b.children].reduce((n, c) => n + c.getBoundingClientRect().width, 0),
+          colors: [...b.children].map((c) => getComputedStyle(c).backgroundColor),
+          hidden: b.getAttribute('aria-hidden'),
+        })),
+      );
+      for (const bar of bars) {
+        assert.ok(bar.width > 0 && Math.abs(bar.width - bar.sum) < 1);
+        assert.equal(new Set(bar.colors).size, 3);
+        assert.equal(bar.hidden, 'true');
+      }
       assert.match(text, /1 saknade eller ofullständiga hela timmar/);
       assert.doesNotMatch(text, /PRIVATE|SECRET|Bearer|unitPrice/);
       await page
@@ -142,6 +161,12 @@ const server = http.createServer((req, res) => {
       }
       await page.locator('#gap-hours').selectOption('72');
       assert.equal(await page.locator('#gap-results').textContent(), '');
+      await page.locator('#gap-refresh').click();
+      await page.waitForFunction(() =>
+        document.getElementById('gap-status').textContent.startsWith('Diagnostik hämtad'),
+      );
+      assert.match(await page.locator('#gap-results').textContent(), /Totalt 72 avslutade timmar/);
+      assert.match(await page.locator('#gap-results').textContent(), /Okänd tid: 48 h 13 min/);
       mode = 'malformed';
       await page.locator('#gap-refresh').click();
       await page.waitForFunction(() =>

@@ -438,3 +438,27 @@ body.sigenergy-settings {
     @apply list-disc ml-5 text-sm;
   }
 }
+
+body.sigenergy-settings {
+  .coverage-bar {
+    @apply flex w-full h-3 my-3 overflow-hidden rounded-full;
+    background: var(--line);
+  }
+  .coverage-bar span {
+    @apply block h-full shrink-0;
+  }
+  .coverage-observed {
+    background: var(--accent);
+  }
+  .coverage-estimated {
+    background: var(--note);
+  }
+  .coverage-unknown {
+    background: #b44848;
+  }
+  @media (prefers-color-scheme: dark) {
+    .coverage-unknown {
+      background: #e98f8f;
+    }
+  }
+}
