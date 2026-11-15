@@ -486,7 +486,11 @@ module.exports = class SigenergyApp extends Homey.App {
     const tariff = this.homey.settings.get('demandTariff');
     if (!tariff) return { status: 'not-configured' };
     validateTariff(tariff);
-    return calculateDemandCharge(this.history.getSlots(), tariff, month);
+    return calculateDemandCharge(
+      this.history.getEnergySlots?.() ?? this.history.getSlots(),
+      tariff,
+      month,
+    );
   }
   getChargingPreview(input, now = new Date()) {
     const advisory = this.getBackupAdvisory(now.getTime());

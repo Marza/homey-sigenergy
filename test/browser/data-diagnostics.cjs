@@ -16,6 +16,18 @@ function reset() {
   f.homey.app.dataDiagnostics = new DataDiagnostics(f.homey.settings, () => f.now);
   f.rows[0].coverageMs = 0;
   f.rows[0].directionalCoverageMs = 0;
+  f.rows[0].gridWh = 0;
+  f.rows[0].importWh = 0;
+  f.rows[0].counterRecovery = {
+    grid: {
+      from: f.rows[0].t + 60000,
+      to: f.rows[0].t + 180000,
+      coverageMs: 120000,
+      correctionWh: { gridWh: 120, importWh: 120, exportWh: 0 },
+      maxCollectionSkewMs: 2000,
+    },
+  };
+  f.data.tibberHistoryPriceCache.networkEnergy = [{ t: f.rows[0].t, importWh: 1000, exportWh: 0 }];
   f.rows[2].essCoverageMs = 0;
   f.rows[4].fieldCoverageMs.pvW = 0;
   delete f.data.tibberHistoryPriceCache.rows[1].production;
@@ -113,6 +125,8 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Modbus svarade inte i tid/);
       assert.match(text, /Ingen orsak registrerad/);
       assert.match(text, /Köppriser/);
+      assert.match(text, /Timmar kompletterade från Tibber: 1/);
+      assert.match(text, /Kvart med räknaråterhämtning: 1/);
       assert.match(text, /Säljpriser/);
       assert.match(text, /1 saknade eller ofullständiga hela timmar/);
       assert.doesNotMatch(text, /PRIVATE|SECRET|Bearer|unitPrice/);

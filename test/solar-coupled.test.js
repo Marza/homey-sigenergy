@@ -361,7 +361,7 @@ test('missed EV goals or home terminal state suppress net cost differences, whil
   assert.equal(s.candidates[0].reason, 'terminal-energy-not-restored');
   assert.equal(s.candidates[0].indicativeNetDifferenceSek, null);
 });
-test('independent power coverage starts with new observations and survives export 6 and restore', () => {
+test('independent power coverage starts with new observations and survives export 7 and restore', () => {
   let now = START + Q;
   const map = new Map(),
     settings = { get: (k) => map.get(k), set: (k, v) => map.set(k, structuredClone(v)) },
@@ -372,7 +372,7 @@ test('independent power coverage starts with new observations and survives expor
   const row = h.getSlots()[0];
   assert.deepEqual(row.fieldCoverageMs, { gridW: Q, pvW: Q, essW: Q, evW: Q });
   const file = h.export();
-  assert.equal(file.schema, 6);
+  assert.equal(file.schema, 7);
   assert.doesNotThrow(() => parseExport(file, now));
   const restoredMap = new Map();
   const restored = new HistoryStore(

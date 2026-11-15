@@ -522,3 +522,66 @@ test('an ongoing blocked polling loop is diagnosed without starting overlapping 
   assert.equal(device.polling, false);
   await device.onUninit();
 });
+
+test('gap recovery reuses the optional counter probe after persistence and cannot hide valid Energy totals on recovery failure', async () => {
+  const { PROFILE } = require('../lib/energy/meters');
+  let reads = 0,
+    stored,
+    failStore = false,
+    resetCounters = false;
+  const { device } = deviceFixture({
+    energyRead: async () => {
+      reads++;
+      return {
+        durationMs: 10,
+        values: {
+          solar: resetCounters ? '0' : '1000',
+          imported: resetCounters ? '0' : '2000',
+          exported: resetCounters ? '0' : '3000',
+          charged: resetCounters ? '0' : '4000',
+          discharged: resetCounters ? '0' : '5000',
+        },
+      };
+    },
+  });
+  const settings = { ...device.getSettings(), energyMetersProfile: PROFILE };
+  device.getSettings = () => settings;
+  device.getStoreValue = () => stored;
+  device.setStoreValue = async (_key, value) => {
+    if (failStore) throw Error('synthetic');
+    stored = value;
+  };
+  const observed = [];
+  device.homey.app.history.observeCounters = (raw, binding) => {
+    assert.ok(stored);
+    observed.push({ raw, binding });
+  };
+  await device.onInit();
+  await tick();
+  assert.equal(reads, 1);
+  assert.equal(observed.length, 1);
+  assert.ok(observed[0].raw.durationMs >= 10);
+  assert.equal(device.getEnergySnapshot().meters.values.imported, 20);
+  resetCounters = true;
+  device.lastEnergyProbeAt = 0;
+  await device.poll();
+  assert.equal(observed.length, 2);
+  assert.deepEqual(
+    Object.keys(observed[1].raw.values),
+    [],
+    'native reset-required channels cannot supply recovery',
+  );
+  resetCounters = false;
+  failStore = true;
+  device.lastEnergyProbeAt = 0;
+  await device.poll();
+  assert.equal(observed.length, 2);
+  failStore = false;
+  device.homey.app.history.observeCounters = () => {
+    throw Error('synthetic');
+  };
+  device.lastEnergyProbeAt = 0;
+  await device.poll();
+  assert.equal(device.getEnergySnapshot().meters.values.imported, 20);
+  await device.onUninit();
+});
