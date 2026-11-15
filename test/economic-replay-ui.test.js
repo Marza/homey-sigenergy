@@ -200,6 +200,77 @@ test('dated UI publishes only explicit dates and saved snapshots, safely renders
   await v.field('import').onclick();
   assert.match(v.field('contract-message').textContent, /256 KiB/);
 });
+test('stale saved terms require visible reload and renewed confirmation before publication', async () => {
+  const v = view();
+  await tick();
+  v.field('from').value = '2026-06-01';
+  v.field('network').checked = true;
+  v.field('date-confirm').checked = true;
+  v.field('components-confirm').checked = true;
+  v.data.costContract.gridImportExVatSekPerKWh = 0.2;
+  await v.field('publish').onclick();
+  assert.equal(v.data.costContractTimeline, undefined);
+  assert.match(v.field('contract-message').textContent, /Ingen ny kostnadsversion sparades/);
+  assert.match(v.field('contract-message').textContent, /Läs om sparade villkor och versioner/);
+  assert.equal(v.field('publish').disabled, true);
+  assert.equal(v.field('date-confirm').checked, false);
+  assert.equal(v.field('components-confirm').checked, false);
+  await v.field('refresh').onclick();
+  assert.equal(v.field('from').value, '2026-06-01');
+  assert.equal(v.field('network').checked, true);
+  assert.equal(v.data.costContractTimeline, undefined, 'reload must never publish');
+  await v.field('publish').onclick();
+  assert.match(v.field('contract-message').textContent, /Bekräfta/);
+  assert.equal(v.data.costContractTimeline, undefined);
+  v.field('date-confirm').checked = true;
+  v.field('components-confirm').checked = true;
+  await v.field('publish').onclick();
+  assert.equal(v.data.costContractTimeline.entries.length, 1);
+  const entry = v.data.costContractTimeline.entries[0];
+  assert.equal(entry.from, '2026-06-01');
+  assert.equal(entry.contract.gridImportExVatSekPerKWh, 0.2);
+});
+test('reload of changed saved terms or versions clears old attestations and results', async () => {
+  for (const change of ['draft', 'timeline']) {
+    const v = view();
+    await tick();
+    v.field('date-confirm').checked = true;
+    v.field('components-confirm').checked = true;
+    v.field('results').children.push({ textContent: 'Old result' });
+    if (change === 'draft') v.data.demandTariff.rateSekPerKw = 45;
+    else {
+      const homey = { settings: { get: (k) => v.data[k], set: (k, x) => (v.data[k] = x) } };
+      publishContract(homey, {
+        ...timelineStatus(homey),
+        expectedRevision: timelineStatus(homey).revision,
+        from: '2026-06-01',
+        confirmEffectiveDate: true,
+        confirmTradeComponents: true,
+        includeNetwork: false,
+      });
+    }
+    await v.field('refresh').onclick();
+    assert.equal(v.field('date-confirm').checked, false);
+    assert.equal(v.field('components-confirm').checked, false);
+    assert.equal(v.field('results').children.length, 0);
+    assert.equal(v.field('publish').disabled, false);
+  }
+});
+test('failed reload disables version actions until a successful read', async () => {
+  const v = view();
+  await tick();
+  v.field('date-confirm').checked = true;
+  v.setFailure('offline');
+  await v.field('refresh').onclick();
+  assert.match(v.field('contract-message').textContent, /offline/);
+  for (const id of ['publish', 'export', 'import']) assert.equal(v.field(id).disabled, true);
+  assert.equal(v.field('refresh').disabled, false);
+  assert.equal(v.field('date-confirm').checked, false);
+  v.setFailure(null);
+  await v.field('refresh').onclick();
+  assert.equal(v.field('publish').disabled, false);
+  assert.equal(v.data.costContractTimeline, undefined);
+});
 test('comparison UI prefills only saved assumptions, handles comma decimals and shows component costs', async () => {
   const v = view();
   await tick();
