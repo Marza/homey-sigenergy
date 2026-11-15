@@ -141,6 +141,18 @@ const server = http.createServer((req, res) => {
         await page.locator('.settings-page:visible details').evaluateAll((details) => {
           for (const detail of details) detail.open = true;
         });
+        if (category === 'economics') {
+          await page.locator('#costVersionBackup').evaluate((detail) => (detail.open = false));
+          assert.equal(await page.locator('#econ-refresh').isVisible(), true);
+          await page.locator('#econ-refresh').click();
+          assert.equal(await page.locator('#econ-refresh-message').isVisible(), true);
+          assert.match(
+            await page.locator('#econ-refresh-message').textContent(),
+            /Omläsningen misslyckades: Synthetic unavailable data/,
+          );
+          assert.equal(await page.locator('#econ-export').isVisible(), false);
+          await page.locator('#costVersionBackup').evaluate((detail) => (detail.open = true));
+        }
         const fields = await page
           .locator(
             '.settings-page:visible input:not([type="checkbox"]):not([type="hidden"]), .settings-page:visible select, #settingsCategory:visible',

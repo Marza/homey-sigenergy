@@ -20,7 +20,7 @@
       'invalid-solar-ev-assumptions':
         'Kontrollera solmålet, sparade bilinställningar, bilens SoC, laddeffekter och tidsfönster.',
       'contract-inputs-changed':
-        'Sparade villkor har ändrats. Läs om versionerna och kontrollera underlaget innan du publicerar.',
+        'Ingen ny kostnadsversion sparades eftersom sparade villkor eller versioner har ändrats. Tryck Läs om sparade villkor och versioner, kontrollera underlaget och bekräfta på nytt innan du publicerar.',
       'confirm-contract-provenance': 'Bekräfta giltighetsdatum och prisernas kostnadsinnehåll.',
       'contract-dates-must-increase':
         'Ange ett giltigt startdatum efter den senast publicerade versionens startdatum.',
@@ -84,9 +84,38 @@
       el('results').replaceChildren();
       el('result').textContent = 'Jämförelsen behöver beräknas på nytt.';
     }
+    function invalidateContracts() {
+      state = null;
+      el('date-confirm').checked = false;
+      el('components-confirm').checked = false;
+      for (const id of ['publish', 'export', 'import']) el(id).disabled = true;
+      clearResults();
+    }
     async function load() {
-      state = await api('GET', '/economics/contracts');
-      if (!state?.timeline?.entries) throw Error('Ogiltigt versionssvar.');
+      const previous = state;
+      state = null;
+      for (const id of ['publish', 'export', 'import']) el(id).disabled = true;
+      el('refresh-message').textContent = 'Läser sparade villkor och versioner…';
+      let next;
+      try {
+        next = await api('GET', '/economics/contracts');
+        if (!Array.isArray(next?.timeline?.entries) || !next.revision || !next.draftHash)
+          throw Error('Ogiltigt versionssvar.');
+      } catch (e) {
+        invalidateContracts();
+        el('refresh-message').textContent = 'Omläsningen misslyckades: ' + explain(e.message);
+        throw e;
+      }
+      if (
+        previous &&
+        (previous.revision !== next.revision || previous.draftHash !== next.draftHash)
+      )
+        invalidateContracts();
+      state = next;
+      el('refresh-message').textContent =
+        'Sparade villkor och versioner har lästs in. Antal publicerade kostnadsversioner: ' +
+        state.timeline.entries.length +
+        '. Kontrollera datum och bekräftelser och tryck Publicera daterad kopia av sparade villkor för att spara en ny version.';
       el('contracts').replaceChildren();
       for (let i = 0; i < state.timeline.entries.length; i++) {
         const e = state.timeline.entries[i],
@@ -117,9 +146,10 @@
         try {
           await fn();
         } catch (e) {
+          if (e.message === 'contract-inputs-changed') invalidateContracts();
           el('contract-message').textContent = explain(e.message);
         } finally {
-          el(id).disabled = false;
+          el(id).disabled = ['publish', 'export', 'import'].includes(id) && !state;
         }
       };
     }
