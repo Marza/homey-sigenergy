@@ -208,3 +208,41 @@ test('unreadable history/journal and missing price service are explicit, while d
   assert.equal(r.gaps.battery.truncated, true);
   assert.equal(r.gaps.battery.ranges.length, 100);
 });
+
+test('hourly recovery counts use the selected diagnostic period, including missing quarters and quarter-offset windows', () => {
+  const f = fixture({ hours: 12 });
+  for (const row of f.rows) {
+    row.coverageMs = 0;
+    row.directionalCoverageMs = 0;
+  }
+  f.data.tibberHistoryPriceCache.networkEnergy = f.data.tibberHistoryPriceCache.rows.map((r) => ({
+    t: r.t,
+    importWh: 1000,
+    exportWh: 0,
+  }));
+  const d = new DataDiagnostics(f.homey.settings, () => f.now);
+  const before = JSON.stringify(f.data);
+  assert.equal(d.report(f.homey, { hours: 12 }).recovery.tibberFilledHours, 12);
+  assert.equal(d.report(f.homey, { hours: 4 }).recovery.tibberFilledHours, 4);
+  assert.equal(d.report(f.homey, { hours: 1 }).recovery.tibberFilledHours, 1);
+  assert.equal(d.report(f.homey, { hours: 24 }).recovery.tibberFilledHours, 12);
+  assert.equal(d.report(f.homey, { hours: 24 }).recovery.hourlyMissing, 12);
+  const offset = d.report(f.homey, { hours: 1 }, f.now + Q);
+  assert.equal(offset.recovery.tibberFilledHours, 1);
+  assert.equal(offset.prices.to - offset.prices.from, H);
+  f.homey.app.history.getSlots = () => [];
+  assert.equal(
+    d.report(f.homey, { hours: 4 }).recovery.tibberFilledHours,
+    4,
+    'confirmed meter hours can fill wholly absent local records',
+  );
+  f.homey.app.history.getSlots = () => {
+    throw Error('synthetic read failure');
+  };
+  assert.equal(
+    d.report(f.homey, { hours: 4 }).recovery.tibberFilledHours,
+    0,
+    'storage failures must stay unavailable',
+  );
+  assert.equal(JSON.stringify(f.data), before);
+});
