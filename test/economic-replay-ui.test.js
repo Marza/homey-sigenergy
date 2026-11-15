@@ -219,6 +219,9 @@ test('stale saved terms require visible reload and renewed confirmation before p
   assert.equal(v.field('from').value, '2026-06-01');
   assert.equal(v.field('network').checked, true);
   assert.equal(v.data.costContractTimeline, undefined, 'reload must never publish');
+  assert.match(v.field('refresh-message').textContent, /har lästs in/);
+  assert.match(v.field('refresh-message').textContent, /publicerade kostnadsversioner: 0/);
+  assert.match(v.field('refresh-message').textContent, /tryck Publicera/);
   await v.field('publish').onclick();
   assert.match(v.field('contract-message').textContent, /Bekräfta/);
   assert.equal(v.data.costContractTimeline, undefined);
@@ -226,6 +229,7 @@ test('stale saved terms require visible reload and renewed confirmation before p
   v.field('components-confirm').checked = true;
   await v.field('publish').onclick();
   assert.equal(v.data.costContractTimeline.entries.length, 1);
+  assert.match(v.field('refresh-message').textContent, /publicerade kostnadsversioner: 1/);
   const entry = v.data.costContractTimeline.entries[0];
   assert.equal(entry.from, '2026-06-01');
   assert.equal(entry.contract.gridImportExVatSekPerKWh, 0.2);
@@ -263,6 +267,7 @@ test('failed reload disables version actions until a successful read', async () 
   v.setFailure('offline');
   await v.field('refresh').onclick();
   assert.match(v.field('contract-message').textContent, /offline/);
+  assert.match(v.field('refresh-message').textContent, /Omläsningen misslyckades: offline/);
   for (const id of ['publish', 'export', 'import']) assert.equal(v.field(id).disabled, true);
   assert.equal(v.field('refresh').disabled, false);
   assert.equal(v.field('date-confirm').checked, false);

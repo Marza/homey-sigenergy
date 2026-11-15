@@ -144,6 +144,12 @@ const server = http.createServer((req, res) => {
         if (category === 'economics') {
           await page.locator('#costVersionBackup').evaluate((detail) => (detail.open = false));
           assert.equal(await page.locator('#econ-refresh').isVisible(), true);
+          await page.locator('#econ-refresh').click();
+          assert.equal(await page.locator('#econ-refresh-message').isVisible(), true);
+          assert.match(
+            await page.locator('#econ-refresh-message').textContent(),
+            /Omläsningen misslyckades: Synthetic unavailable data/,
+          );
           assert.equal(await page.locator('#econ-export').isVisible(), false);
           await page.locator('#costVersionBackup').evaluate((detail) => (detail.open = true));
         }

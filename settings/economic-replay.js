@@ -95,6 +95,7 @@
       const previous = state;
       state = null;
       for (const id of ['publish', 'export', 'import']) el(id).disabled = true;
+      el('refresh-message').textContent = 'Läser sparade villkor och versioner…';
       let next;
       try {
         next = await api('GET', '/economics/contracts');
@@ -102,6 +103,7 @@
           throw Error('Ogiltigt versionssvar.');
       } catch (e) {
         invalidateContracts();
+        el('refresh-message').textContent = 'Omläsningen misslyckades: ' + explain(e.message);
         throw e;
       }
       if (
@@ -110,6 +112,10 @@
       )
         invalidateContracts();
       state = next;
+      el('refresh-message').textContent =
+        'Sparade villkor och versioner har lästs in. Antal publicerade kostnadsversioner: ' +
+        state.timeline.entries.length +
+        '. Kontrollera datum och bekräftelser och tryck Publicera daterad kopia av sparade villkor för att spara en ny version.';
       el('contracts').replaceChildren();
       for (let i = 0; i < state.timeline.entries.length; i++) {
         const e = state.timeline.entries[i],
