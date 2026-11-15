@@ -64,13 +64,17 @@
             : 'Avgifter enligt tidsbundna kostnadsversioner.')
         : 'Ingen kostnadssumma: ' + (messages[r.status] || r.status);
       el('coverage').textContent =
-        'Saknar daterat underlag: ' +
+        'Kompletterade timmar från Tibbermätning: ' +
+        (r.tibberFilledHours || 0) +
+        '. Timmar med Sigenergy-räknaråterhämtning: ' +
+        (r.counterRecoveredHours || 0) +
+        '. Saknar daterat underlag: ' +
         (r.missingContractHours || 0) +
         ' timmar. Saknar köppris: ' +
         (r.missingPriceHours || 0) +
         ' timmar, säljpris: ' +
         (r.missingProductionHours || 0) +
-        ' timmar. Kompletta kvart utanför hela timmar: ' +
+        ' timmar. Kompletta kvart utanför anläggningens använda hela timmar: ' +
         (r.unusedEnergyQuarters || 0) +
         '. Ofullständiga energikvart: ' +
         (r.excludedEnergyQuarters || 0) +

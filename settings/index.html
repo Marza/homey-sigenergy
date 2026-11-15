@@ -3005,7 +3005,7 @@
             status.textContent =
               result.status === 'collecting'
                 ? 'Samlar nya riktningsdata. Inga kompletta kvartar finns ännu.'
-                : `${result.completeQuarters} kompletta kvartar med separata import-/exportvolymer.`;
+                : `${result.completeQuarters} kompletta energikvartar med separata import-/exportvolymer, varav ${result.counterRecoveredQuarters || 0} med räknarestimat.`;
             const fmt = (value) =>
               Number.isFinite(value)
                 ? value.toLocaleString('sv-SE', { maximumFractionDigits: 3 })

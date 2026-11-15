@@ -15,6 +15,10 @@
     'modbus-unreachable': 'Modbus-adressen kunde inte nås',
     'modbus-refused': 'Modbus-anslutningen avvisades',
     'modbus-read-error': 'Modbus-avläsningen misslyckades',
+    'counter-recovery-failed':
+      'Räknaråterhämtningen kunde inte genomföras; ordinarie avläsning fortsätter',
+    'counter-gap-recovered':
+      'Kort energilucka kompletterades från Sigenergys kWh-räknare (uppskattning)',
     'plant-processing-error': 'Bearbetning eller publicering av anläggningsdata misslyckades',
     'off-grid': 'Nätenergin pausades eftersom nätläge inte var on-grid',
     'slow-poll': 'Ett avläsningsvarv tog mer än 60 sekunder',
@@ -161,6 +165,23 @@
           showRanges(sources[source], report.gaps[source], 'kvart');
         showRanges('Köppriser från Tibber', report.prices.consumption, 'hela timmar');
         showRanges('Säljpriser från Tibber', report.prices.production, 'hela timmar');
+        if (report.recovery) {
+          const recovered = section('Kompletterat energiunderlag');
+          paragraph(
+            recovered,
+            'Timmar kompletterade från Tibber: ' +
+              (report.recovery.tibberFilledHours || 0) +
+              '. Kvart med räknaråterhämtning: ' +
+              report.recovery.counterQuarters +
+              '. Kompletta nätenergikvart efter återhämtning: ' +
+              report.recovery.effectiveGridQuarters +
+              '.',
+          );
+          paragraph(
+            recovered,
+            'Räknaråterhämtning är ett märkt energiestimat. Diagrammens effektprov och råa täckning fylls inte i. Tibbers timunderlag ersätter inte saknade batteri- eller solkvart.',
+          );
+        }
         const prices = section('Tibbers hämtningsläge');
         const priceStates = {
           ok: 'Komplett svar vid senaste hämtning',

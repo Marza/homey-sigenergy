@@ -184,6 +184,32 @@ module.exports = class SigenergyDevice extends Homey.Device {
           await this.setStoreValue('energyCounterState', result.state);
           if (!current()) return;
           this.energyMeters = result;
+          try {
+            this.homey.app.history?.observeCounters?.(
+              {
+                ...raw,
+                values: Object.fromEntries(
+                  Object.entries(raw.values || {}).filter(
+                    ([key]) => Number.isFinite(result.values?.[key]) && !result.errors?.[key],
+                  ),
+                ),
+                durationMs: Math.max(raw.durationMs ?? Infinity, Date.now() - pollStartedAt),
+              },
+              {
+                key: sourceKey(settings) + ':' + Number(settings.energyCounterEpoch || 0),
+                solarMode: settings.energySolarSource || 'self',
+                solarKey:
+                  solarSourceKey(settings) +
+                  ':' +
+                  Number(settings.energyCounterEpoch || 0) +
+                  ':' +
+                  Number(settings.energySolarReference || 0),
+              },
+            );
+          } catch {
+            this.homey.app.dataDiagnostics?.record('plant', 'counter-recovery-failed');
+            this.error('Energy gap recovery unavailable');
+          }
         } catch {
           if (!current()) return;
           this.energyMeters = { readAt: Date.now(), values: {}, errors: {} };

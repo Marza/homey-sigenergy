@@ -20,3 +20,7 @@ New observations begin with this version. Earlier missing coverage is shown with
 Journal failures do not stop collection or price fetching. Pending observations are retained in memory and retried at the next periodic history checkpoint; history-write failures similarly retain the measurement buffer. Abrupt termination can lose uncommitted memory, including diagnostic observations; this logger cannot reconstruct an unobserved outage or guarantee recording its own storage failure. Corrupt stored journals are reported unavailable and are not overwritten automatically. The journal is separate from history/contract backups and is not included in their existing export formats.
 
 The normal history snapshot and its retention are unchanged: up to 32 days of quarters and 730 daily summaries. The journal does not backfill coverage or enable hardware writes. Tibber pricing uses the existing saved connection and rate-limit protection; see [historical prices](tibber-history-prices.md).
+
+## Energy recovery
+
+See [energy-gap recovery](gap-recovery.md) for small same-quarter counter estimates and explicitly sourced Tibber hourly fallback. Raw missing-period counts remain visible; recovered energy is shown separately, without creating power or SoC samples.

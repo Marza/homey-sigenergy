@@ -37,3 +37,7 @@ Credential/home changes invalidate cached visibility and pending requests, inclu
 Synthetic tests cover existing-token request headers, home selection and source binding, bounded windows, negative prices, VAT amounts, missing production, duplicate/malformed data, hourly grouping, retry/cache behavior, pending-request invalidation and private routes. Browser checks exercise confirmation, optional components, partial coverage and failure states without account data. Homey build checks verify runtime/UI files and authenticated routes are packaged.
 
 Live production-field availability, account-specific component semantics and comparison with actual billing remain owner verification steps after installation. No physical or household observations are published here. Issue #10 stays open for verified scenario pricing, matching battery boundaries and runtime financial comparison.
+
+## Meter-volume fallback
+
+The same requests also retain independently validated hourly import/export volumes, including when prices are not yet available. A missing whole Sigenergy energy hour can use both reported meter directions as a labelled hourly fallback for the observed-cost underlay. It never creates four quarters or fills battery/PV/SoC history. See [energy-gap recovery](gap-recovery.md) for source precedence, confirmation, retention and limitations.

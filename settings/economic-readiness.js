@@ -13,7 +13,7 @@
     ],
     batteryCoverageQuarters: [
       'Batterienergi och täckning',
-      'Separat batteritäckning behövs. Äldre luckor fylls inte i automatiskt.',
+      'Separat batteritäckning behövs. Korta nya luckor kan få märkta räknarestimat; äldre luckor utan räknarpar förblir okända.',
     ],
     contractQuarters: [
       'Daterade avtalsvillkor',
@@ -256,6 +256,14 @@
           ' (slut exkluderat). Kontrollerat ' +
           date.format(r.checkedAt) +
           '.';
+        if (r.counterRecoveredQuarters)
+          list.appendChild(
+            node(
+              'li',
+              r.counterRecoveredQuarters +
+                ' kvart innehåller energiestimat från Sigenergys räknare. Ursprungliga effektprov har inte återskapats.',
+            ),
+          );
         for (const g of r.gates) {
           const row = node('li');
           row.className = 'readiness-row';

@@ -414,6 +414,10 @@
           ' – ' +
           date(r.to) +
           '. Indikativ modell; ingen ekonomisk rangordning. ' +
+          (r.counterRecoveredQuarters
+            ? r.counterRecoveredQuarters +
+              ' kvart innehåller energiestimat från Sigenergys räknare. '
+            : '') +
           r.contractVersions.length +
           ' kostnadsversioner.' +
           (coupled

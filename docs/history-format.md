@@ -103,3 +103,7 @@ The Dashboard continues to show only the current-month summary. Retained prior-m
 The independent ESS coverage field, dated cost/tariff archive and balanced replay are described in [economic replay](economic-replay.md). Older energy is retained but not promoted to complete battery coverage. Export schema 6 is not readable by older app versions; retain a pre-upgrade backup for downgrade. Dated cost versions have a separate private export and are not part of the combined history/meter backup.
 
 For coupled solar/EV modeling, see [coupled solar replay](coupled-solar-ev.md). Its independent PV requirement starts with newly observed covered segments; missing legacy PV coverage is not inferred from battery/net coverage.
+
+## Version 7: separate counter recovery metadata
+
+Version-7 exports carry optional `counterRecovery` metadata per quarter while preserving the original sampled integrals and counts. Stored snapshot schema 3 and quarter schema 2 remain unchanged. Versions 1–6 are still accepted without invented recovery metadata. Old app versions cannot restore version 7; retain a pre-upgrade backup for downgrade. See [energy-gap recovery](gap-recovery.md) for the correction projection, eligibility and timing limits.

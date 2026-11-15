@@ -506,3 +506,49 @@ test('partial price replies preserve previously reported directions, accept corr
   await f.service.sync();
   assert.equal(JSON.stringify(f.data.tibberHistoryPriceCache), snapshot);
 });
+
+test('network energy is persisted from the existing connection, survives partial replies and migrates successful old price-only caches once', async () => {
+  const f = fixture();
+  f.service.confirm({ confirmSamePlant: true });
+  await f.service.sync();
+  const first = f.data.tibberHistoryPriceCache;
+  assert.deepEqual(first.networkEnergy, [{ t: T, importWh: 1000, exportWh: 500 }]);
+  delete first.networkEnergy;
+  let calls = 0;
+  f.service.fetch = async (_u, o) => {
+    calls++;
+    return response({
+      data: JSON.parse(o.body).variables
+        ? { viewer: { home: home([node()], null) } }
+        : { viewer: { homes: [{ id: 'synthetic-home' }] } },
+    });
+  };
+  await f.service.sync();
+  assert.equal(calls, 2);
+  assert.deepEqual(f.data.tibberHistoryPriceCache.networkEnergy, [{ t: T, importWh: 1000 }]);
+  await f.service.sync();
+  assert.equal(calls, 2);
+  f.setNow(NOW + H);
+  f.service.fetch = async (_u, o) =>
+    response({
+      data: JSON.parse(o.body).variables
+        ? {
+            viewer: {
+              home: home([{ ...node(), consumption: 2, cost: 2.4 }], [node(T, 'production')]),
+            },
+          }
+        : { viewer: { homes: [{ id: 'synthetic-home' }] } },
+    });
+  await f.service.sync();
+  assert.equal(f.data.tibberHistoryPriceCache.networkEnergy[0].importWh, 2000);
+  assert.equal(f.data.tibberHistoryPriceCache.networkEnergy[0].exportWh, 500);
+  f.setNow(NOW + 2 * H);
+  f.service.fetch = async (_u, o) =>
+    response({
+      data: JSON.parse(o.body).variables
+        ? { viewer: { home: home([{ ...node(), consumption: null, cost: null }], null) } }
+        : { viewer: { homes: [{ id: 'synthetic-home' }] } },
+    });
+  await f.service.sync();
+  assert.equal(f.data.tibberHistoryPriceCache.networkEnergy[0].importWh, 2000);
+});

@@ -396,7 +396,7 @@ test('new battery coverage is independently integrated and survives export 5, re
   assert.equal(row.essCoverageMs, Q);
   close(row.essWh, 250);
   const exported = h.export();
-  assert.equal(exported.schema, 6);
+  assert.equal(exported.schema, 7);
   const freshMap = new Map(),
     fresh = new HistoryStore(
       { get: (k) => freshMap.get(k), set: (k, v) => freshMap.set(k, v) },
