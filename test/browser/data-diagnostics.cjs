@@ -18,15 +18,29 @@ function reset() {
   f.rows[0].directionalCoverageMs = 0;
   f.rows[0].gridWh = 0;
   f.rows[0].importWh = 0;
-  f.rows[0].counterRecovery = {
-    grid: {
-      from: f.rows[0].t + 60000,
-      to: f.rows[0].t + 180000,
-      coverageMs: 120000,
-      correctionWh: { gridWh: 120, importWh: 120, exportWh: 0 },
-      maxCollectionSkewMs: 2000,
-    },
+  const boundary = f.rows[1].t;
+  const allocation = {
+    method: 'missing-time-proportional',
+    from: boundary - 60000,
+    to: boundary + 60000,
+    missingMs: [60000, 60000],
+    correctionWh: { gridWh: 120, importWh: 120, exportWh: 0 },
   };
+  f.rows[1].coverageMs -= 60000;
+  f.rows[1].directionalCoverageMs -= 60000;
+  for (let i = 0; i < 2; i++) {
+    const part = {
+      from: i ? boundary : boundary - 60000,
+      to: i ? boundary + 60000 : boundary,
+      coverageMs: 60000,
+      correctionWh: { gridWh: 60, importWh: 60, exportWh: 0 },
+      maxCollectionSkewMs: 2000,
+      allocation,
+    };
+    const aggregate = { ...part };
+    delete aggregate.allocation;
+    f.rows[i].counterRecovery = { grid: { ...aggregate, parts: [part] } };
+  }
   f.data.tibberHistoryPriceCache.networkEnergy = [{ t: f.rows[0].t, importWh: 1000, exportWh: 0 }];
   f.rows[2].essCoverageMs = 0;
   f.rows[4].fieldCoverageMs.pvW = 0;
@@ -126,11 +140,13 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Ingen orsak registrerad/);
       assert.match(text, /Köppriser/);
       assert.match(text, /Timmar kompletterade från Tibber: 1/);
-      assert.match(text, /Kvart med räknaråterhämtning: 1/);
+      assert.match(text, /Kvart med räknaråterhämtning: 2/);
       assert.match(text, /Säljpriser/);
-      assert.match(text, /Observerat: 23 h 45 min/);
+      assert.match(text, /Kvart med fördelning över kvartgräns: 2/);
+      assert.match(text, /exakta energifördelningen.*okänd/);
+      assert.match(text, /Observerat: 23 h 44 min/);
       assert.match(text, /Räknarestimat: 2 min/);
-      assert.match(text, /Okänd tid: 13 min/);
+      assert.match(text, /Okänd tid: 14 min/);
       assert.match(text, /Enbart observerade Sigenergy-kvart: 23 timmar/);
       assert.match(text, /Okända timmar: 0/);
       assert.equal(await page.locator('.coverage-bar').count(), 3);
@@ -166,7 +182,7 @@ const server = http.createServer((req, res) => {
         document.getElementById('gap-status').textContent.startsWith('Diagnostik hämtad'),
       );
       assert.match(await page.locator('#gap-results').textContent(), /Totalt 72 avslutade timmar/);
-      assert.match(await page.locator('#gap-results').textContent(), /Okänd tid: 48 h 13 min/);
+      assert.match(await page.locator('#gap-results').textContent(), /Okänd tid: 48 h 14 min/);
       mode = 'malformed';
       await page.locator('#gap-refresh').click();
       await page.waitForFunction(() =>

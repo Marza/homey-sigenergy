@@ -95,7 +95,7 @@ test('counter corrections replace the already integrated share rather than addin
   near(raw.counterRecovery.grid.correctionWh.importWh, 70);
   near(r.importWh, 180);
 });
-test('write failures preserve both measurements and recovery for retry; version 7 backup restores provenance', () => {
+test('write failures preserve both measurements and recovery for retry; version 8 backup restores provenance', () => {
   const f = fixture();
   observe(f, 0);
   sample(f, 120);
@@ -106,7 +106,7 @@ test('write failures preserve both measurements and recovery for retry; version 
   f.fail(false);
   f.history.flush();
   const file = f.history.export();
-  assert.equal(file.schema, 7);
+  assert.equal(file.schema, 8);
   const g = fixture();
   g.at(T + 120000);
   g.history.import(file);
@@ -122,13 +122,12 @@ test('write failures preserve both measurements and recovery for retry; version 
   bad.slots[0].counterRecovery.grid.correctionWh.extra = 123;
   assert.throws(() => parseExport(bad, T + 120000), /counter recovery/);
 });
-test('no bridge across restart, source changes, imports, off-grid intervals, quarter boundaries or long gaps', () => {
+test('no bridge across restart, source changes, imports, off-grid intervals or long gaps', () => {
   for (const scenario of [
     'restart',
     'connection',
     'solar-source',
     'off-grid',
-    'quarter',
     'long',
     'slow',
     'reset',
@@ -144,7 +143,6 @@ test('no bridge across restart, source changes, imports, off-grid intervals, qua
       f.history.append({ gridW: null, essW: null, pvW: null }, T + 1000, 'connection-changed');
     if (scenario === 'off-grid')
       f.history.append({ gridW: null, essW: null, pvW: null }, T + 1000, 'off-grid');
-    if (scenario === 'quarter') time = 960;
     if (scenario === 'long') time = 360;
     sample(f, time);
     const raw = counters(time),

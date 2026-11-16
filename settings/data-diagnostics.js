@@ -292,6 +292,13 @@
           recovered,
           'Varje timme räknas en gång. En timme med räknarestimat kan också innehålla observerad tid. Tibber fyller endast nätets timunderlag, inte tidstäckningen för nät, batteri eller sol.',
         );
+        if (report.recovery?.crossQuarterQuarters > 0)
+          paragraph(
+            recovered,
+            'Kvart med fördelning över kvartgräns: ' +
+              report.recovery.crossQuarterQuarters +
+              '. Energin har fördelats efter saknad tid. Den exakta energifördelningen mellan kvarten är okänd.',
+          );
         const prices = section('Tibbers hämtningsläge');
         const priceStates = {
           ok: 'Komplett svar vid senaste hämtning',
