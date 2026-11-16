@@ -89,6 +89,7 @@ test('time coverage displays independent durations and rejects a contradictory f
   const f = fixture({ hours: 1 });
   f.rows[0].essCoverageMs -= 60000;
   const r = new DataDiagnostics(f.homey.settings, () => f.now).report(f.homey, { hours: 1 });
+  r.recovery.crossQuarterQuarters = 2;
   const text = (node) => [node.textContent, ...node.children.map(text)].join(' ');
   let p = v.field('refresh').onclick();
   v.requests[0].cb(null, r);
@@ -98,6 +99,8 @@ test('time coverage displays independent durations and rejects a contradictory f
   assert.match(rendered, /Okänd tid: 1 min/);
   assert.match(rendered, /Timmar med räknarestimat: 0/);
   assert.match(rendered, /inte tidstäckningen/);
+  assert.match(rendered, /Kvart med fördelning över kvartgräns: 2/);
+  assert.match(rendered, /exakta energifördelningen.*okänd/);
   r.quality.channels.battery.observedMs++;
   p = v.field('refresh').onclick();
   v.requests[1].cb(null, r);
