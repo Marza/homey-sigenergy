@@ -25,7 +25,14 @@ function estimate(value) {
     'estimatedSek',
     'fetchedAt',
   ]);
-  return result && { ...result, coverage: coverage(value.coverage) };
+  const peaks = value?.selectedPeaks;
+  const selectedPeakCount =
+    Array.isArray(peaks) &&
+    peaks.length <= 31 &&
+    peaks.every((p) => Number.isFinite(p?.kw) && p.kw >= 0)
+      ? peaks.length
+      : null;
+  return result && { ...result, selectedPeakCount, coverage: coverage(value.coverage) };
 }
 function publicStatus(status) {
   return {

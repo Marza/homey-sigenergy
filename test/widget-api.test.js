@@ -236,3 +236,18 @@ test('hung API requests time out and a late response cannot restore stale values
   await flush();
   assert.equal(v.elements.get('state').textContent, 'Ingen historik');
 });
+
+test('widget exposes only the count of selected peaks, including zero and unknown counts', () => {
+  for (const [peaks, count] of [
+    [[], 0],
+    [[{ kw: 1, date: 'PRIVATE_DATE' }], 1],
+    [undefined, null],
+    [[{ kw: NaN }], null],
+    [Array(32).fill({ kw: 1 }), null],
+  ]) {
+    const r = snapshot({ demandEstimate: { status: 'insufficient-data', selectedPeaks: peaks } });
+    assert.equal(r.values.demandEstimate.selectedPeakCount, count);
+    assert.ok(!JSON.stringify(r).includes('PRIVATE_DATE'));
+    assert.equal(r.values.demandEstimate.selectedPeaks, undefined);
+  }
+});
