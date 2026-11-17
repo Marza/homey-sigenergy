@@ -8,8 +8,9 @@ const { getOverview } = require('../../widgets/energy-overview/api');
 const { tariffKey, currentMonth } = require('../../lib/tariff-config');
 const directory = path.join(__dirname, '../../widgets/energy-overview/public');
 let mode = 'meter';
+const NOW = Date.parse('2026-11-12T12:00Z');
 function values() {
-  const now = Date.now(),
+  const now = NOW,
     tariff = {
       start: '07:00',
       end: '20:00',
@@ -19,7 +20,7 @@ function values() {
       rateSekPerKw: 100,
     };
   const result = {
-    month: currentMonth(),
+    month: currentMonth(new Date(now)),
     tariffKey: tariffKey(tariff),
     status: 'provisional',
     averageKw: 4.2,
@@ -51,8 +52,9 @@ function values() {
     },
     demandTariff: mode === 'no-tariff' ? null : tariff,
     tibberConsumptionArchive: { configRevision: 'synthetic' },
-    meterDemandEstimate:
-      mode === 'local' ? null : { ...result, ...(mode === 'stale' ? { month: '2000-01' } : {}) },
+    meterDemandEstimate: ['local', 'partial-local'].includes(mode)
+      ? null
+      : { ...result, ...(mode === 'stale' ? { month: '2000-01' } : {}) },
     demandEstimate:
       mode === 'local'
         ? { ...result, averageKw: 3, estimatedSek: 300 }
@@ -61,7 +63,10 @@ function values() {
             status: 'insufficient-data',
             averageKw: null,
             estimatedSek: null,
-            selectedPeaks: [{ kw: 3 }, { kw: 2 }, { kw: 1 }],
+            selectedPeaks: [3, 2, 1].map((kw, i) => ({
+              kw,
+              t: Date.parse('2026-11-' + String(9 + i).padStart(2, '0') + 'T09:00Z'),
+            })),
           },
     tariffOptimization: { status: 'insufficient-data' },
   };
@@ -83,16 +88,19 @@ const server = http.createServer((req, res) => {
     }
     const data = values(),
       before = JSON.stringify(data);
-    const result = getOverview({
-      homey: {
-        settings: {
-          get: (k) => data[k],
-          set: () => {
-            throw Error('Writes forbidden');
+    const result = getOverview(
+      {
+        homey: {
+          settings: {
+            get: (k) => data[k],
+            set: () => {
+              throw Error('Writes forbidden');
+            },
           },
         },
       },
-    });
+      NOW,
+    );
     assert.equal(JSON.stringify(data), before);
     res.end(JSON.stringify(result));
     return;
@@ -115,6 +123,20 @@ const server = http.createServer((req, res) => {
   try {
     browser = await chromium.launch();
     const page = await browser.newPage();
+    await page.addInitScript(
+      ({ now }) => {
+        const OriginalDate = Date;
+        globalThis.Date = class extends OriginalDate {
+          constructor(...args) {
+            super(...(args.length ? args : [now]));
+          }
+          static now() {
+            return now;
+          }
+        };
+      },
+      { now: NOW },
+    );
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     for (const [width, scheme] of [
@@ -125,7 +147,7 @@ const server = http.createServer((req, res) => {
     ]) {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: scheme });
-      for (const scenario of ['meter', 'local', 'stale', 'no-tariff', 'failure']) {
+      for (const scenario of ['meter', 'local', 'partial-local', 'stale', 'no-tariff', 'failure']) {
         mode = scenario;
         await page.goto(`http://127.0.0.1:${server.address().port}/`);
         await page.waitForFunction(() => window.appReady);
@@ -133,7 +155,8 @@ const server = http.createServer((req, res) => {
         if (mode === 'meter') {
           assert.match(source, /Tibber/);
           assert.equal(await page.locator('#meterSek').textContent(), '420 kr');
-          assert.equal(await page.locator('#demandSek').textContent(), '–');
+          assert.equal(await page.locator('#demandSek').textContent(), '200 kr');
+          assert.equal(await page.locator('#demandKw').textContent(), '2 kW');
           assert.equal(await page.locator('#simSaving').textContent(), '–');
           assert.match(await page.locator('#demandState').textContent(), /3 av 5 olika mätdagar/);
           const monthly = await page.locator('#monthly-demand').boundingBox();
@@ -152,10 +175,23 @@ const server = http.createServer((req, res) => {
           assert.match(source, /Sigenergy/);
           assert.equal(await page.locator('#meterSek').textContent(), '300 kr');
           assert.match(await page.locator('#meterState').textContent(), /lokal avgift/);
+        } else if (mode === 'partial-local') {
+          assert.equal(await page.locator('#meterKw').textContent(), '2 kW');
+          assert.equal(await page.locator('#meterSek').textContent(), '200 kr');
+          assert.match(
+            await page.locator('#meterPeakLabel').textContent(),
+            /Medel hittills \(3 av 5\)/,
+          );
+          await page.getByText('Visa toppar hittills', { exact: true }).click();
+          assert.match(await page.locator('#meterPeaks').textContent(), /3 kW/);
+        } else if (mode === 'stale') {
+          assert.equal(await page.locator('#meterSek').textContent(), '200 kr');
+          assert.match(source, /Sigenergy/);
         } else {
           assert.equal(await page.locator('#meterSek').textContent(), '–');
           assert.doesNotMatch(source, /Tibber – mätarreferens/);
         }
+        await page.locator('details').evaluateAll((ds) => ds.forEach((d) => (d.open = true)));
         assert.ok(
           await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
         );

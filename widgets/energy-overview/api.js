@@ -1,4 +1,5 @@
 'use strict';
+const { currentMonth } = require('../../lib/tariff-config');
 const { diagnostics, backupAdvisory } = require('../../lib/source-status');
 const pick = (value, keys) =>
   value && typeof value === 'object'
@@ -16,7 +17,7 @@ function coverage(value) {
     'status',
   ]);
 }
-function estimate(value) {
+function estimate(value, now = Date.now()) {
   const result = pick(value, [
     'month',
     'tariffKey',
@@ -26,13 +27,36 @@ function estimate(value) {
     'fetchedAt',
   ]);
   const peaks = value?.selectedPeaks;
-  const selectedPeakCount =
+  const validPeaks =
     Array.isArray(peaks) &&
     peaks.length <= 31 &&
-    peaks.every((p) => Number.isFinite(p?.kw) && p.kw >= 0)
-      ? peaks.length
+    peaks.every((p) => Number.isFinite(p?.kw) && p.kw >= 0);
+  const selectedPeakHours =
+    validPeaks &&
+    peaks.every(
+      (p) =>
+        Number.isSafeInteger(p.t) &&
+        p.t >= 0 &&
+        p.t % 3600000 === 0 &&
+        p.t + 3600000 <= now &&
+        currentMonth(new Date(p.t)) === value.month,
+    ) &&
+    new Set(peaks.map((p) => p.t)).size === peaks.length
+      ? peaks.map((p) => ({ t: p.t, kw: p.kw }))
       : null;
-  return result && { ...result, selectedPeakCount, coverage: coverage(value.coverage) };
+  const selectedPeakCount = selectedPeakHours === null ? null : selectedPeakHours.length;
+  const observedAverageKw = selectedPeakHours?.length
+    ? selectedPeakHours.reduce((n, p) => n + p.kw, 0) / selectedPeakHours.length
+    : null;
+  return (
+    result && {
+      ...result,
+      selectedPeakCount,
+      selectedPeakHours,
+      observedAverageKw,
+      coverage: coverage(value.coverage),
+    }
+  );
 }
 function publicStatus(status) {
   return {
@@ -112,7 +136,7 @@ function getOverview({ homey }, now) {
       meterState?.configRevision &&
       meterState.configRevision === sourceValues.sourceConfig?.tibber?.revision
         ? {
-            ...estimate(meterEstimate),
+            ...estimate(meterEstimate, now ?? Date.now()),
             sync,
           }
         : sync
@@ -157,12 +181,12 @@ function getOverview({ homey }, now) {
       'rateSekPerKw',
       'calendar',
     ]),
-    demandEstimate: estimate(read('demandEstimate')),
+    demandEstimate: estimate(read('demandEstimate'), now ?? Date.now()),
     tariffOptimization: optimization
       ? {
           status: optimization.status,
           backupAdvisory: advisory,
-          baseline: estimate(optimization.baseline),
+          baseline: estimate(optimization.baseline, now ?? Date.now()),
           best: pick(optimization.best, ['simulatedDemandSek', 'demandSavingSek']),
         }
       : null,

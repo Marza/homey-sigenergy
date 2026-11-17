@@ -384,7 +384,10 @@ test('monthly demand prioritizes Tibber when local distinct-day history is insuf
       status: 'insufficient-data',
       averageKw: null,
       estimatedSek: null,
-      selectedPeaks: [{ kw: 3 }, { kw: 2 }, { kw: 1 }],
+      selectedPeaks: [3, 2, 1].map((kw, i) => ({
+        kw,
+        t: Date.parse('2026-11-' + String(9 + i).padStart(2, '0') + 'T09:00Z'),
+      })),
     },
     tariffOptimization: { status: 'insufficient-data' },
   });
@@ -393,8 +396,11 @@ test('monthly demand prioritizes Tibber when local distinct-day history is insuf
   assert.equal(v.element('meterSek').textContent, '420 kr');
   assert.match(v.element('monthlySource').textContent, /Tibber/);
   assert.match(v.element('meterState').textContent, /5 olika dagar/);
-  assert.equal(v.element('demandKw').textContent, '–');
+  assert.equal(v.element('demandKw').textContent, '2 kW');
+  assert.equal(v.element('demandSek').textContent, '200 kr');
+  assert.equal(v.element('demandPeakLabel').textContent, 'Medel hittills (3 av 5)');
   assert.match(v.element('demandState').textContent, /3 av 5 olika mätdagar/);
+  assert.match(v.element('demandPeaks').textContent, /3 kW/);
   assert.equal(v.element('simSaving').textContent, '–');
   for (const mode of ['stale', 'read-error', 'negative', 'new-tariff']) {
     v.values.meterDemandEstimate = { ...r, averageKw: 4.2, estimatedSek: 420 };
@@ -405,7 +411,7 @@ test('monthly demand prioritizes Tibber when local distinct-day history is insuf
     if (mode === 'negative') v.values.meterDemandEstimate.estimatedSek = -1;
     if (mode === 'new-tariff') v.values.demandTariff = { ...tariff, rateSekPerKw: 200 };
     v.refresh();
-    assert.equal(v.element('meterSek').textContent, '–', mode);
+    assert.equal(v.element('meterSek').textContent, mode === 'new-tariff' ? '–' : '200 kr', mode);
   }
 });
 test('local monthly fallback is explicitly sourced and never adds Tibber volumes to simulation', () => {
@@ -424,4 +430,104 @@ test('local monthly fallback is explicitly sourced and never adds Tibber volumes
   v.failedReads.add('demandEstimate');
   v.refresh();
   assert.equal(v.element('meterSek').textContent, '–');
+});
+
+test('first-day peaks and their provisional fee show immediately, including zero, without completing the tariff', () => {
+  for (const kw of [3, 0]) {
+    const tariff = { ...base(), peakCount: 5 },
+      r = {
+        ...estimate(tariff),
+        status: 'insufficient-data',
+        averageKw: null,
+        estimatedSek: null,
+        selectedPeaks: [{ t: Date.parse('2026-11-09T09:00Z'), kw }],
+      };
+    const v = view('widgets/energy-overview/public/index.html', {
+      demandTariff: tariff,
+      demandEstimate: r,
+    });
+    v.run('onHomeyReady(Homey)');
+    assert.equal(v.element('demandKw').textContent, kw + ' kW');
+    assert.equal(v.element('meterKw').textContent, kw + ' kW');
+    assert.equal(v.element('demandSek').textContent, kw * 100 + ' kr');
+    assert.equal(v.element('meterSek').textContent, kw * 100 + ' kr');
+    assert.match(v.element('meterFeeLabel').textContent, /hittills/);
+    assert.match(v.element('meterState').textContent, /1 av 5 olika mätdagar/);
+    assert.match(v.element('meterState').textContent, /Underlaget är ofullständigt/);
+    assert.match(v.element('demandPeaks').textContent, /10:00 GMT\+1/);
+    assert.equal(v.element('simSaving').textContent, '–');
+    v.values.demandEstimate = {
+      ...estimate(tariff),
+      selectedPeaks: [1, 2, 3, 4, 5].map((kw, i) => ({
+        kw,
+        t: Date.parse('2026-11-' + String(2 + i).padStart(2, '0') + 'T09:00Z'),
+      })),
+    };
+    v.refresh();
+    assert.equal(v.element('demandSek').textContent, '400 kr');
+    assert.equal(v.element('demandPeakLabel').textContent, 'Medel av 5 timtoppar');
+    v.values.demandEstimate = { ...r, month: '2026-10' };
+    v.refresh();
+    assert.equal(v.element('demandKw').textContent, '–');
+    assert.doesNotMatch(v.element('demandPeaks').textContent, /3 kW/);
+  }
+});
+test('partial Tibber peaks stay source-bound and never masquerade as a completed tariff calculation', () => {
+  const tariff = { ...base(), peakCount: 5 },
+    r = {
+      ...estimate(tariff),
+      status: 'insufficient-data',
+      averageKw: null,
+      estimatedSek: null,
+      selectedPeaks: [{ kw: 2, t: Date.parse('2026-11-09T09:00Z') }],
+    };
+  const v = view('widgets/energy-overview/public/index.html', {
+    demandTariff: tariff,
+    meterDemandEstimate: r,
+    sourceConfig: { tibber: { revision: 'synthetic' } },
+    tibberConsumptionArchive: { configRevision: 'synthetic' },
+  });
+  v.run('onHomeyReady(Homey)');
+  assert.equal(v.element('meterKw').textContent, '2 kW');
+  assert.match(v.element('monthlySource').textContent, /Tibber/);
+  assert.equal(v.element('meterSek').textContent, '200 kr');
+  v.values.sourceConfig.tibber.revision = 'changed';
+  v.refresh();
+  assert.equal(v.element('meterKw').textContent, '–');
+  assert.doesNotMatch(v.element('meterPeaks').textContent, /2 kW/);
+});
+
+test('partial fee uses the observed mean and matching saved rate while backend completion and simulation stay unchanged', () => {
+  const tariff = { ...base(), peakCount: 5, rateSekPerKw: 125.5 };
+  const r = {
+    ...estimate(tariff),
+    status: 'insufficient-data',
+    averageKw: null,
+    estimatedSek: null,
+    selectedPeaks: [1.1, 2.2, 3.3].map((kw, i) => ({
+      kw,
+      t: Date.parse('2026-11-' + String(9 + i).padStart(2, '0') + 'T09:00Z'),
+    })),
+  };
+  const v = view('widgets/energy-overview/public/index.html', {
+    demandTariff: tariff,
+    demandEstimate: r,
+    tariffOptimization: { status: 'insufficient-data' },
+  });
+  v.run('onHomeyReady(Homey)');
+  assert.equal(v.element('demandSek').textContent, '276 kr');
+  assert.equal(v.element('meterSek').textContent, '276 kr');
+  assert.match(v.element('demandState').textContent, /baserad på 3 av 5 olika mätdagar/);
+  assert.equal(v.values.demandEstimate.status, 'insufficient-data');
+  assert.equal(v.values.demandEstimate.estimatedSek, null);
+  assert.equal(v.element('simDemand').textContent, '–');
+  assert.equal(v.element('simSaving').textContent, '–');
+  assert.equal(v.writes.length, 0);
+  for (const rate of [0, 1e308]) {
+    v.values.demandTariff = { ...tariff, rateSekPerKw: rate };
+    v.values.demandEstimate = { ...r, tariffKey: tariffKey(v.values.demandTariff) };
+    v.refresh();
+    assert.equal(v.element('meterSek').textContent, rate === 0 ? '0 kr' : '–');
+    if (rate !== 0) assert.match(v.element('meterState').textContent, /kunde inte beräknas/);
+  }
 });
