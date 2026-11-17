@@ -155,7 +155,7 @@ const server = http.createServer((req, res) => {
         if (mode === 'meter') {
           assert.match(source, /Tibber/);
           assert.equal(await page.locator('#meterSek').textContent(), '420 kr');
-          assert.equal(await page.locator('#demandSek').textContent(), '–');
+          assert.equal(await page.locator('#demandSek').textContent(), '200 kr');
           assert.equal(await page.locator('#demandKw').textContent(), '2 kW');
           assert.equal(await page.locator('#simSaving').textContent(), '–');
           assert.match(await page.locator('#demandState').textContent(), /3 av 5 olika mätdagar/);
@@ -177,13 +177,16 @@ const server = http.createServer((req, res) => {
           assert.match(await page.locator('#meterState').textContent(), /lokal avgift/);
         } else if (mode === 'partial-local') {
           assert.equal(await page.locator('#meterKw').textContent(), '2 kW');
-          assert.equal(await page.locator('#meterSek').textContent(), '–');
+          assert.equal(await page.locator('#meterSek').textContent(), '200 kr');
           assert.match(
             await page.locator('#meterPeakLabel').textContent(),
             /Medel hittills \(3 av 5\)/,
           );
           await page.getByText('Visa toppar hittills', { exact: true }).click();
           assert.match(await page.locator('#meterPeaks').textContent(), /3 kW/);
+        } else if (mode === 'stale') {
+          assert.equal(await page.locator('#meterSek').textContent(), '200 kr');
+          assert.match(source, /Sigenergy/);
         } else {
           assert.equal(await page.locator('#meterSek').textContent(), '–');
           assert.doesNotMatch(source, /Tibber – mätarreferens/);

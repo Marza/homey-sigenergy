@@ -128,7 +128,9 @@
           <div class="tile">
             <span id="meterPeakLabel">Medel av timtoppar</span><strong id="meterKw">–</strong>
           </div>
-          <div class="tile">Preliminär effektavgift<strong id="meterSek">–</strong></div>
+          <div class="tile">
+            <span id="meterFeeLabel">Preliminär effektavgift</span><strong id="meterSek">–</strong>
+          </div>
         </div>
         <small id="meterState" role="status">Ingen mätarhistorik ännu</small>
         <details class="peak-details">
@@ -154,7 +156,10 @@
           <div class="tile">
             <span id="demandPeakLabel">Medel av timtoppar</span><strong id="demandKw">–</strong>
           </div>
-          <div class="tile">Lokalt uppskattad avgift<strong id="demandSek">–</strong></div>
+          <div class="tile">
+            <span id="demandFeeLabel">Lokalt uppskattad avgift</span
+            ><strong id="demandSek">–</strong>
+          </div>
         </div>
         <small id="demandState" role="status">Tariff och timdata kontrolleras</small>
         <details class="peak-details">
@@ -327,6 +332,20 @@
               ' av ' +
               tariff.peakCount +
               (tariff.distinctDays ? ' olika mätdagar' : ' timtoppar');
+            const partialFee = (r) => {
+              const amount = r.observedAverageKw * tariff.rateSekPerKw;
+              return Number.isFinite(amount) && amount >= 0 ? amount : null;
+            };
+            const money = (amount) =>
+              Number.isFinite(amount) && amount >= 0
+                ? Math.round(amount).toLocaleString('sv-SE') + ' kr'
+                : '–';
+            const partialState = (r, amount) =>
+              (amount === null
+                ? 'Avgiften kunde inte beräknas från sparat effektpris · '
+                : 'Preliminär avgift baserad på ') +
+              progress(r) +
+              ' · Underlaget är ofullständigt. Nya toppar kan ändra beloppet.';
             const partialLabel = (r) =>
               'Medel hittills (' + r.selectedPeakCount + ' av ' + tariff.peakCount + ')';
             const showPeaks = (id, r) => {
@@ -393,6 +412,11 @@
                       : null;
               const fromMeter = meterValid || (!localValid && meterPartial);
               const mean = full ? chosen?.averageKw : chosen?.observedAverageKw;
+              const amount = full ? chosen.estimatedSek : chosen ? partialFee(chosen) : null;
+              set(
+                'meterFeeLabel',
+                chosen && !full ? 'Preliminär avgift hittills' : 'Preliminär effektavgift',
+              );
               set(
                 'meterPeakLabel',
                 chosen && !full ? partialLabel(chosen) : TariffConfig.peakLabel(tariff),
@@ -410,10 +434,7 @@
                 'meterKw',
                 chosen ? mean.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW' : '–',
               );
-              set(
-                'meterSek',
-                full ? Math.round(chosen.estimatedSek).toLocaleString('sv-SE') + ' kr' : '–',
-              );
+              set('meterSek', money(amount));
               set(
                 'meterState',
                 meterValid
@@ -423,10 +444,7 @@
                       fetchedText +
                       syncText
                   : chosen && !full
-                    ? progress(chosen) +
-                      ' · Medel av tillgängliga toppar, inte färdigt tariffmedel. Avgiften visas när alla ' +
-                      tariff.peakCount +
-                      ' toppar finns.' +
+                    ? partialState(chosen, amount) +
                       coverageText(chosen.coverage) +
                       (fromMeter ? fetchedText + syncText : '')
                     : localValid
@@ -443,6 +461,11 @@
               const matches = !error && TariffConfig.matchesResult(r, tariff);
               const valid = validEstimate(r, error);
               const partial = partialEstimate(r, error);
+              const amount = valid ? r.estimatedSek : partial ? partialFee(r) : null;
+              set(
+                'demandFeeLabel',
+                partial ? 'Preliminär avgift hittills' : 'Lokalt uppskattad avgift',
+              );
               set('demandPeakLabel', partial ? partialLabel(r) : TariffConfig.peakLabel(tariff));
               showPeaks('demandPeaks', valid || partial ? r : null);
               set(
@@ -453,10 +476,7 @@
                     }) + ' kW'
                   : '–',
               );
-              set(
-                'demandSek',
-                valid ? Math.round(r.estimatedSek).toLocaleString('sv-SE') + ' kr' : '–',
-              );
+              set('demandSek', money(amount));
               set(
                 'demandState',
                 valid
@@ -468,22 +488,21 @@
                     ? 'Beräkningen kunde inte läsas'
                     : !matches
                       ? 'Inväntar beräkning för sparad tariff och aktuell månad'
-                      : (tariff.distinctDays
-                          ? Number.isInteger(r?.selectedPeakCount) &&
-                            r.selectedPeakCount >= 0 &&
-                            r.selectedPeakCount < tariff.peakCount
-                            ? r.selectedPeakCount +
-                              ' av ' +
-                              tariff.peakCount +
-                              ' olika mätdagar med kompletta timtoppar'
-                            : 'Inväntar ' +
-                              tariff.peakCount +
-                              ' olika mätdagar med kompletta timtoppar'
-                          : 'Otillräcklig data för ' + tariff.peakCount + ' timtoppar') +
-                        coverageText(r?.coverage) +
-                        (partial
-                          ? ' · Avgiften visas när alla ' + tariff.peakCount + ' toppar finns.'
-                          : ''),
+                      : partial
+                        ? partialState(r, amount) + coverageText(r?.coverage)
+                        : (tariff.distinctDays
+                            ? Number.isInteger(r?.selectedPeakCount) &&
+                              r.selectedPeakCount >= 0 &&
+                              r.selectedPeakCount < tariff.peakCount
+                              ? r.selectedPeakCount +
+                                ' av ' +
+                                tariff.peakCount +
+                                ' olika mätdagar med kompletta timtoppar'
+                              : 'Inväntar ' +
+                                tariff.peakCount +
+                                ' olika mätdagar med kompletta timtoppar'
+                            : 'Otillräcklig data för ' + tariff.peakCount + ' timtoppar') +
+                          coverageText(r?.coverage),
               );
             });
             get('tariffOptimization', (error, r) => {
