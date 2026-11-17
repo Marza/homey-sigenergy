@@ -237,10 +237,10 @@ test('hung API requests time out and a late response cannot restore stale values
   assert.equal(v.elements.get('state').textContent, 'Ingen historik');
 });
 
-test('widget exposes only the count of selected peaks, including zero and unknown counts', () => {
+test('widget omits arbitrary peak metadata and preserves zero/unknown selection counts', () => {
   for (const [peaks, count] of [
     [[], 0],
-    [[{ kw: 1, date: 'PRIVATE_DATE' }], 1],
+    [[{ kw: 1, date: 'PRIVATE_DATE' }], null],
     [undefined, null],
     [[{ kw: NaN }], null],
     [Array(32).fill({ kw: 1 }), null],
@@ -250,4 +250,82 @@ test('widget exposes only the count of selected peaks, including zero and unknow
     assert.ok(!JSON.stringify(r).includes('PRIVATE_DATE'));
     assert.equal(r.values.demandEstimate.selectedPeaks, undefined);
   }
+});
+
+test('peak details are bounded, sanitized, unique and closed; a partial mean never changes the fee', () => {
+  const t = now - 3600000;
+  for (const [peaks, valid] of [
+    [[{ t, kw: 0, secret: 'PRIVATE_PEAK' }], true],
+    [
+      [
+        { t, kw: 2 },
+        { t: t - 86400000, kw: 4 },
+      ],
+      true,
+    ],
+    [[{ t: now, kw: 2 }], false],
+    [[{ t: Date.parse('2026-10-31T21:00Z'), kw: 2 }], false],
+    [[{ t: Date.parse('2026-10-31T23:00Z'), kw: 2 }], true],
+    [[{ t: t + 1, kw: 2 }], false],
+    [[{ t: -1, kw: 2 }], false],
+    [
+      [
+        { t, kw: 2 },
+        { t, kw: 4 },
+      ],
+      false,
+    ],
+    [[{ t, kw: -1 }], false],
+    [[{ t, kw: NaN }], false],
+  ]) {
+    const r = snapshot({
+      demandEstimate: {
+        status: 'insufficient-data',
+        month: '2026-11',
+        averageKw: null,
+        estimatedSek: null,
+        selectedPeaks: peaks,
+      },
+    }).values.demandEstimate;
+    assert.equal(r.selectedPeakCount, valid ? peaks.length : null);
+    if (valid) {
+      assert.equal(r.selectedPeakHours.length, peaks.length);
+      assert.equal(r.observedAverageKw, peaks.reduce((n, p) => n + p.kw, 0) / peaks.length);
+    } else {
+      assert.equal(r.selectedPeakHours, null);
+      assert.equal(r.observedAverageKw, null);
+    }
+    assert.equal(r.estimatedSek, null);
+    assert.equal(r.averageKw, null);
+    assert.ok(!JSON.stringify(r).includes('PRIVATE_PEAK'));
+  }
+});
+
+test('real first-day tariff selection exposes the observed maximum before the five-day calculation is ready', () => {
+  const { calculateDemandCharge } = require('../lib/demand-tariff');
+  const tariff = {
+    start: '07:00',
+    end: '20:00',
+    weekdays: [1, 2, 3, 4, 5],
+    peakCount: 5,
+    distinctDays: true,
+    rateSekPerKw: 100,
+  };
+  const t = Date.parse('2026-11-13T09:00Z');
+  const rows = [6, 3].flatMap((kw, h) =>
+    [0, 1, 2, 3].map((i) => ({
+      t: t + h * 3600000 + i * 900000,
+      gridWh: kw * 250,
+      coverageMs: 900000,
+    })),
+  );
+  const result = calculateDemandCharge(rows, tariff, '2026-11', { nowMs: now });
+  assert.equal(result.status, 'insufficient-data');
+  assert.equal(result.averageKw, null);
+  assert.equal(result.estimatedSek, null);
+  const output = snapshot({ demandTariff: tariff, demandEstimate: result }).values.demandEstimate;
+  assert.equal(output.selectedPeakCount, 1);
+  assert.equal(output.observedAverageKw, 6);
+  assert.deepEqual(output.selectedPeakHours, [{ t, kw: 6 }]);
+  assert.equal(output.estimatedSek, null);
 });
