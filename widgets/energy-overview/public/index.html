@@ -109,6 +109,21 @@
           Utomhus<strong id="outdoor">–</strong><small id="outdoorState">Väntar på data</small>
         </div>
       </div>
+      <section class="recommend" id="monthly-demand">
+        <b>Effektavgift – innevarande månad</b>
+        <small id="monthlySource" role="status">Väntar på månadsunderlag</small>
+        <div class="grid">
+          <div class="tile">
+            <span id="meterPeakLabel">Medel av timtoppar</span><strong id="meterKw">–</strong>
+          </div>
+          <div class="tile">Preliminär effektavgift<strong id="meterSek">–</strong></div>
+        </div>
+        <small id="meterState" role="status">Ingen mätarhistorik ännu</small>
+        <small
+          >Månadsbeloppet är preliminärt och kan ändras när fler timmar rapporteras.
+          Batteribesparing beräknas separat från lokal historik.</small
+        >
+      </section>
       <section class="recommend">
         <b>Rekommenderade inställningar</b>
         <div class="grid">
@@ -118,12 +133,12 @@
         <small id="recommendState">Beräknas från historik</small>
       </section>
       <section class="recommend">
-        <b>Effektavgift – innevarande månad</b>
+        <b>Sigenergy – lokal beräkning och simulering</b>
         <div class="grid">
           <div class="tile">
             <span id="demandPeakLabel">Medel av timtoppar</span><strong id="demandKw">–</strong>
           </div>
-          <div class="tile">Uppskattad avgift<strong id="demandSek">–</strong></div>
+          <div class="tile">Lokalt uppskattad avgift<strong id="demandSek">–</strong></div>
         </div>
         <small id="demandState" role="status">Tariff och timdata kontrolleras</small>
         <div class="grid">
@@ -131,20 +146,6 @@
           <div class="tile">Möjlig effektbesparing<strong id="simSaving">–</strong></div>
         </div>
         <small id="savingState">Historisk simulering, inte garanterad besparing.</small>
-      </section>
-      <section class="recommend">
-        <b>Tibber – mätarreferens för månaden</b>
-        <div class="grid">
-          <div class="tile">
-            <span id="meterPeakLabel">Medel av timtoppar</span><strong id="meterKw">–</strong>
-          </div>
-          <div class="tile">Preliminär effektavgift<strong id="meterSek">–</strong></div>
-        </div>
-        <small id="meterState" role="status">Ingen mätarhistorik ännu</small>
-        <small
-          >Daglig hämtning av timvis förbrukning. Ingen batteribesparing beräknas för dessa
-          timmar.</small
-        >
       </section>
       <footer>
         Inlärningsläge · Ingen styrning · <span id="state" role="status">Väntar på mätdata</span>
@@ -254,6 +255,7 @@
                 set(id, '–');
               set('demandState', message);
               set('meterState', message);
+              set('monthlySource', 'Inget giltigt månadsunderlag');
               set('savingState', message + ' · Ingen garanterad besparing');
             };
             set('demandPeakLabel', TariffConfig.peakLabel(tariffError ? null : tariff));
@@ -279,6 +281,17 @@
               clear('Tariffen gäller inte denna månad');
               return;
             }
+            const validEstimate = (r, error) =>
+              !error &&
+              TariffConfig.matchesResult(r, tariff) &&
+              r.status === 'provisional' &&
+              Number.isFinite(r.averageKw) &&
+              r.averageKw >= 0 &&
+              Number.isFinite(r.estimatedSek) &&
+              r.estimatedSek >= 0;
+            const peakRule = tariff.distinctDays
+              ? ' · Toppar från ' + tariff.peakCount + ' olika dagar'
+              : '';
             get('meterDemandEstimate', (error, r) => {
               const fetched = Date.parse(r?.fetchedAt);
               const syncText =
@@ -292,39 +305,49 @@
                   new Date(fetched).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' })
                 : '';
 
-              const valid =
-                !error &&
-                TariffConfig.matchesResult(r, tariff) &&
-                r.status === 'provisional' &&
-                Number.isFinite(r.averageKw) &&
-                Number.isFinite(r.estimatedSek);
+              const meterValid = validEstimate(r, error);
+              const local = values.demandEstimate;
+              const localValid = validEstimate(local, snapshot.errors.includes('demandEstimate'));
+              const chosen = meterValid ? r : localValid ? local : null;
+              set(
+                'monthlySource',
+                meterValid
+                  ? 'Tibber – mätarreferens'
+                  : localValid
+                    ? 'Sigenergy – lokal uppskattning'
+                    : 'Väntar på månadsunderlag',
+              );
               set(
                 'meterKw',
-                valid
-                  ? r.averageKw.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW'
+                chosen
+                  ? chosen.averageKw.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW'
                   : '–',
               );
               set(
                 'meterSek',
-                valid ? Math.round(r.estimatedSek).toLocaleString('sv-SE') + ' kr' : '–',
+                chosen ? Math.round(chosen.estimatedSek).toLocaleString('sv-SE') + ' kr' : '–',
               );
               set(
                 'meterState',
-                valid
+                meterValid
                   ? 'Tibber timhistorik · Preliminär avgift' +
+                      peakRule +
                       coverageText(r.coverage) +
                       fetchedText +
                       syncText
-                  : 'Ingen tillräcklig mätarhistorik för aktuell tariff/månad' + syncText,
+                  : localValid
+                    ? 'Preliminär lokal avgift' +
+                      peakRule +
+                      coverageText(local.coverage) +
+                      ' · Tibbers mätarreferens är inte tillgänglig för aktuell tariff/månad' +
+                      syncText
+                    : 'Ingen tillräcklig mätarhistorik eller lokal beräkning för aktuell tariff/månad' +
+                      syncText,
               );
             });
             get('demandEstimate', (error, r) => {
               const matches = !error && TariffConfig.matchesResult(r, tariff);
-              const valid =
-                matches &&
-                r.status === 'provisional' &&
-                Number.isFinite(r.averageKw) &&
-                Number.isFinite(r.estimatedSek);
+              const valid = validEstimate(r, error);
               set(
                 'demandKw',
                 valid
@@ -346,9 +369,18 @@
                     ? 'Beräkningen kunde inte läsas'
                     : !matches
                       ? 'Inväntar beräkning för sparad tariff och aktuell månad'
-                      : 'Otillräcklig data för ' +
-                        tariff.peakCount +
-                        ' timtoppar' +
+                      : (tariff.distinctDays
+                          ? Number.isInteger(r?.selectedPeakCount) &&
+                            r.selectedPeakCount >= 0 &&
+                            r.selectedPeakCount < tariff.peakCount
+                            ? r.selectedPeakCount +
+                              ' av ' +
+                              tariff.peakCount +
+                              ' olika mätdagar med kompletta timtoppar'
+                            : 'Inväntar ' +
+                              tariff.peakCount +
+                              ' olika mätdagar med kompletta timtoppar'
+                          : 'Otillräcklig data för ' + tariff.peakCount + ' timtoppar') +
                         coverageText(r?.coverage),
               );
             });
@@ -424,6 +456,7 @@
               'demandState',
               'savingState',
               'meterState',
+              'monthlySource',
             ])
               document.getElementById(id).textContent =
                 'Kunde inte läsa data. Försöker igen automatiskt.';

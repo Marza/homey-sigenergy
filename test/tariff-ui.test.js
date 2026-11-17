@@ -306,7 +306,9 @@ test('meter-import reference remains separate and hides after binding changes', 
   assert.equal(v.element('demandKw').textContent, '4 kW');
   v.values.sourceConfig.tibber.revision = 'changed';
   v.refresh();
-  assert.equal(v.element('meterKw').textContent, '–');
+  assert.equal(v.element('meterKw').textContent, '4 kW');
+  assert.match(v.element('monthlySource').textContent, /Sigenergy/);
+  assert.doesNotMatch(v.element('meterState').textContent, /Tibber timhistorik/);
 });
 
 const costContract = () => ({
@@ -367,4 +369,59 @@ test('cost form handles absent/invalid data and read/write failures without repl
   write.element('saveCostContract').onclick();
   assert.equal(write.values.costContract.vatRate, 0.25);
   assert.equal(write.element('costMessage').textContent, 'Write failed');
+});
+
+test('monthly demand prioritizes Tibber when local distinct-day history is insufficient', () => {
+  const tariff = { ...base(), peakCount: 5 },
+    r = estimate(tariff);
+  const v = view('widgets/energy-overview/public/index.html', {
+    demandTariff: tariff,
+    sourceConfig: { tibber: { revision: 'synthetic' } },
+    tibberConsumptionArchive: { configRevision: 'synthetic' },
+    meterDemandEstimate: { ...r, averageKw: 4.2, estimatedSek: 420 },
+    demandEstimate: {
+      ...r,
+      status: 'insufficient-data',
+      averageKw: null,
+      estimatedSek: null,
+      selectedPeaks: [{ kw: 3 }, { kw: 2 }, { kw: 1 }],
+    },
+    tariffOptimization: { status: 'insufficient-data' },
+  });
+  v.run('onHomeyReady(Homey)');
+  assert.equal(v.element('meterKw').textContent, '4,2 kW');
+  assert.equal(v.element('meterSek').textContent, '420 kr');
+  assert.match(v.element('monthlySource').textContent, /Tibber/);
+  assert.match(v.element('meterState').textContent, /5 olika dagar/);
+  assert.equal(v.element('demandKw').textContent, '–');
+  assert.match(v.element('demandState').textContent, /3 av 5 olika mätdagar/);
+  assert.equal(v.element('simSaving').textContent, '–');
+  for (const mode of ['stale', 'read-error', 'negative', 'new-tariff']) {
+    v.values.meterDemandEstimate = { ...r, averageKw: 4.2, estimatedSek: 420 };
+    v.failedReads.clear();
+    v.values.demandTariff = tariff;
+    if (mode === 'stale') v.values.meterDemandEstimate.month = '2026-10';
+    if (mode === 'read-error') v.failedReads.add('meterDemandEstimate');
+    if (mode === 'negative') v.values.meterDemandEstimate.estimatedSek = -1;
+    if (mode === 'new-tariff') v.values.demandTariff = { ...tariff, rateSekPerKw: 200 };
+    v.refresh();
+    assert.equal(v.element('meterSek').textContent, '–', mode);
+  }
+});
+test('local monthly fallback is explicitly sourced and never adds Tibber volumes to simulation', () => {
+  const tariff = base(),
+    r = estimate(tariff),
+    v = view('widgets/energy-overview/public/index.html', {
+      demandTariff: tariff,
+      demandEstimate: r,
+      tariffOptimization: { status: 'insufficient-data' },
+    });
+  v.run('onHomeyReady(Homey)');
+  assert.equal(v.element('meterSek').textContent, '400 kr');
+  assert.match(v.element('monthlySource').textContent, /Sigenergy/);
+  assert.match(v.element('meterState').textContent, /lokal avgift/);
+  assert.equal(v.element('simSaving').textContent, '–');
+  v.failedReads.add('demandEstimate');
+  v.refresh();
+  assert.equal(v.element('meterSek').textContent, '–');
 });
