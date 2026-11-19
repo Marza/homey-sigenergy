@@ -12,7 +12,8 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | --- | --- | --- |
 | Sigenergy monitoring | Battery SoC and capacity, grid/PV/battery power, grid mode; Homey device capabilities | Local Modbus TCP reads; one plant per Homey through a fixed pairing identity |
 | Battery telemetry | Optional power limits, available energy, nominal power, SoC cutoffs and SoH | Probed about every five minutes; individual failures do not invalidate the main snapshot; registers and scaling unverified |
-| EVDC monitoring | Optional charging power and vehicle SoC reads | Experimental and disabled by default; no charger control |
+| EVDC monitoring | Optional DC power, vehicle SoC, state, session energy and total counters | Disabled by default; V2.9 profile awaiting hardware verification |
+| EVAC monitoring | Optional AC charging power and cumulative energy consumption | Disabled by default; read-only Modbus, awaiting hardware verification |
 | Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Four readings verified against the display on one installation; optional local reads every 30 seconds, no separate Homey device or heat-pump control |
 | Backup advisory | Grid/island/unknown state and a “Backup mode changed” Flow trigger | EV-stop and Nibe-mode tokens are requests, never confirmation of an action |
 | Native Homey Energy | Optional grid, solar and battery power-reporting companions | W/% plus opt-in V2.9 cumulative kWh profile; physical counter/history verification pending |
@@ -82,11 +83,19 @@ Pair **Sigenergy plant**, then open the device's advanced settings and replace t
 | `unitId` | `247` | Plant unit ID |
 | `addressOffset` | `0` | Register address adjustment; use -1 only if verified necessary |
 | `pollSeconds` | `10` | Main polling interval, clamped to at least five seconds |
-| `evdcEnabled` | `false` | Enable experimental EVDC reads only after register verification |
+| `evdcEnabled` | `false` | Enable read-only EVDC telemetry for supported V2.9 firmware |
+| `evdcUnitId` | `0` (unset) | Modbus ID (1–246) of the inverter hosting the DC charger, as configured in mySigen |
+| `evacEnabled` | `false` | Enable read-only EVAC telemetry |
+| `evacHost` | Empty | AC charger LAN address. If empty, use the plant Modbus endpoint |
+| `evacUnitId` | `0` (unset) | AC charger Modbus ID (1–246), as configured in mySigen |
 
 Compare SoC, capacity, grid power and PV power against mySigen. The code assumes **positive grid power = import**, negative = export; **positive battery power = charging**, negative = discharging.
 
-EVDC defaults are power register `31502` (two unsigned 16-bit words) and SoC register `31504` (one word), with divisors `evdcPowerScale = 1` and `evdcSocScale = 1`. Addresses and divisors are device settings; widths are fixed in the reader. Do not enable probing until all of these match your firmware. EVDC errors are recorded separately from plant monitoring.
+To collect EVDC data, enter the inverter ID in the Sigenergy device’s advanced settings and enable EVDC. Keep the plant unit ID at 247. The fixed profile reads signed power in W (`31502`), vehicle SoC in tenths of a percent (`31504`), session charging energy (`31505`), running state (`31513`) and total charge/discharge energy (`31519`/`31521`). Energy registers are in hundredths of a kWh. See [Sigenergy Modbus Protocol V2.9, Table 5-3](https://github.com/ks00410/sigenergy-modbus-profile/blob/main/references/Sigenergy%20Modbus%20Protocol%202026-05-13%20V2.9.pdf). The older experimental settings for register addresses and divisors are no longer used.
+
+Check **Diagnostik** during idle and active charging and compare the power, SoC and session energy against mySigen. Power is integrated into quarter-hour DC energy with its own measured coverage. A missing reading breaks the EVDC interval even when the other plant data is available. The session and total counters are displayed as current readings. They do not backfill past quarters. The solar/EV replay requires complete data from the enabled chargers and a period without observed vehicle charging or discharging.
+
+For a Sigen EV AC charger (EVAC), enable EVAC and enter its own Modbus ID in the Sigenergy device’s advanced settings. Enter the charger’s LAN IP for a direct connection on port 502. Leave it empty if the existing plant endpoint can route requests to that unit ID. The read-only profile uses `32000` (state), `32001` (total consumed energy in 0.01 kWh) and `32003` (power in W). Compare the Homey power and total consumption against mySigen. The app stores measured AC charging in its own quarter intervals, uses independent coverage and reports the charger total separately from plant grid import. See [Sigenergy Modbus Protocol V2.9, Table 5-5](https://github.com/ks00410/sigenergy-modbus-profile/blob/main/references/Sigenergy%20Modbus%20Protocol%202026-05-13%20V2.9.pdf).
 
 ### App settings
 

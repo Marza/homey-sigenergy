@@ -176,20 +176,20 @@
       "type": "number",
       "title": {
         "en": "EV state of charge",
-        "sv": "Bilens laddniva"
+        "sv": "Bilens laddnivå"
       },
       "units": {
         "en": "%"
       },
       "getable": true,
       "setable": false,
-      "decimals": 0
+      "decimals": 1
     },
     "measure_ev_power": {
       "type": "number",
       "title": {
-        "en": "EV charging power",
-        "sv": "Bilens laddeffekt"
+        "en": "EVDC power",
+        "sv": "Bilens EVDC-effekt"
       },
       "units": {
         "en": "W"
@@ -264,6 +264,32 @@
           }
         }
       ]
+    },
+    "measure_evac_power": {
+      "type": "number",
+      "title": {
+        "en": "EVAC charging power",
+        "sv": "AC-laddarens effekt"
+      },
+      "units": {
+        "en": "W"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 0
+    },
+    "measure_evac_energy": {
+      "type": "number",
+      "title": {
+        "en": "EVAC total energy",
+        "sv": "AC-laddarens totala förbrukning"
+      },
+      "units": {
+        "en": "kWh"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 2
     }
   },
   "drivers": [
@@ -281,7 +307,9 @@
         "measure_pv_power",
         "measure_ess_capacity",
         "measure_ev_soc",
-        "measure_ev_power"
+        "measure_ev_power",
+        "measure_evac_power",
+        "measure_evac_energy"
       ],
       "pair": [
         {
@@ -344,41 +372,50 @@
           "id": "evdcEnabled",
           "type": "checkbox",
           "label": {
-            "en": "Experimental EVDC read (verify firmware/register map first)"
+            "en": "Read EVDC telemetry (Modbus V2.9)",
+            "sv": "Läs EVDC-värden (Modbus V2.9)"
           },
           "value": false
         },
         {
-          "id": "evdcPowerAddress",
+          "id": "evdcUnitId",
           "type": "number",
           "label": {
-            "en": "EVDC power register"
+            "en": "EVDC inverter Modbus ID (1–246, 0 = unset)",
+            "sv": "Modbus-ID för EVDC:s växelriktare (1–246, 0 = ej valt)"
           },
-          "value": 31502
+          "value": 0,
+          "min": 0,
+          "max": 246
         },
         {
-          "id": "evdcSocAddress",
-          "type": "number",
+          "id": "evacEnabled",
+          "type": "checkbox",
           "label": {
-            "en": "EVDC SoC register"
+            "en": "Read AC charger (EVAC)",
+            "sv": "Läs AC-laddaren (EVAC)"
           },
-          "value": 31504
+          "value": false
         },
         {
-          "id": "evdcPowerScale",
-          "type": "number",
+          "id": "evacHost",
+          "type": "text",
           "label": {
-            "en": "EVDC power divisor"
+            "en": "AC charger IP (optional, uses plant host if empty)",
+            "sv": "AC-laddarens IP (tomt använder anläggningens adress)"
           },
-          "value": 1
+          "value": ""
         },
         {
-          "id": "evdcSocScale",
+          "id": "evacUnitId",
           "type": "number",
           "label": {
-            "en": "EVDC SoC divisor"
+            "en": "AC charger Modbus ID (1–246, 0 = unset)",
+            "sv": "AC-laddarens Modbus-ID (1–246, 0 = ej valt)"
           },
-          "value": 1
+          "value": 0,
+          "min": 0,
+          "max": 246
         },
         {
           "id": "energyMetersProfile",

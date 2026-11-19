@@ -48,7 +48,8 @@ function fixture({ hours = 4, now = END } = {}) {
     essWh: 0,
     essCoverageMs: Q,
     pvWh: 0,
-    fieldCoverageMs: { pvW: Q },
+    evWh: 0,
+    fieldCoverageMs: { pvW: Q, evW: Q },
   }));
   const homey = {
     settings: {

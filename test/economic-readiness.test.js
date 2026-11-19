@@ -309,3 +309,62 @@ test('unexpected snapshot processing failures return a safe unavailable report',
   assert.equal(r.controlApplied, false);
   assert.doesNotMatch(JSON.stringify(r), /SECRET_FIXTURE_PROCESSING_ERROR/);
 });
+
+test('missing EV measurements cannot pass the readiness check or solar replay as measured zero', () => {
+  const f = fixture();
+  assert.equal(report(f, 'solar-ev').checks.evCoverageQuarters.state, 'complete');
+  delete f.rows[0].fieldCoverageMs.evW;
+  delete f.rows[0].evWh;
+  f.rows[1].fieldCoverageMs.evW /= 2;
+  const r = report(f, 'solar-ev');
+  assert.equal(r.dataComplete, false);
+  assert.equal(r.checks.evCoverageQuarters.missingQuarters, 2);
+  assert.equal(r.checks.knownEvChargingQuarters.missingQuarters, 0);
+  assert.equal(report(f).dataComplete, true);
+  const result = compareSolarEv(
+    f.homey,
+    {
+      ...input(),
+      ev: { confirmHistoricalTask: true, confirmNoExistingEvCharging: true },
+    },
+    f.now,
+  );
+  assert.equal(result.reason, 'incomplete-solar-ev-window');
+  assert.equal(result.missing.evCoverageQuarters, 2);
+});
+
+test('solar/EV checks support AC-only sites and require both channels when enabled', () => {
+  const f = fixture();
+  f.data.sourceConfig.evac = { enabled: true };
+  for (const row of f.rows) {
+    delete row.fieldCoverageMs.evW;
+    delete row.evWh;
+    row.fieldCoverageMs.evacW = Q;
+    row.evacWh = 0;
+  }
+  assert.equal(report(f, 'solar-ev').dataComplete, true);
+  f.data.sourceConfig.evdc = { enabled: true };
+  assert.equal(report(f, 'solar-ev').checks.evCoverageQuarters.missingQuarters, f.rows.length);
+  for (const row of f.rows) {
+    row.fieldCoverageMs.evW = Q;
+    row.evWh = 0;
+  }
+  f.rows[0].evacWh = 1500;
+  delete f.rows[1].fieldCoverageMs.evacW;
+  const result = report(f, 'solar-ev');
+  assert.equal(result.checks.knownEvChargingQuarters.missingQuarters, 1);
+  assert.equal(result.checks.evCoverageQuarters.missingQuarters, 1);
+  assert.equal(result.dataComplete, false);
+
+  const replay = compareSolarEv(
+    f.homey,
+    {
+      ...input(),
+      ev: { confirmHistoricalTask: true, confirmNoExistingEvCharging: true },
+    },
+    f.now,
+  );
+  assert.equal(replay.reason, 'incomplete-solar-ev-window');
+  assert.equal(replay.missing.knownEvChargingQuarters, 1);
+  assert.equal(replay.missing.evCoverageQuarters, 1);
+});

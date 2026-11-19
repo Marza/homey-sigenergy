@@ -1943,8 +1943,7 @@
                     <p class="note">
                       En ögonblicksbild av datatäckning, inte en verifierad besparing.
                       Batteri-/bilantaganden, effektavgift, laddmål och slutenergi prövas i
-                      beräkningen. Frånvaro av registrerad billaddning ersätter inte din
-                      bekräftelse. Beräkningen läser alltid om underlaget.
+                      beräkningen. Beräkningen läser alltid om underlaget.
                     </p>
                   </section>
                   <div class="form-grid">
@@ -2058,14 +2057,14 @@
                     >
                     <label class="hy-nostyle"
                       ><input id="econ-ev-absent-confirm" type="checkbox" class="hy-nostyle" /> Jag
-                      har kontrollerat att vald historik saknar befintlig billaddning. Modellen får
-                      inte lägga till laddning ovanpå redan registrerad bilförbrukning.</label
+                      har kontrollerat att bilen varken laddade eller laddade ur under den valda
+                      perioden.</label
                     >
                     <p>
-                      Komplett separat solenergitäckning krävs. Känd billaddning i historiken
-                      blockerar modellen. Laddning från andra källor kan behövas för att nå
-                      avgångsmålet och räknas då med i nät-/batteriflödet; effekttaket kan därför
-                      bli ouppnått. Faser och säkringar modelleras inte.
+                      Komplett täckning för solenergi och de aktiverade laddarna krävs. Välj en
+                      period utan laddning eller urladdning från bilen. Laddning från andra källor
+                      kan behövas för att nå avgångsmålet och räknas då med i nät-/batteriflödet;
+                      effekttaket kan därför bli ouppnått. Faser och säkringar modelleras inte.
                     </p>
                   </fieldset>
                   <button id="econ-run" type="button" class="hy-nostyle">
@@ -2473,11 +2472,64 @@
             ['nibe', 'Nibe'],
             ['tibber', 'Tibber'],
             ['evdc', 'EVDC'],
+            ['evac', 'AC-laddare (EVAC)'],
           ]) {
             const status = sources[key];
             const p = document.createElement('p');
             p.textContent = name + ': ' + SourceStatus.describe(status);
             el.appendChild(p);
+            if (key === 'evdc' && status.usable) {
+              const evdc = values.lastEvdc;
+              const number = (value) => value.toLocaleString('sv-SE', { maximumFractionDigits: 2 });
+              const states = [
+                'Viloläge',
+                'Anslutning väntar',
+                'Upprättar kommunikation',
+                'Laddar',
+                'Fel',
+                'Schemalagd',
+                'Avslutad',
+                'Underhåll',
+                'Laddar ur',
+                'Larm',
+                'Kontrollerar isolering',
+              ];
+              const entries = [
+                ['powerW', 'Effekt', 'kW', 1000],
+                ['soc', 'Bilens SoC', '%', 1],
+                ['sessionKWh', 'Laddsession', 'kWh', 1],
+                ['totalChargedKWh', 'Totalt laddat', 'kWh', 1],
+                ['totalDischargedKWh', 'Totalt urladdat', 'kWh', 1],
+              ];
+              const detail = document.createElement('p');
+              detail.className = 'sub';
+              detail.textContent = [
+                states[evdc.state],
+                ...entries
+                  .filter(([field]) => Number.isFinite(evdc[field]))
+                  .map(
+                    ([field, label, unit, divisor]) =>
+                      label + ' ' + number(evdc[field] / divisor) + ' ' + unit,
+                  ),
+              ]
+                .filter(Boolean)
+                .join(' · ');
+              el.appendChild(detail);
+            }
+            if (key === 'evac' && status.usable) {
+              const { powerW, totalConsumedKWh } = values.lastEvac;
+              const detail = document.createElement('p');
+              detail.className = 'sub';
+              detail.textContent = [
+                Number.isFinite(powerW) &&
+                  'Effekt ' + (powerW / 1000).toLocaleString('sv-SE') + ' kW',
+                Number.isFinite(totalConsumedKWh) &&
+                  'Totalt förbrukat ' + totalConsumedKWh.toLocaleString('sv-SE') + ' kWh',
+              ]
+                .filter(Boolean)
+                .join(' · ');
+              if (detail.textContent) el.appendChild(detail);
+            }
             for (const [field, error] of Object.entries(status.fieldErrors)) {
               const detail = document.createElement('p');
               detail.className = 'sub';

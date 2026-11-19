@@ -166,18 +166,20 @@ const server = http.createServer((req, res) => {
       await page.locator('#econ-solar-enabled').check();
       await button.click();
       await page.waitForFunction(
-        () => document.querySelector('#econ-data-checks').children.length === 15,
+        () => document.querySelector('#econ-data-checks').children.length === 16,
       );
       assert.match(await status.innerText(), /täckta/);
       assert.equal(await page.locator('#econ-ev-absent-confirm').isChecked(), false);
       assert.equal(await page.locator('#econ-ev-history-confirm').isChecked(), false);
       f.rows[0].fieldCoverageMs.pvW = 0;
       f.rows[1].evWh = 50;
+      delete f.rows[2].fieldCoverageMs.evW;
       await button.click();
       await page.waitForFunction(() =>
         document.querySelector('#econ-data-status').textContent.includes('ofullständigt'),
       );
-      assert.match(await list.innerText(), /Registrerad billaddning/);
+      assert.match(await list.innerText(), /Registrerad aktivitet från billaddare/);
+      assert.match(await list.innerText(), /Mättäckning för billaddning/);
       assert.match(await list.innerText(), /1 kvart saknas/);
       const before = posts;
       await page.locator('#econ-hours').fill('169');

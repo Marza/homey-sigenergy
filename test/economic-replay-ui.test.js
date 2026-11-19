@@ -470,9 +470,10 @@ test('coupled missing-data details show independent solar and existing EV-load e
   v.requests[0].cb(null, {
     status: 'unavailable',
     reason: 'incomplete-solar-ev-window',
-    missing: { solarCoverageQuarters: 4, knownEvChargingQuarters: 2 },
+    missing: { solarCoverageQuarters: 4, evCoverageQuarters: 3, knownEvChargingQuarters: 2 },
   });
   await p;
   assert.match(v.field('result').textContent, /soltäckning 4/);
-  assert.match(v.field('result').textContent, /befintlig billaddning 2/);
+  assert.match(v.field('result').textContent, /mättäckning för billaddning 3/);
+  assert.match(v.field('result').textContent, /registrerad laddaktivitet 2/);
 });

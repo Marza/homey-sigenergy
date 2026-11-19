@@ -301,3 +301,25 @@ test('the supported one-minute boundary interval is integrated while invalid tim
     near(row.gridWh, 30);
   }
 });
+
+test('EVAC energy has independent quarter coverage and survives a version 9 backup', () => {
+  const { history } = setup(T + 40000);
+  history.append({ evacW: 7200, evW: 3600, gridW: 10800 }, T);
+  history.append({ evacW: 7200, evW: 3600, gridW: 10800 }, T + 10000);
+  history.append({ evacW: null }, T + 20000);
+  history.append({ evacW: 0, evW: 3600, gridW: 10800 }, T + 30000);
+  history.append({ evacW: 0, evW: 3600, gridW: 10800 }, T + 40000);
+  const exported = history.export();
+  assert.equal(exported.schema, 9);
+  const [row] = exported.slots;
+  assert.equal(row.evacWh, 20);
+  assert.equal(row.fieldCoverageMs.evacW, 20000);
+  assert.equal(row.evWh, 40);
+  assert.equal(row.fieldCoverageMs.evW, 40000);
+  assert.equal(row.gridWh, 120);
+  assert.equal(exported.daily[0].evacWh, 20);
+  const restored = setup(T + 40000).history;
+  assert.throws(() => restored.import({ ...exported, schema: 8 }), /version 9/);
+  restored.import(exported);
+  assert.deepEqual(restored.getSlots(), exported.slots);
+});

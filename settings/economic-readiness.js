@@ -35,9 +35,13 @@
       'Solenergivärden',
       'Perioden behöver giltiga, icke-negativa solenergivärden. Noll är tillåtet.',
     ],
+    evCoverageQuarters: [
+      'Mättäckning för billaddning',
+      'Samla kompletta kvartar för de aktiverade laddarna. En uppmätt nolla är giltig. Tid utan mätning är okänd.',
+    ],
     knownEvChargingQuarters: [
-      'Registrerad billaddning',
-      'Kända eller ogiltiga laddvärden blockerar modellen. Avsaknad av sådana värden bevisar inte att bilen inte laddats; separat bekräftelse krävs.',
+      'Registrerad aktivitet från billaddare',
+      'Modellen kräver en period utan uppmätt laddning eller urladdning. Bekräfta även perioden själv.',
     ],
     inconsistentSolarQuarters: [
       'Sol-/nätbalans',
@@ -86,7 +90,7 @@
       !Array.isArray(r.gates)
     )
       return false;
-    const keys = Object.keys(labels).slice(0, mode === 'solar-ev' ? 9 : 5);
+    const keys = Object.keys(labels).slice(0, mode === 'solar-ev' ? undefined : 5);
     const gateKeys = Object.keys(gates).slice(0, mode === 'solar-ev' ? 6 : 4);
     if (
       Object.keys(r.checks).length !== keys.length ||

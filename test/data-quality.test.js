@@ -138,7 +138,7 @@ test('legacy, absent, inconsistent and invalid per-channel evidence stays unknow
     const f = fixture({ hours: 1 });
     change(f.rows[0]);
     const q = inspect(f).quality;
-    for (const c of Object.values(q.channels)) assert.equal(c.unknownMs, Q);
+    for (const key of ['grid', 'battery', 'solar']) assert.equal(q.channels[key].unknownMs, Q);
     partition(q);
   }
   const f = fixture({ hours: 1 });
@@ -196,7 +196,8 @@ test('anchor-only rows can have zero observed duration and valid estimated durat
     solar: recovery(r.t, 60000, { pvWh: 0 }),
   };
   const q = inspect(f).quality;
-  for (const c of Object.values(q.channels)) {
+  for (const key of ['grid', 'battery', 'solar']) {
+    const c = q.channels[key];
     assert.equal(c.observedMs, H - Q);
     assert.equal(c.counterEstimatedMs, 60000);
     assert.equal(c.unknownMs, Q - 60000);
@@ -300,4 +301,22 @@ test('display does not round small unknown durations away or accept contradictor
     assert.equal(validQuality(bad, r.from, r.to), false);
   }
   assert.equal(validQuality(null, r.from, r.to), false);
+});
+
+test('EVDC diagnostics count measured zero, signed energy, and missing time independently', () => {
+  const f = fixture({ hours: 1 });
+  f.rows[1].evWh = -200;
+  f.rows[2].fieldCoverageMs.evW = Q / 2;
+  delete f.rows[3].fieldCoverageMs.evW;
+  delete f.rows[3].evWh;
+  const r = inspect(f);
+  assert.deepEqual(r.quality.channels.ev, {
+    available: true,
+    observedMs: 2.5 * Q,
+    counterEstimatedMs: 0,
+    unknownMs: 1.5 * Q,
+  });
+  assert.equal(r.gaps.ev.missing, 2);
+  assert.equal(r.gaps.solar.missing, 0);
+  assert.equal(validQuality(r.quality, r.from, r.to), true);
 });
