@@ -67,6 +67,16 @@ module.exports = class SigenergyDevice extends Homey.Device {
         maxAgeMs: Math.max(30000, seconds * 3000),
       },
     };
+    sources.household = {
+      configured,
+      enabled:
+        configured &&
+        settings.energyMetersProfile === PROFILE &&
+        Number(settings.unitId ?? 247) === 247,
+      since,
+      maxAgeMs: Math.max(180000, seconds * 3000),
+    };
+    this.householdEnabled = sources.household.enabled;
     for (const [key, profile] of Object.entries(CHARGERS)) {
       const dedicatedHost = key === 'evac' ? String(settings.evacHost || '').trim() : '';
       const host = dedicatedHost || String(settings.host || '').trim();
@@ -100,6 +110,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
       'batteryTelemetry',
       'sigenergyError',
       'batteryTelemetryError',
+      'householdCounterStatus',
+      'householdCounterError',
     ])
       this.homey.settings.set(key, null);
     this.homey.app?.dataDiagnostics?.record('plant', reason);
@@ -270,6 +282,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
           this.energyMeters = { readAt: Date.now(), values: {}, errors: {} };
           this.error('Optional Energy counter read or persistence failed');
         }
+        if (current() && this.householdEnabled) await this.pollHouseholdEnergy(reader, current);
       }
       if (current()) {
         await this.setAvailable();
@@ -292,6 +305,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
       this.homey.app.dataDiagnostics?.record('plant', reason, from, Date.now());
       this.homey.app.history?.append({ gridW: null, essW: null, pvW: null }, undefined, reason);
       this.homey.settings.set('sigenergyError', String(error.message));
+      if (this.householdEnabled) this.noteHouseholdFailure(reason);
       await this.publishBackup(this.island.communicationLost());
       if (!current()) return;
       await this.setUnavailable(`Modbus read failed: ${error.message}`);
@@ -301,6 +315,27 @@ module.exports = class SigenergyDevice extends Homey.Device {
         this.homey.app.dataDiagnostics?.record('plant', 'slow-poll', pollStartedAt, endedAt);
       this.polling = false;
       this.pollStartedAt = null;
+    }
+  }
+  noteHouseholdFailure(reason) {
+    this.homey.app.history?.observeHouseholdCounter?.(null, Date.now(), reason);
+    this.homey.settings.set('householdCounterStatus', null);
+    this.homey.settings.set('householdCounterError', 'Kunde inte läsa husets energiräknare.');
+  }
+  async pollHouseholdEnergy(reader, current) {
+    try {
+      const raw = await reader.householdEnergyCounter();
+      if (!current()) return;
+      const at = Date.now();
+      const averageKW = this.homey.app.history?.observeHouseholdCounter?.(raw, at) ?? null;
+      this.homey.settings.set('householdCounterStatus', {
+        totalKWh: Number(raw) / 100,
+        averageKW,
+        readAt: new Date(at).toISOString(),
+      });
+      this.homey.settings.set('householdCounterError', null);
+    } catch (error) {
+      if (current()) this.noteHouseholdFailure(readFailureReason(error));
     }
   }
   async pollCharger(key) {
@@ -381,6 +416,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
       sigenergy: { ...config.sigenergy, enabled: false },
       evdc: { ...config.evdc, enabled: false },
       evac: { ...config.evac, enabled: false },
+      household: { ...config.household, enabled: false },
     });
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();

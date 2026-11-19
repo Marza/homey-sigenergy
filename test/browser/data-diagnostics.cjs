@@ -14,6 +14,12 @@ let f,
 function reset() {
   f = fixture({ hours: 24, now: Math.floor(Date.now() / 3600000) * 3600000 });
   f.homey.app.dataDiagnostics = new DataDiagnostics(f.homey.settings, () => f.now);
+  f.data.sourceConfig.household = { configured: true, enabled: true };
+  f.data.householdCounterStatus = {
+    readAt: new Date().toISOString(),
+    totalKWh: 123.45,
+    averageKW: 0,
+  };
   f.rows[0].coverageMs = 0;
   f.rows[0].directionalCoverageMs = 0;
   f.rows[0].gridWh = 0;
@@ -45,6 +51,11 @@ function reset() {
   f.rows[2].essCoverageMs = 0;
   f.rows[4].fieldCoverageMs.pvW = 0;
   f.rows[5].fieldCoverageMs.evW = 0;
+  Object.assign(f.rows[6], {
+    householdWh: 1250,
+    householdCoverageMs: 900000,
+    householdEstimatedMs: 60000,
+  });
   delete f.data.tibberHistoryPriceCache.rows[1].production;
   f.homey.app.dataDiagnostics.record('grid', 'modbus-timeout', f.rows[0].t, f.rows[0].t + 10000);
   mode = 'normal';
@@ -127,6 +138,15 @@ const server = http.createServer((req, res) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(`http://127.0.0.1:${server.address().port}/`);
       await page.waitForFunction(() => window.appReady);
+      await page.locator('#tab-diagnostics').click();
+      await page
+        .locator('#diagnosticRows')
+        .getByText(/Räknarställning 123,45 kWh/)
+        .waitFor();
+      assert.match(
+        await page.locator('#diagnosticRows').textContent(),
+        /Medel sedan förra avläsningen 0 kW/,
+      );
       await page.locator('#tab-settings').click();
       if (width < 768) await page.locator('#settingsCategory').selectOption('data');
       else await page.locator('[data-settings-category="data"]').click();
@@ -152,7 +172,9 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Okända timmar: 0/);
       assert.match(text, /Bil \(EVDC\)/);
       assert.match(text, /AC-laddare \(EVAC\)/);
-      assert.equal(await page.locator('.coverage-bar').count(), 5);
+      assert.match(text, /Husets förbrukning utan billaddning/);
+      assert.match(text, /Energi under täckt tid: 1,25 kWh/);
+      assert.equal(await page.locator('.coverage-bar').count(), 6);
       const bars = await page.locator('.coverage-bar').evaluateAll((bs) =>
         bs.map((b) => ({
           width: b.getBoundingClientRect().width,

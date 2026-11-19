@@ -74,6 +74,7 @@ function deviceFixture({
   evacRead,
   evdcRead = async () => ({ values: { soc: 0, powerW: 0 }, powerReadAt: Date.now() }),
   energyRead = async () => ({ values: {} }),
+  householdRead = async () => '123456',
   batteryRead = async () => ({
     values: {},
     errors: { soh: 'Unsupported' },
@@ -97,6 +98,9 @@ function deviceFixture({
     }
     energyCounters(profile, solarSource) {
       return energyRead(profile, solarSource);
+    }
+    householdEnergyCounter() {
+      return householdRead();
     }
     batteryTelemetry() {
       return batteryRead(this);
@@ -251,6 +255,40 @@ test('EVAC uses its own endpoint, publishes cumulative energy and records separa
   assert.equal(device.available, true);
   await device.onUninit();
   assert.equal(readers[2].closed, true);
+});
+
+test('the V2.9 profile reads household energy without invalidating site data on failure', async () => {
+  let failure = false;
+  const { device, settings } = deviceFixture({
+    householdRead: async () => {
+      if (failure) throw Error('timeout');
+      return '123456';
+    },
+  });
+  const base = device.getSettings();
+  device.getSettings = () => ({ ...base, energyMetersProfile: 'sigenergy-v29-statistics' });
+  device.getStoreValue = () => undefined;
+  device.setStoreValue = async () => {};
+  const seen = [];
+  device.homey.app.history.observeHouseholdCounter = (...args) => {
+    seen.push(args);
+    return args[0] ? 0 : null;
+  };
+  await device.onInit();
+  await tick();
+  assert.equal(settings.get('householdCounterStatus').totalKWh, 1234.56);
+  assert.equal(settings.get('householdCounterStatus').averageKW, 0);
+  assert.equal(diagnostics(settings).household.status, 'ok');
+  failure = true;
+  device.lastEnergyProbeAt = null;
+  await device.poll();
+  assert.equal(settings.get('householdCounterStatus'), null);
+  assert.equal(diagnostics(settings).household.status, 'error');
+  assert.equal(seen.at(-1)[0], null);
+  assert.equal(seen.at(-1)[2], 'modbus-timeout');
+  assert.equal(diagnostics(settings).sigenergy.status, 'ok');
+  assert.equal(device.available, true);
+  await device.onUninit();
 });
 
 test('results from a reader replaced during a poll cannot republish old source data', async () => {
