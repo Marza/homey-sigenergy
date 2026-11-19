@@ -35,6 +35,8 @@
     'evdcError',
     'lastEvac',
     'evacError',
+    'householdCounterStatus',
+    'householdCounterError',
   ];
   const time = (value) => (typeof value === 'string' && value.trim() ? Date.parse(value) : NaN);
   function isFresh(readAt, maxAgeMs, now = Date.now()) {
@@ -180,6 +182,15 @@
         MAX_AGE_MS.evac,
         now,
       ),
+      household: sourceStatus({
+        configured: false,
+        enabled: false,
+        ...config.household,
+        readAt: values.householdCounterStatus?.readAt,
+        error: values.householdCounterError,
+        now,
+        maxAgeMs: config.household?.maxAgeMs || 180000,
+      }),
       controlEnabled: false,
     };
   }
@@ -241,7 +252,7 @@
         const statuses = diagnostics(values);
         // A partial settings read must never make cached values appear healthy.
         if (failures.length)
-          for (const key of ['sigenergy', 'battery', 'nibe', 'tibber', 'evdc', 'evac'])
+          for (const key of ['sigenergy', 'battery', 'nibe', 'tibber', 'evdc', 'evac', 'household'])
             statuses[key] = {
               ...statuses[key],
               status: 'error',

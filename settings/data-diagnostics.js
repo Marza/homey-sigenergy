@@ -10,7 +10,8 @@
     'reader-started': 'Anslutningsläsaren startade',
     'connection-changed': 'Anslutningsinställningar eller mätkälla ändrades',
     'invalid-sample': 'Ogiltigt eller saknat mätvärde',
-    'sample-delay': 'Mer än 60 sekunder mellan giltiga mätvärden',
+    'sample-delay': 'För lång tid mellan giltiga mätvärden',
+    'counter-reset': 'Energiräknaren minskade och fick en ny startpunkt',
     'modbus-timeout': 'Modbus svarade inte i tid',
     'modbus-unreachable': 'Modbus-adressen kunde inte nås',
     'modbus-refused': 'Modbus-anslutningen avvisades',
@@ -39,6 +40,7 @@
     solar: 'Sol',
     ev: 'Bil (EVDC)',
     evac: 'AC-laddare (EVAC)',
+    household: 'Husets förbrukning utan billaddning',
     storage: 'Lagring',
     prices: 'Tibber',
   };
@@ -68,7 +70,7 @@
       !q.hourlyGrid
     )
       return false;
-    for (const key of ['grid', 'battery', 'solar', 'ev', 'evac']) {
+    for (const key of ['grid', 'battery', 'solar', 'ev', 'evac', 'household']) {
       const c = q.channels[key];
       if (!c || typeof c.available !== 'boolean') return false;
       const values = [c.observedMs, c.counterEstimatedMs, c.unknownMs];
@@ -79,6 +81,14 @@
       )
         return false;
     }
+    const household = q.channels.household;
+    if (
+      household.energyWh !== null &&
+      (!Number.isFinite(household.energyWh) ||
+        household.energyWh < 0 ||
+        !(household.observedMs + household.counterEstimatedMs > 0))
+    )
+      return false;
     const h = q.hourlyGrid;
     const values = [h.sampledHours, h.withCounterEstimateHours, h.tibberHours, h.unknownHours];
     return (
@@ -90,7 +100,7 @@
       (h.available
         ? values.every(nonnegative) && values.reduce((a, b) => a + b, 0) === h.totalHours
         : values.every((n) => n === null)) &&
-      ['grid', 'battery', 'solar', 'ev', 'evac'].every(
+      ['grid', 'battery', 'solar', 'ev', 'evac', 'household'].every(
         (k) => q.channels[k].available === q.channels.grid.available,
       ) &&
       (!h.available || q.channels.grid.available)
@@ -188,6 +198,15 @@
           if (coverage) {
             if (!coverage.available) paragraph(box, 'Tidstäckningen är inte tillgänglig.');
             else {
+              if (coverage.energyWh !== undefined) {
+                const kWh =
+                  coverage.energyWh === null
+                    ? 'saknas'
+                    : (coverage.energyWh / 1000).toLocaleString('sv-SE', {
+                        maximumFractionDigits: 2,
+                      }) + ' kWh';
+                paragraph(box, 'Energi under täckt tid: ' + kWh + '.');
+              }
               const parts = [
                 ['Observerat', 'observedMs', 'observed'],
                 ['Räknarestimat', 'counterEstimatedMs', 'estimated'],
@@ -249,11 +268,11 @@
               );
           }
         };
-        for (const source of ['grid', 'battery', 'solar', 'ev', 'evac'])
+        for (const source of ['grid', 'battery', 'solar', 'ev', 'evac', 'household'])
           showRanges(
             sources[source],
             report.gaps[source],
-            'råa kvart',
+            source === 'household' ? 'kvartar' : 'råa kvart',
             report.quality.channels[source],
           );
         showRanges('Köppriser från Tibber', report.prices.consumption, 'hela timmar');

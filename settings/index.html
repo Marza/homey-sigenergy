@@ -2473,6 +2473,7 @@
             ['tibber', 'Tibber'],
             ['evdc', 'EVDC'],
             ['evac', 'AC-laddare (EVAC)'],
+            ['household', 'Husets förbrukning utan billaddning'],
           ]) {
             const status = sources[key];
             const p = document.createElement('p');
@@ -2525,6 +2526,20 @@
                   'Effekt ' + (powerW / 1000).toLocaleString('sv-SE') + ' kW',
                 Number.isFinite(totalConsumedKWh) &&
                   'Totalt förbrukat ' + totalConsumedKWh.toLocaleString('sv-SE') + ' kWh',
+              ]
+                .filter(Boolean)
+                .join(' · ');
+              if (detail.textContent) el.appendChild(detail);
+            }
+            if (key === 'household' && status.usable) {
+              const { totalKWh, averageKW } = values.householdCounterStatus;
+              const number = (value) => value.toLocaleString('sv-SE', { maximumFractionDigits: 2 });
+              const detail = document.createElement('p');
+              detail.className = 'sub';
+              detail.textContent = [
+                Number.isFinite(totalKWh) && 'Räknarställning ' + number(totalKWh) + ' kWh',
+                Number.isFinite(averageKW) &&
+                  'Medel sedan förra avläsningen ' + number(averageKW) + ' kW',
               ]
                 .filter(Boolean)
                 .join(' · ');
