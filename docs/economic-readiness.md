@@ -23,10 +23,11 @@ not hide independent energy gaps.
   historical prices do not expire merely because they are old.
 - Valid frozen cost versions covering each quarter under Stockholm local dates.
   Undated drafts and checked dates are not effective dates.
-- In solar/EV mode: separate PV coverage, nonnegative solar energy, known invalid
-  or nonzero EV observations, and solar/residual-load consistency. Exactly one
-  plant and valid saved charging configuration are required. No EV observations
-  is **not** proof of no charging; the existing owner confirmations still apply.
+- In solar/EV mode: separate PV and EVDC coverage, nonnegative solar energy,
+  and solar/residual-load consistency. A fully measured zero EVDC quarter is
+  eligible. Missing EVDC coverage and observed vehicle charging or discharging
+  are reported separately. The mode also requires exactly one plant, valid
+  saved charging configuration, and the existing owner confirmations.
 
 `comparison-data.js` supplies the shared energy, battery, price and contract scan
 used by battery replay. Solar replay and inspection share the same additional

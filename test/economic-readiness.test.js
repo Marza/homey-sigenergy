@@ -309,3 +309,26 @@ test('unexpected snapshot processing failures return a safe unavailable report',
   assert.equal(r.controlApplied, false);
   assert.doesNotMatch(JSON.stringify(r), /SECRET_FIXTURE_PROCESSING_ERROR/);
 });
+
+test('missing EV measurements cannot pass the readiness check or solar replay as measured zero', () => {
+  const f = fixture();
+  assert.equal(report(f, 'solar-ev').checks.evCoverageQuarters.state, 'complete');
+  delete f.rows[0].fieldCoverageMs.evW;
+  delete f.rows[0].evWh;
+  f.rows[1].fieldCoverageMs.evW /= 2;
+  const r = report(f, 'solar-ev');
+  assert.equal(r.dataComplete, false);
+  assert.equal(r.checks.evCoverageQuarters.missingQuarters, 2);
+  assert.equal(r.checks.knownEvChargingQuarters.missingQuarters, 0);
+  assert.equal(report(f).dataComplete, true);
+  const result = compareSolarEv(
+    f.homey,
+    {
+      ...input(),
+      ev: { confirmHistoricalTask: true, confirmNoExistingEvCharging: true },
+    },
+    f.now,
+  );
+  assert.equal(result.reason, 'incomplete-solar-ev-window');
+  assert.equal(result.missing.evCoverageQuarters, 2);
+});

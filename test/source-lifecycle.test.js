@@ -71,7 +71,7 @@ test('backup Flow tokens are requests and publish before a pending optional prob
 const snapshot = { gridMode: 0, soc: 60, capacityKWh: 42, gridW: 2000, pvW: 1000, essW: 500 };
 function deviceFixture({
   snapshotRead = async () => snapshot,
-  evdcRead = async () => ({ soc: 0, powerW: 0 }),
+  evdcRead = async () => ({ values: { soc: 0, powerW: 0 }, powerReadAt: Date.now() }),
   energyRead = async () => ({ values: {} }),
   batteryRead = async () => ({
     values: {},
@@ -81,7 +81,8 @@ function deviceFixture({
 } = {}) {
   const settings = new Settings(),
     capabilities = new Map(),
-    readers = [];
+    readers = [],
+    samples = [];
   class Reader {
     constructor(config) {
       this.config = config;
@@ -103,14 +104,17 @@ function deviceFixture({
   const Device = load('drivers/sigenergy/device.js', {
     homey: { Device: class {} },
     '../../lib/modbus': { SigenergyReader: Reader },
-    '../../lib/charging/evdc': { readEvdc: evdcRead },
+    '../../lib/charging/evdc': {
+      ...require('../lib/charging/evdc'),
+      readEvdc: evdcRead,
+    },
   });
   const device = new Device();
   device.homey = {
     settings,
     setInterval: () => 1,
     clearInterval() {},
-    app: { history: { append() {}, event() {} } },
+    app: { history: { append: (...args) => samples.push(args), event() {} } },
     flow: { getTriggerCard: () => ({ trigger: async () => {} }) },
   };
   device.getSettings = () => ({
@@ -119,6 +123,7 @@ function deviceFixture({
     unitId: 247,
     pollSeconds: 10,
     evdcEnabled: true,
+    evdcUnitId: 7,
   });
   device.setCapabilityValue = async (key, value) => capabilities.set(key, value);
   device.setAvailable = async () => {
@@ -128,15 +133,21 @@ function deviceFixture({
     device.available = false;
   };
   device.error = device.log = () => {};
-  return { device, settings, capabilities, readers };
+  return { device, settings, capabilities, readers, samples };
 }
 
 test('device publishes EVDC state on first failure, recovers, disables and shuts down', async () => {
   let fail = true;
   const { device, settings, capabilities } = deviceFixture({
     evdcRead: async () => {
-      if (fail) throw new Error('timeout');
-      return { soc: 0, powerW: 0 };
+      return fail
+        ? {
+            values: {},
+            errors: { powerW: 'timeout' },
+            powerFailure: Error('timeout'),
+            powerReadAt: Date.now(),
+          }
+        : { values: { soc: 0, powerW: 0 }, powerReadAt: Date.now() };
     },
   });
   await device.onInit();
@@ -149,7 +160,7 @@ test('device publishes EVDC state on first failure, recovers, disables and shuts
   assert.equal(d.battery.status, 'error');
   assert.equal(device.available, true);
   fail = false;
-  await device.poll();
+  await device.pollEvdc();
   d = diagnostics(settings);
   assert.equal(d.evdc.status, 'ok');
   assert.equal(capabilities.get('measure_ev_soc'), 0);
@@ -159,6 +170,42 @@ test('device publishes EVDC state on first failure, recovers, disables and shuts
   assert.equal(capabilities.get('measure_ev_soc'), null);
   await device.onDeleted();
   assert.equal(diagnostics(settings).sigenergy.status, 'disabled');
+});
+
+test('EVDC uses its own inverter address and marks failed power reads as gaps', async () => {
+  let values = { powerW: 7200 };
+  const powerFailure = Error('timeout');
+  const { device, settings, capabilities, readers, samples } = deviceFixture({
+    evdcRead: async () => ({
+      values,
+      errors: values.powerW === undefined ? { powerW: 'timeout' } : { soc: 'unavailable' },
+      powerFailure: values.powerW === undefined ? powerFailure : undefined,
+      powerReadAt: Date.now(),
+    }),
+  });
+  await device.onInit();
+  await tick();
+  assert.deepEqual(
+    readers.map((reader) => reader.config.unitId),
+    [247, 7],
+  );
+  assert.equal(capabilities.get('measure_ev_power'), 7200);
+  assert.equal(capabilities.get('measure_ev_soc'), null);
+  assert.equal(diagnostics(settings).evdc.status, 'partial');
+
+  values = { soc: 50 };
+  await device.pollEvdc();
+  assert.deepEqual({ ...samples.at(-1)[0] }, { evW: null, evSoc: 50 });
+  assert.equal(samples.at(-1)[2], 'modbus-timeout');
+  assert.equal(capabilities.get('measure_ev_power'), null);
+  assert.equal(device.available, true);
+
+  await device.onSettings({ newSettings: { ...device.getSettings(), evdcUnitId: 247 } });
+  await tick();
+  assert.equal(readers.length, 3);
+  assert.equal(readers[1].closed, true);
+  assert.match(settings.get('evdcError'), /Modbus-ID/);
+  await device.onUninit();
 });
 
 test('results from a reader replaced during a poll cannot republish old source data', async () => {

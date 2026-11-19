@@ -44,6 +44,7 @@ function reset() {
   f.data.tibberHistoryPriceCache.networkEnergy = [{ t: f.rows[0].t, importWh: 1000, exportWh: 0 }];
   f.rows[2].essCoverageMs = 0;
   f.rows[4].fieldCoverageMs.pvW = 0;
+  f.rows[5].fieldCoverageMs.evW = 0;
   delete f.data.tibberHistoryPriceCache.rows[1].production;
   f.homey.app.dataDiagnostics.record('grid', 'modbus-timeout', f.rows[0].t, f.rows[0].t + 10000);
   mode = 'normal';
@@ -149,7 +150,8 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Okänd tid: 14 min/);
       assert.match(text, /Enbart observerade Sigenergy-kvart: 23 timmar/);
       assert.match(text, /Okända timmar: 0/);
-      assert.equal(await page.locator('.coverage-bar').count(), 3);
+      assert.match(text, /Bil \(EVDC\)/);
+      assert.equal(await page.locator('.coverage-bar').count(), 4);
       const bars = await page.locator('.coverage-bar').evaluateAll((bs) =>
         bs.map((b) => ({
           width: b.getBoundingClientRect().width,

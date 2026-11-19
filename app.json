@@ -176,20 +176,20 @@
       "type": "number",
       "title": {
         "en": "EV state of charge",
-        "sv": "Bilens laddniva"
+        "sv": "Bilens laddnivå"
       },
       "units": {
         "en": "%"
       },
       "getable": true,
       "setable": false,
-      "decimals": 0
+      "decimals": 1
     },
     "measure_ev_power": {
       "type": "number",
       "title": {
-        "en": "EV charging power",
-        "sv": "Bilens laddeffekt"
+        "en": "EVDC power",
+        "sv": "Bilens EVDC-effekt"
       },
       "units": {
         "en": "W"
@@ -344,41 +344,21 @@
           "id": "evdcEnabled",
           "type": "checkbox",
           "label": {
-            "en": "Experimental EVDC read (verify firmware/register map first)"
+            "en": "Read EVDC telemetry (Modbus V2.9)",
+            "sv": "Läs EVDC-värden (Modbus V2.9)"
           },
           "value": false
         },
         {
-          "id": "evdcPowerAddress",
+          "id": "evdcUnitId",
           "type": "number",
           "label": {
-            "en": "EVDC power register"
+            "en": "EVDC inverter Modbus ID (1–246, 0 = unset)",
+            "sv": "Modbus-ID för EVDC:s växelriktare (1–246, 0 = ej valt)"
           },
-          "value": 31502
-        },
-        {
-          "id": "evdcSocAddress",
-          "type": "number",
-          "label": {
-            "en": "EVDC SoC register"
-          },
-          "value": 31504
-        },
-        {
-          "id": "evdcPowerScale",
-          "type": "number",
-          "label": {
-            "en": "EVDC power divisor"
-          },
-          "value": 1
-        },
-        {
-          "id": "evdcSocScale",
-          "type": "number",
-          "label": {
-            "en": "EVDC SoC divisor"
-          },
-          "value": 1
+          "value": 0,
+          "min": 0,
+          "max": 246
         },
         {
           "id": "energyMetersProfile",

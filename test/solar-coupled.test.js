@@ -85,7 +85,8 @@ function fixture() {
     coverageMs: Q,
     directionalCoverageMs: Q,
     essCoverageMs: Q,
-    fieldCoverageMs: { gridW: Q, pvW: Q, essW: Q },
+    evWh: 0,
+    fieldCoverageMs: { gridW: Q, pvW: Q, essW: Q, evW: Q },
   }));
   const homey = {
     drivers: { getDriver: () => ({ getDevices: () => [{}] }) },

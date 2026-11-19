@@ -116,6 +116,7 @@
     const config = values.sourceConfig || {};
     const plant = config.sigenergy || { configured: false, enabled: false };
     const evdc = config.evdc || { configured: false, enabled: false };
+    const lastEvdc = values.lastEvdc;
     const nibe = config.nibe || {};
     const nibeConfigured = !!String(values.nibeHost || '').trim();
     const nibeMatches = nibe.connectionKey === nibeKey(values);
@@ -151,8 +152,17 @@
       tibber: PriceCoverage.priceStatus(values, now),
       evdc: sourceStatus({
         ...evdc,
-        readAt: values.lastEvdc?.readAt,
-        error: values.evdcError || (evdc.enabled ? values.sigenergyError : null),
+        readAt: lastEvdc?.readAt,
+        error: values.evdcError,
+        errors: lastEvdc?.errors,
+        availableFields: [
+          'powerW',
+          'soc',
+          'sessionKWh',
+          'state',
+          'totalChargedKWh',
+          'totalDischargedKWh',
+        ].filter((key) => Number.isFinite(lastEvdc?.[key])).length,
         now,
         maxAgeMs: evdc.maxAgeMs || MAX_AGE_MS.evdc,
       }),

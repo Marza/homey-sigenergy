@@ -2,7 +2,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizePrices, fetchTibberPrices } = require('../lib/pricing/tibber');
-const { validateEvdc, readEvdc } = require('../lib/charging/evdc');
 const rows = [
   { startsAt: '2026-11-12T00:00:00Z', total: 0.3, currency: 'SEK' },
   { startsAt: '2026-11-12T00:15:00Z', total: 0.2, currency: 'SEK' },
@@ -43,10 +42,4 @@ test('fetch prices and select home', async () => {
   });
   assert.equal(result.homeId, 'abc');
   assert.equal(result.prices.length, 3);
-});
-test('reject invalid EVDC SoC', () =>
-  assert.throws(() => validateEvdc({ soc: 120, powerW: 1000 }), /SoC/));
-test('read EVDC with explicit scales', async () => {
-  const data = await readEvdc({ read: async (addr) => (addr === 31502 ? [0, 2500] : [75]) });
-  assert.deepEqual(data, { soc: 75, powerW: 2500 });
 });
