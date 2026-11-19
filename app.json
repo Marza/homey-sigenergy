@@ -264,6 +264,32 @@
           }
         }
       ]
+    },
+    "measure_evac_power": {
+      "type": "number",
+      "title": {
+        "en": "EVAC charging power",
+        "sv": "AC-laddarens effekt"
+      },
+      "units": {
+        "en": "W"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 0
+    },
+    "measure_evac_energy": {
+      "type": "number",
+      "title": {
+        "en": "EVAC total energy",
+        "sv": "AC-laddarens totala förbrukning"
+      },
+      "units": {
+        "en": "kWh"
+      },
+      "getable": true,
+      "setable": false,
+      "decimals": 2
     }
   },
   "drivers": [
@@ -281,7 +307,9 @@
         "measure_pv_power",
         "measure_ess_capacity",
         "measure_ev_soc",
-        "measure_ev_power"
+        "measure_ev_power",
+        "measure_evac_power",
+        "measure_evac_energy"
       ],
       "pair": [
         {
@@ -355,6 +383,35 @@
           "label": {
             "en": "EVDC inverter Modbus ID (1–246, 0 = unset)",
             "sv": "Modbus-ID för EVDC:s växelriktare (1–246, 0 = ej valt)"
+          },
+          "value": 0,
+          "min": 0,
+          "max": 246
+        },
+        {
+          "id": "evacEnabled",
+          "type": "checkbox",
+          "label": {
+            "en": "Read AC charger (EVAC)",
+            "sv": "Läs AC-laddaren (EVAC)"
+          },
+          "value": false
+        },
+        {
+          "id": "evacHost",
+          "type": "text",
+          "label": {
+            "en": "AC charger IP (optional, uses plant host if empty)",
+            "sv": "AC-laddarens IP (tomt använder anläggningens adress)"
+          },
+          "value": ""
+        },
+        {
+          "id": "evacUnitId",
+          "type": "number",
+          "label": {
+            "en": "AC charger Modbus ID (1–246, 0 = unset)",
+            "sv": "AC-laddarens Modbus-ID (1–246, 0 = ej valt)"
           },
           "value": 0,
           "min": 0,

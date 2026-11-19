@@ -178,8 +178,8 @@ const server = http.createServer((req, res) => {
       await page.waitForFunction(() =>
         document.querySelector('#econ-data-status').textContent.includes('ofullständigt'),
       );
-      assert.match(await list.innerText(), /Registrerad aktivitet i EVDC/);
-      assert.match(await list.innerText(), /EVDC-täckning/);
+      assert.match(await list.innerText(), /Registrerad aktivitet från billaddare/);
+      assert.match(await list.innerText(), /Mättäckning för billaddning/);
       assert.match(await list.innerText(), /1 kvart saknas/);
       const before = posts;
       await page.locator('#econ-hours').fill('169');

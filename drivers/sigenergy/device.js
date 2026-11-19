@@ -2,29 +2,50 @@
 const Homey = require('homey');
 const { SigenergyReader } = require('../../lib/modbus');
 const { readFailureReason } = require('../../lib/data-diagnostics');
-const { readEvdc, validateUnitId } = require('../../lib/charging/evdc');
+const { readEvdc, readEvac, validateUnitId } = require('../../lib/charging/modbus-telemetry');
 const { PROFILE, sourceKey, solarSourceKey, advance } = require('../../lib/energy/meters');
 const { IslandController } = require('../../lib/backup/island-controller');
+const CHARGERS = {
+  evdc: {
+    read: readEvdc,
+    history: { evW: 'powerW', evSoc: 'soc' },
+    capabilities: { measure_ev_power: 'powerW', measure_ev_soc: 'soc' },
+    sourceLabel: 'växelriktarens Modbus-ID (1–246) för EVDC',
+  },
+  evac: {
+    read: readEvac,
+    history: { evacW: 'powerW' },
+    capabilities: { measure_evac_power: 'powerW', measure_evac_energy: 'totalConsumedKWh' },
+    sourceLabel: 'AC-laddarens Modbus-ID (1–246) för EVAC',
+  },
+};
+const chargerValues = (fields, values) =>
+  Object.fromEntries(Object.entries(fields).map(([key, field]) => [key, values[field] ?? null]));
 module.exports = class SigenergyDevice extends Homey.Device {
   async onInit() {
     this.stopped = false;
     this.island = new IslandController();
     this.lastBackupState = null;
     this.polling = false;
-    this.startReader();
+    // Existing paired devices may predate the EVAC capabilities.
+    for (const capability of Object.keys(CHARGERS.evac.capabilities)) {
+      if (this.hasCapability?.(capability) === false)
+        await this.addCapability(capability).catch((error) => this.error(error));
+    }
+    if (!this.stopped) this.startReader();
   }
   startReader(settings = this.getSettings()) {
     const reason = this.reader ? 'connection-changed' : 'reader-started';
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();
-    if (this.evdcReader) this.evdcReader.close();
+    for (const charger of Object.values(this.chargers || {})) charger.reader?.close();
     this.generation = (this.generation || 0) + 1;
     this.activeSettings = { ...settings };
     this.energySnapshot = null;
     this.energyMeters = null;
     // Do not integrate across a reader/source change, even within one minute.
     this.homey.app?.history?.append(
-      { pvW: null, gridW: null, essW: null, evW: null },
+      { pvW: null, gridW: null, essW: null, evW: null, evacW: null },
       undefined,
       reason,
     );
@@ -37,40 +58,60 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.homey.settings.set('backupStatus', null);
     const since = new Date().toISOString();
     const configured = !!String(settings.host || '').trim();
-    const evdcEnabled = configured && !!settings.evdcEnabled;
-    const evdcUnitId = evdcEnabled ? validateUnitId(settings.evdcUnitId) : null;
-    this.evdcReader =
-      evdcUnitId === null ? null : new SigenergyReader({ ...settings, unitId: evdcUnitId });
-    this.updateSources({
+    this.chargers = {};
+    const sources = {
       sigenergy: {
         configured,
         enabled: configured,
         since,
         maxAgeMs: Math.max(30000, seconds * 3000),
       },
-      evdc: {
-        configured,
-        enabled: evdcEnabled,
+    };
+    for (const [key, profile] of Object.entries(CHARGERS)) {
+      const dedicatedHost = key === 'evac' ? String(settings.evacHost || '').trim() : '';
+      const host = dedicatedHost || String(settings.host || '').trim();
+      const enabled = !!settings[key + 'Enabled'];
+      const unitId = enabled ? validateUnitId(settings[key + 'UnitId']) : null;
+      const reader =
+        host && unitId !== null
+          ? new SigenergyReader({
+              host,
+              unitId,
+              port: dedicatedHost ? 502 : settings.port,
+              addressOffset: dedicatedHost ? 0 : settings.addressOffset,
+            })
+          : null;
+      this.chargers[key] = { reader, polling: false };
+      sources[key] = {
+        configured: !!host,
+        enabled,
         since,
         maxAgeMs: Math.max(90000, seconds * 3000),
-      },
-    });
+      };
+      this.homey.settings.set(key === 'evdc' ? 'lastEvdc' : 'lastEvac', null);
+      this.homey.settings.set(
+        key + 'Error',
+        enabled && host && !reader ? 'Ange ' + profile.sourceLabel + '.' : null,
+      );
+    }
+    this.updateSources(sources);
     for (const key of [
       'sigenergyStatus',
       'batteryTelemetry',
-      'lastEvdc',
       'sigenergyError',
       'batteryTelemetryError',
-      'evdcError',
     ])
       this.homey.settings.set(key, null);
-    if (evdcEnabled && !this.evdcReader)
-      this.homey.settings.set('evdcError', 'Ange växelriktarens Modbus-ID (1–246) för EVDC.');
     this.homey.app?.dataDiagnostics?.record('plant', reason);
-    const cleared = this.clearEvdc();
+    const cleared = Promise.all(
+      Object.values(CHARGERS).map(({ capabilities }) =>
+        this.publishChargerCapabilities(capabilities, {}),
+      ),
+    );
     const tick = () => {
       this.poll().catch((error) => this.error(error));
-      this.pollEvdc().catch((error) => this.error(error));
+      for (const key of Object.keys(CHARGERS))
+        this.pollCharger(key).catch((error) => this.error(error));
     };
     this.timer = this.homey.setInterval(tick, seconds * 1000);
     const generation = this.generation;
@@ -86,10 +127,10 @@ module.exports = class SigenergyDevice extends Homey.Device {
       ...sources,
     });
   }
-  async clearEvdc() {
+  async publishChargerCapabilities(fields, values) {
     await Promise.all(
-      ['measure_ev_soc', 'measure_ev_power'].map((id) =>
-        this.setCapabilityValue(id, null).catch((e) => this.error(e)),
+      Object.entries(chargerValues(fields, values)).map(([id, value]) =>
+        this.setCapabilityValue(id, value).catch((error) => this.error(error)),
       ),
     );
   }
@@ -262,39 +303,34 @@ module.exports = class SigenergyDevice extends Homey.Device {
       this.pollStartedAt = null;
     }
   }
-  async pollEvdc() {
-    const reader = this.evdcReader;
-    if (this.stopped || !reader || this.evdcPoll === reader) return;
-    this.evdcPoll = reader;
-    const current = () => !this.stopped && this.evdcReader === reader;
+  async pollCharger(key) {
+    const charger = this.chargers[key];
+    const { reader } = charger;
+    if (this.stopped || !reader || charger.polling) return;
+    charger.polling = true;
+    const current = () => !this.stopped && this.chargers[key] === charger;
+    const profile = CHARGERS[key];
     try {
-      const evdc = await readEvdc({
+      const { values, errors, powerReadAt, powerFailure } = await profile.read({
         read: (...args) => {
-          if (!current()) throw Error('EVDC reader replaced');
+          if (!current()) throw Error('Charger reader replaced');
           return reader.read(...args);
         },
       });
       if (!current()) return;
-      const { values, errors, powerReadAt, powerFailure } = evdc;
-      const evW = values.powerW ?? null,
-        evSoc = values.soc ?? null;
       this.homey.app.history?.append(
-        { evW, evSoc },
+        chargerValues(profile.history, values),
         powerReadAt,
         powerFailure ? readFailureReason(powerFailure) : 'invalid-sample',
       );
-      this.homey.settings.set('lastEvdc', {
+      this.homey.settings.set(key === 'evdc' ? 'lastEvdc' : 'lastEvac', {
         ...values,
         errors,
         readAt: new Date(powerReadAt).toISOString(),
       });
-      this.homey.settings.set('evdcError', null);
-      await Promise.all([
-        this.setCapabilityValue('measure_ev_power', evW),
-        this.setCapabilityValue('measure_ev_soc', evSoc),
-      ]);
+      await this.publishChargerCapabilities(profile.capabilities, values);
     } finally {
-      if (this.evdcPoll === reader) this.evdcPoll = null;
+      charger.polling = false;
       if (!current()) reader.close();
     }
   }
@@ -344,9 +380,10 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.updateSources({
       sigenergy: { ...config.sigenergy, enabled: false },
       evdc: { ...config.evdc, enabled: false },
+      evac: { ...config.evac, enabled: false },
     });
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();
-    if (this.evdcReader) this.evdcReader.close();
+    for (const charger of Object.values(this.chargers || {})) charger.reader?.close();
   }
 };

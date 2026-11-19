@@ -151,7 +151,8 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Enbart observerade Sigenergy-kvart: 23 timmar/);
       assert.match(text, /Okända timmar: 0/);
       assert.match(text, /Bil \(EVDC\)/);
-      assert.equal(await page.locator('.coverage-bar').count(), 4);
+      assert.match(text, /AC-laddare \(EVAC\)/);
+      assert.equal(await page.locator('.coverage-bar').count(), 5);
       const bars = await page.locator('.coverage-bar').evaluateAll((bs) =>
         bs.map((b) => ({
           width: b.getBoundingClientRect().width,

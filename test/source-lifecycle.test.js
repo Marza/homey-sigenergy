@@ -71,6 +71,7 @@ test('backup Flow tokens are requests and publish before a pending optional prob
 const snapshot = { gridMode: 0, soc: 60, capacityKWh: 42, gridW: 2000, pvW: 1000, essW: 500 };
 function deviceFixture({
   snapshotRead = async () => snapshot,
+  evacRead,
   evdcRead = async () => ({ values: { soc: 0, powerW: 0 }, powerReadAt: Date.now() }),
   energyRead = async () => ({ values: {} }),
   batteryRead = async () => ({
@@ -91,6 +92,9 @@ function deviceFixture({
     snapshot(solarSource) {
       return snapshotRead(this, solarSource);
     }
+    read(...args) {
+      return evacRead(this, ...args);
+    }
     energyCounters(profile, solarSource) {
       return energyRead(profile, solarSource);
     }
@@ -104,8 +108,8 @@ function deviceFixture({
   const Device = load('drivers/sigenergy/device.js', {
     homey: { Device: class {} },
     '../../lib/modbus': { SigenergyReader: Reader },
-    '../../lib/charging/evdc': {
-      ...require('../lib/charging/evdc'),
+    '../../lib/charging/modbus-telemetry': {
+      ...require('../lib/charging/modbus-telemetry'),
       readEvdc: evdcRead,
     },
   });
@@ -160,7 +164,7 @@ test('device publishes EVDC state on first failure, recovers, disables and shuts
   assert.equal(d.battery.status, 'error');
   assert.equal(device.available, true);
   fail = false;
-  await device.pollEvdc();
+  await device.pollCharger('evdc');
   d = diagnostics(settings);
   assert.equal(d.evdc.status, 'ok');
   assert.equal(capabilities.get('measure_ev_soc'), 0);
@@ -194,7 +198,7 @@ test('EVDC uses its own inverter address and marks failed power reads as gaps', 
   assert.equal(diagnostics(settings).evdc.status, 'partial');
 
   values = { soc: 50 };
-  await device.pollEvdc();
+  await device.pollCharger('evdc');
   assert.deepEqual({ ...samples.at(-1)[0] }, { evW: null, evSoc: 50 });
   assert.equal(samples.at(-1)[2], 'modbus-timeout');
   assert.equal(capabilities.get('measure_ev_power'), null);
@@ -206,6 +210,47 @@ test('EVDC uses its own inverter address and marks failed power reads as gaps', 
   assert.equal(readers[1].closed, true);
   assert.match(settings.get('evdcError'), /Modbus-ID/);
   await device.onUninit();
+});
+
+test('EVAC uses its own endpoint, publishes cumulative energy and records separate power', async () => {
+  let fail = false;
+  const { device, settings, capabilities, readers, samples } = deviceFixture({
+    evacRead: async (reader, address, count) => {
+      assert.equal(reader.config.host, '192.0.2.20');
+      assert.equal(reader.config.unitId, 9);
+      assert.equal(address, 32000);
+      assert.equal(count, 5);
+      if (fail) throw Error('timeout');
+      return [5, 0, 12345, 0, 11000];
+    },
+  });
+  const originalSettings = device.getSettings();
+  device.getSettings = () => ({
+    ...originalSettings,
+    evacEnabled: true,
+    evacHost: '192.0.2.20',
+    evacUnitId: 9,
+  });
+  await device.onInit();
+  await tick();
+  assert.deepEqual(
+    readers.map((reader) => reader.config.unitId),
+    [247, 7, 9],
+  );
+  assert.ok(samples.some(([sample]) => sample.evacW === 11000 && sample.evW === undefined));
+  assert.equal(capabilities.get('measure_evac_power'), 11000);
+  assert.equal(capabilities.get('measure_evac_energy'), 123.45);
+  assert.equal(diagnostics(settings).evac.status, 'ok');
+  fail = true;
+  await device.pollCharger('evac');
+  assert.equal(samples.at(-1)[0].evacW, null);
+  assert.equal(samples.at(-1)[2], 'modbus-timeout');
+  assert.equal(capabilities.get('measure_evac_power'), null);
+  assert.equal(diagnostics(settings).evac.status, 'error');
+  assert.equal(diagnostics(settings).evdc.status, 'ok');
+  assert.equal(device.available, true);
+  await device.onUninit();
+  assert.equal(readers[2].closed, true);
 });
 
 test('results from a reader replaced during a poll cannot republish old source data', async () => {
@@ -222,9 +267,9 @@ test('results from a reader replaced during a poll cannot republish old source d
   await f.device.onSettings({
     newSettings: { ...f.device.getSettings(), host: '192.0.2.11', evdcEnabled: false },
   });
-  resolve(snapshot);
+  resolve({ ...snapshot, gridW: 999999 });
   await tick();
-  assert.equal(f.settings.get('sigenergyStatus'), null);
+  assert.ok(!f.samples.some(([sample]) => sample.gridW === 999999));
   assert.equal(f.readers[0].closed, true);
   await f.device.poll();
   assert.equal(diagnostics(f.settings).sigenergy.status, 'ok');

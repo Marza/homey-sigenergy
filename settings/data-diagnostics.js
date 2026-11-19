@@ -38,6 +38,7 @@
     battery: 'Batteri',
     solar: 'Sol',
     ev: 'Bil (EVDC)',
+    evac: 'AC-laddare (EVAC)',
     storage: 'Lagring',
     prices: 'Tibber',
   };
@@ -67,7 +68,7 @@
       !q.hourlyGrid
     )
       return false;
-    for (const key of ['grid', 'battery', 'solar', 'ev']) {
+    for (const key of ['grid', 'battery', 'solar', 'ev', 'evac']) {
       const c = q.channels[key];
       if (!c || typeof c.available !== 'boolean') return false;
       const values = [c.observedMs, c.counterEstimatedMs, c.unknownMs];
@@ -89,7 +90,7 @@
       (h.available
         ? values.every(nonnegative) && values.reduce((a, b) => a + b, 0) === h.totalHours
         : values.every((n) => n === null)) &&
-      ['grid', 'battery', 'solar', 'ev'].every(
+      ['grid', 'battery', 'solar', 'ev', 'evac'].every(
         (k) => q.channels[k].available === q.channels.grid.available,
       ) &&
       (!h.available || q.channels.grid.available)
@@ -248,7 +249,7 @@
               );
           }
         };
-        for (const source of ['grid', 'battery', 'solar', 'ev'])
+        for (const source of ['grid', 'battery', 'solar', 'ev', 'evac'])
           showRanges(
             sources[source],
             report.gaps[source],

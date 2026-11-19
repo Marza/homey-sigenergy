@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readEvdc, validateUnitId } = require('../lib/charging/evdc');
+const { readEvdc, readEvac, validateUnitId } = require('../lib/charging/modbus-telemetry');
 
 test('EVDC requires an explicit inverter unit ID and rejects the plant address', () => {
   for (const invalid of [undefined, true, '', 0, -1, 1.5, 247, 248, 'invalid']) {
@@ -64,4 +64,27 @@ test('a failed or malformed power read remains unknown even with valid SoC', asy
   const malformed = await readEvdc(reader({ 31502: [0x8000, 0] }));
   assert.equal(malformed.values.powerW, undefined);
   assert.ok(malformed.errors.powerW);
+});
+
+test('read EVAC kWh and W from separate fields and preserve measured idle', async () => {
+  const read = (words) =>
+    readEvac({
+      async read(address, count) {
+        assert.equal(address, 32000);
+        assert.equal(count, 5);
+        return words;
+      },
+    });
+  assert.deepEqual((await read([5, 1, 100, 0, 11000])).values, {
+    powerW: 11000,
+    state: 5,
+    totalConsumedKWh: 656.36,
+  });
+  const idle = await read([1, 0xffff, 0xffff, 0, 0]);
+  assert.equal(idle.values.powerW, 0);
+  assert.ok(idle.errors.totalConsumedKWh);
+  const invalid = await read([5, 0, 100, 0xffff, 0xffff]);
+  assert.equal(invalid.values.powerW, undefined);
+  assert.ok(invalid.errors.powerW);
+  assert.equal(invalid.values.totalConsumedKWh, 1);
 });

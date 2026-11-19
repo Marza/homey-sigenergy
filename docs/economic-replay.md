@@ -57,7 +57,7 @@ Synthetic tests cover date/DST boundaries, frozen drafts/tariffs, concurrent pub
 
 ## Coupled solar and EV mode
 
-The optional [coupled solar/EV replay](coupled-solar-ev.md) extends this same context and price evaluation with a confirmed hypothetical EV task and two solar priorities. It needs independent PV and EVDC coverage and a period confirmed to exclude existing EV charging or discharging, retains identical terminal goals, and stays indicative without automatic ranking. The battery-only mode retains its existing behavior.
+The optional [coupled solar/EV replay](coupled-solar-ev.md) extends this same context and price evaluation with a confirmed hypothetical EV task and two solar priorities. It needs independent PV and charger coverage and a period confirmed to exclude existing EV charging or discharging, retains identical terminal goals, and stays indicative without automatic ranking. The battery-only mode retains its existing behavior.
 
 ## Inspecting the selected period
 

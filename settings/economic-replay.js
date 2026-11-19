@@ -11,7 +11,7 @@
       'confirm-historical-ev-baseline':
         'Bekräfta det hypotetiska laddscenariot och att perioden saknar befintlig billaddning.',
       'incomplete-solar-ev-window':
-        'Kontrollera solunderlag, EVDC-täckning och om bilen laddades eller laddade ur under perioden.',
+        'Kontrollera solunderlag, mättäckning för billaddning och om bilen laddades eller laddade ur under perioden.',
       'ev-target-below-saved-minimum': 'Bilens mål måste minst motsvara sparad minsta SoC.',
       'ev-deadline-unmet':
         'Bilens laddmål kunde inte nås före den antagna avgången. Kostnadsskillnaden hålls därför okänd.',
@@ -53,8 +53,8 @@
       productionPriceQuarters: 'säljpris',
       solarCoverageQuarters: 'soltäckning',
       solarEnergyQuarters: 'solenergi',
-      evCoverageQuarters: 'EVDC-täckning',
-      knownEvChargingQuarters: 'registrerad EVDC-aktivitet',
+      evCoverageQuarters: 'mättäckning för billaddning',
+      knownEvChargingQuarters: 'registrerad laddaktivitet',
       inconsistentSolarQuarters: 'inkonsekventa solvärden',
     };
     const explain = (reason) => messages[reason] || reason || 'Underlaget är otillräckligt.';

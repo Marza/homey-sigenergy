@@ -332,3 +332,39 @@ test('missing EV measurements cannot pass the readiness check or solar replay as
   assert.equal(result.reason, 'incomplete-solar-ev-window');
   assert.equal(result.missing.evCoverageQuarters, 2);
 });
+
+test('solar/EV checks support AC-only sites and require both channels when enabled', () => {
+  const f = fixture();
+  f.data.sourceConfig.evac = { enabled: true };
+  for (const row of f.rows) {
+    delete row.fieldCoverageMs.evW;
+    delete row.evWh;
+    row.fieldCoverageMs.evacW = Q;
+    row.evacWh = 0;
+  }
+  assert.equal(report(f, 'solar-ev').dataComplete, true);
+  f.data.sourceConfig.evdc = { enabled: true };
+  assert.equal(report(f, 'solar-ev').checks.evCoverageQuarters.missingQuarters, f.rows.length);
+  for (const row of f.rows) {
+    row.fieldCoverageMs.evW = Q;
+    row.evWh = 0;
+  }
+  f.rows[0].evacWh = 1500;
+  delete f.rows[1].fieldCoverageMs.evacW;
+  const result = report(f, 'solar-ev');
+  assert.equal(result.checks.knownEvChargingQuarters.missingQuarters, 1);
+  assert.equal(result.checks.evCoverageQuarters.missingQuarters, 1);
+  assert.equal(result.dataComplete, false);
+
+  const replay = compareSolarEv(
+    f.homey,
+    {
+      ...input(),
+      ev: { confirmHistoricalTask: true, confirmNoExistingEvCharging: true },
+    },
+    f.now,
+  );
+  assert.equal(replay.reason, 'incomplete-solar-ev-window');
+  assert.equal(replay.missing.knownEvChargingQuarters, 1);
+  assert.equal(replay.missing.evCoverageQuarters, 1);
+});

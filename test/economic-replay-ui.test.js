@@ -474,6 +474,6 @@ test('coupled missing-data details show independent solar and existing EV-load e
   });
   await p;
   assert.match(v.field('result').textContent, /soltäckning 4/);
-  assert.match(v.field('result').textContent, /EVDC-täckning 3/);
-  assert.match(v.field('result').textContent, /registrerad EVDC-aktivitet 2/);
+  assert.match(v.field('result').textContent, /mättäckning för billaddning 3/);
+  assert.match(v.field('result').textContent, /registrerad laddaktivitet 2/);
 });

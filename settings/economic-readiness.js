@@ -36,11 +36,11 @@
       'Perioden behöver giltiga, icke-negativa solenergivärden. Noll är tillåtet.',
     ],
     evCoverageQuarters: [
-      'EVDC-täckning',
-      'Samla kompletta EVDC-kvartar. En uppmätt nolla är giltig; tid utan mätning är okänd.',
+      'Mättäckning för billaddning',
+      'Samla kompletta kvartar för de aktiverade laddarna. En uppmätt nolla är giltig. Tid utan mätning är okänd.',
     ],
     knownEvChargingQuarters: [
-      'Registrerad aktivitet i EVDC',
+      'Registrerad aktivitet från billaddare',
       'Modellen kräver en period utan uppmätt laddning eller urladdning. Bekräfta även perioden själv.',
     ],
     inconsistentSolarQuarters: [

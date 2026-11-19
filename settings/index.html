@@ -2061,10 +2061,10 @@
                       perioden.</label
                     >
                     <p>
-                      Komplett täckning för både solenergi och EVDC krävs. Välj en period utan
-                      laddning eller urladdning från bilen. Laddning från andra källor kan behövas
-                      för att nå avgångsmålet och räknas då med i nät-/batteriflödet; effekttaket
-                      kan därför bli ouppnått. Faser och säkringar modelleras inte.
+                      Komplett täckning för solenergi och de aktiverade laddarna krävs. Välj en
+                      period utan laddning eller urladdning från bilen. Laddning från andra källor
+                      kan behövas för att nå avgångsmålet och räknas då med i nät-/batteriflödet;
+                      effekttaket kan därför bli ouppnått. Faser och säkringar modelleras inte.
                     </p>
                   </fieldset>
                   <button id="econ-run" type="button" class="hy-nostyle">
@@ -2472,6 +2472,7 @@
             ['nibe', 'Nibe'],
             ['tibber', 'Tibber'],
             ['evdc', 'EVDC'],
+            ['evac', 'AC-laddare (EVAC)'],
           ]) {
             const status = sources[key];
             const p = document.createElement('p');
@@ -2514,6 +2515,20 @@
                 .filter(Boolean)
                 .join(' · ');
               el.appendChild(detail);
+            }
+            if (key === 'evac' && status.usable) {
+              const { powerW, totalConsumedKWh } = values.lastEvac;
+              const detail = document.createElement('p');
+              detail.className = 'sub';
+              detail.textContent = [
+                Number.isFinite(powerW) &&
+                  'Effekt ' + (powerW / 1000).toLocaleString('sv-SE') + ' kW',
+                Number.isFinite(totalConsumedKWh) &&
+                  'Totalt förbrukat ' + totalConsumedKWh.toLocaleString('sv-SE') + ' kWh',
+              ]
+                .filter(Boolean)
+                .join(' · ');
+              if (detail.textContent) el.appendChild(detail);
             }
             for (const [field, error] of Object.entries(status.fieldErrors)) {
               const detail = document.createElement('p');
