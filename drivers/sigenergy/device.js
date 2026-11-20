@@ -353,6 +353,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
   }
   async pollHouseholdEnergy(reader, current, meters, meterReadAt) {
     try {
+      if (meters && !Number.isSafeInteger(meters.house))
+        throw Error('Invalid household energy register');
       const raw = meters ? String(meters.house) : await reader.householdEnergyCounter();
       if (!current()) return;
       const at = meters ? meterReadAt : Date.now();

@@ -15,6 +15,9 @@ const { getEnergyHistory } = require('./lib/pricing/energy-history');
 const { previewSolar } = require('./lib/charging/solar-preview');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
+  async getOptimizationPreview({ homey }) {
+    return homey.app.getOptimizationPreview();
+  },
   async getDataDiagnostics({ homey, body }) {
     return homey.app.dataDiagnostics.report(homey, body);
   },

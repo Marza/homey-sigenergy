@@ -52,6 +52,11 @@
       "path": "/solar/preview",
       "public": false
     },
+    "getOptimizationPreview": {
+      "method": "GET",
+      "path": "/optimization/preview",
+      "public": false
+    },
     "getEconomicHistory": {
       "method": "GET",
       "path": "/economics/energy-history",

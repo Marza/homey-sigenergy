@@ -233,32 +233,28 @@ test('fresh BMS constraints and stale/error fallbacks match browser and runtime'
     } else assert.equal(expected.initialSocPercent, 60);
   }
 });
-test('settings renders shared results and clears them on insufficient history, bad config and read errors', () => {
-  const b = browser({
-    historyState: { schema: 3, slots: rows(), daily: [], events: [], legacyDaily: [] },
-  });
+test('settings renders the runtime preview and ignores a late response after a new simulation', () => {
+  const b = browser();
+  const requests = [];
+  b.context.Homey.api = (method, url, body, done) => {
+    assert.equal(method, 'GET');
+    assert.equal(url, '/optimization/preview');
+    assert.equal(body, null);
+    requests.push(done);
+  };
+  const reply = (n) => ({ ...S.simulate(rows(n), config), backupAdvisory: { reason: 'Test' } });
   b.run('runSimulation(Homey)');
+  requests[0](null, reply(8));
   assert.equal(b.element('simulationRows').children.length, 6);
-  assert.match(
-    b.element('simulationStatus').textContent,
-    /conservative-no-recharge.*Start-SoC 60.*Ingen uppladdning eller priser/,
-  );
-  b.values.historyState.slots = rows(2);
+  assert.match(b.element('simulationStatus').textContent, /conservative-no-recharge.*Start-SoC 60/);
   b.run('runSimulation(Homey)');
+  b.run('runSimulation(Homey)');
+  requests[2](null, reply(2));
+  requests[1](null, reply(8));
   assert.equal(b.element('simulationRows').children.length, 0);
   assert.match(b.element('simulationStatus').textContent, /Otillräckligt/);
-  b.values.historyState.slots = rows();
-  b.values.optimizerConfig = { ...config, capStepKW: 1e-300 };
   b.run('runSimulation(Homey)');
-  assert.equal(b.element('simulationRows').children.length, 0);
-  assert.match(b.element('simulationStatus').textContent, /range/);
-  b.values.optimizerConfig = config;
-  b.failures.add('autoBatteryValues');
-  b.run('runSimulation(Homey)');
-  assert.match(b.element('simulationStatus').textContent, /kunde inte läsas/);
-  b.failures.clear();
-  b.failures.add('historyState');
-  b.run('runSimulation(Homey)');
+  requests[3](Error('Read failed'));
   assert.match(b.element('simulationStatus').textContent, /Read failed/);
   assert.deepEqual(b.writes, []);
 });
