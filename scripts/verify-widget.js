@@ -25,6 +25,31 @@ function verifyWidget(directory) {
     typeof require(path.resolve(directory, 'widgets/energy-overview/api.js')).getOverview,
     'function',
   );
+  for (const [id, route] of [
+    ['energy-flow', '/:date/:period'],
+    ['power-history', '/:date'],
+  ]) {
+    const folder = path.join(directory, 'widgets', id);
+    assert.deepEqual(manifest.widgets?.[id]?.api, { getHistory: { method: 'GET', path: route } });
+    for (const file of [
+      'public/index.html',
+      'public/history-widget.js',
+      'public/history-widget.css',
+      'public/widget-layout.js',
+      'preview-light.png',
+      'preview-dark.png',
+    ])
+      assert.ok(fs.statSync(path.join(folder, file)).size > 0, `Widget ${id} missing ${file}`);
+    assert.equal(typeof require(path.resolve(folder, 'api.js')).getHistory, 'function');
+  }
+  for (const asset of ['history-widget.js', 'history-widget.css', 'widget-layout.js']) {
+    const read = (id) => fs.readFileSync(path.join(directory, 'widgets', id, 'public', asset));
+    assert.deepEqual(
+      read('energy-flow'),
+      read('power-history'),
+      `Widget copies differ for ${asset}`,
+    );
+  }
 }
 if (require.main === module) verifyWidget(process.argv[2] || '.homeybuild');
 module.exports = { verifyWidget };

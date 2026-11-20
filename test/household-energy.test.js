@@ -91,7 +91,7 @@ test('energy across a quarter boundary is preserved and its allocation is marked
   observe('200', 870);
   assert.equal(observe('212', 930), 7.2);
   const file = history.export();
-  assert.equal(file.schema, 10);
+  assert.equal(file.schema, 14);
   assert.deepEqual(
     file.slots.map((s) => [s.t, s.householdWh, s.householdCoverageMs, s.householdEstimatedMs]),
     [

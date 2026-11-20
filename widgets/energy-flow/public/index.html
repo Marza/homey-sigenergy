@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Energiflöden</title>
+    <link rel="stylesheet" href="history-widget.css" />
+    <style>
+      #flow-method {
+        display: block;
+        width: 100%;
+        padding: 4px 8px;
+        margin: 3px 0;
+      }
+      .flow-headings,
+      .flow-board {
+        display: grid;
+        grid-template-columns: 29% 1fr 29%;
+      }
+      .flow-headings {
+        margin: 18px 0 7px;
+        align-items: end;
+      }
+      .flow-headings h2 {
+        font-size: 13px;
+      }
+      .flow-headings h2:last-child {
+        grid-column: 3;
+        text-align: right;
+      }
+      .flow-board {
+        position: relative;
+        min-height: 355px;
+        height: clamp(355px, 97vw, 425px);
+        isolation: isolate;
+      }
+      .flow-diagram {
+        position: absolute;
+        inset: 0;
+        height: 100%;
+        z-index: -1;
+      }
+      .nodes {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #energy-out {
+        grid-column: 3;
+      }
+      .node {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 4px 7px;
+        min-height: min-content;
+        border-radius: 5px;
+        color: #182335;
+        background: linear-gradient(
+          115deg,
+          color-mix(in srgb, var(--series), white 36%),
+          var(--series)
+        );
+      }
+      .node[data-active='false'] {
+        background: var(--panel);
+        color: var(--muted);
+      }
+      .node-name {
+        font-size: 12px;
+        font-weight: 680;
+      }
+      .node strong {
+        font-size: clamp(15px, 4.5vw, 21px);
+        line-height: 1.18;
+        letter-spacing: -0.04em;
+        overflow-wrap: anywhere;
+      }
+      .node small {
+        font-size: 10px;
+      }
+      .node[data-active='false'] strong {
+        font-size: 13px;
+      }
+      .flow-summary {
+        margin-top: 13px;
+      }
+      .flow-summary summary {
+        cursor: pointer;
+        font-weight: 650;
+        color: var(--ink);
+      }
+      .flow-summary p {
+        margin-top: 6px;
+      }
+      #flow-details {
+        padding-left: 16px;
+      }
+    </style>
+    <script src="widget-layout.js" defer></script>
+    <script src="history-widget.js" defer></script>
+  </head>
+  <body>
+    <main id="widget-content">
+      <header class="heading">
+        <h1>Energiflöden</h1>
+        <span class="unit">kWh</span>
+      </header>
+      <div class="controls">
+        <button id="history-back" type="button" aria-label="Föregående period" disabled>‹</button>
+        <input id="history-date" type="date" aria-label="Datum i perioden" />
+        <button id="history-next" type="button" aria-label="Nästa period" disabled>›</button>
+        <select id="history-period" aria-label="Summeringsperiod">
+          <option value="day">Dygn</option>
+          <option value="week">Vecka</option>
+          <option value="month">Månad</option>
+        </select>
+      </div>
+      <p id="history-status" role="status"></p>
+      <figure id="history-results" hidden>
+        <label for="flow-method" class="sub">Underlag för diagrammet</label>
+        <select id="flow-method">
+          <option value="meters">Räknare · beräknade flöden</option>
+          <option value="history">Kvartshistorik · totalsummor</option>
+        </select>
+        <p class="sub" id="flow-status" role="status"></p>
+        <div class="flow-headings">
+          <h2 id="into-title">Tillfört</h2>
+          <h2 id="out-title">Använt / export</h2>
+        </div>
+        <div class="flow-board">
+          <canvas id="flow-diagram" class="flow-diagram" aria-hidden="true"></canvas>
+          <ul id="energy-into" class="nodes values" aria-labelledby="into-title"></ul>
+          <ul id="energy-out" class="nodes values" aria-labelledby="out-title"></ul>
+        </div>
+        <figcaption class="sub flow-summary">
+          <details>
+            <summary>Mättäckning och andelar</summary>
+            <p id="flow-coverage"></p>
+            <ul id="flow-details"></ul>
+            <ul id="flow-links"></ul>
+            <p id="history-explanation">
+              Andelen gäller uppmätt energi på respektive sida. Banden möts i anläggningen. Hur
+              mycket varje källa levererade till varje last är okänt.
+            </p>
+            <p>Hus är förbrukningen utan billaddning.</p>
+          </details>
+        </figcaption>
+      </figure>
+    </main>
+    <script>
+      function onHomeyReady(Homey) {
+        const { mount, canvasPainter, value } = globalThis.HistoryWidget;
+        const sides = [
+          {
+            id: 'into',
+            field: 'inKWh',
+            channels: [
+              ['solar', 'Sol'],
+              ['battery', 'Batteri'],
+              ['dc', 'EVDC'],
+              ['grid', 'Nät'],
+              ['generator', 'Generator'],
+            ],
+          },
+          {
+            id: 'out',
+            field: 'outKWh',
+            channels: [
+              ['battery', 'Batteri'],
+              ['dc', 'EVDC'],
+              ['house', 'Hus'],
+              ['ac', 'EVAC'],
+              ['grid', 'Nät'],
+            ],
+          },
+        ];
+        const method = document.getElementById('flow-method');
+        let preference, lastReport, meterReport;
+        method.onchange = () => {
+          preference = method.value;
+          render(lastReport);
+        };
+        const canvas = document.getElementById('flow-diagram');
+        const redraw = canvasPainter(canvas, (ctx, width, height, palette) => {
+          const bounds = canvas.getBoundingClientRect();
+          const groups = sides.map(({ id }) =>
+            [...document.getElementById('energy-' + id).children]
+              .filter((node) => Number(node.dataset.kwh) > 0)
+              .map((node) => ({
+                rect: node.getBoundingClientRect(),
+                amount: Number(node.dataset.kwh),
+                key: node.dataset.key,
+              })),
+          );
+          // One thickness scale on both sides. The common bus represents an unknown mix.
+          const scale = Math.min(...groups.flat().map(({ rect, amount }) => rect.height / amount));
+          if (!Number.isFinite(scale)) return;
+          if (meterReport) {
+            const edges = groups.map((nodes) =>
+              Object.fromEntries(
+                nodes.map((node) => [
+                  node.key,
+                  {
+                    ...node,
+                    top: node.rect.top - bounds.top + (node.rect.height - node.amount * scale) / 2,
+                  },
+                ]),
+              ),
+            );
+            for (const { from, to, kWh } of meterReport.links) {
+              const left = edges[0][from],
+                right = edges[1][to];
+              const x = left.rect.right - bounds.left,
+                end = right.rect.left - bounds.left,
+                mid = (x + end) / 2;
+              const a = left.top,
+                b = right.top,
+                band = kWh * scale;
+              const gradient = ctx.createLinearGradient(x, 0, end, 0);
+              gradient.addColorStop(0, palette[from] || palette.muted);
+              gradient.addColorStop(1, palette[to]);
+              ctx.fillStyle = gradient;
+              ctx.globalAlpha = 0.76;
+              ctx.beginPath();
+              ctx.moveTo(x, a);
+              ctx.bezierCurveTo(mid, a, mid, b, end, b);
+              ctx.lineTo(end, b + band);
+              ctx.bezierCurveTo(mid, b + band, mid, a + band, x, a + band);
+              ctx.closePath();
+              ctx.fill();
+              left.top += band;
+              right.top += band;
+            }
+            return;
+          }
+          for (const [index, nodes] of groups.entries()) {
+            const depth = nodes.reduce((sum, node) => sum + node.amount * scale, 0);
+            let top = (height - depth) / 2;
+            const center = width / 2 + (index === 0 ? -1 : 1);
+            // Stack incoming bands in reverse order at the common junction.
+            for (const { rect, amount, key } of index === 0 ? [...nodes].reverse() : nodes) {
+              const x = (index === 0 ? rect.right : rect.left) - bounds.left;
+              const band = amount * scale;
+              const y = rect.top - bounds.top + (rect.height - band) / 2;
+              const bend = (x + center) / 2;
+              const gradient = ctx.createLinearGradient(x, 0, center, 0);
+              gradient.addColorStop(0, palette[key]);
+              gradient.addColorStop(1, palette.muted);
+              ctx.fillStyle = gradient;
+              ctx.globalAlpha = 0.78;
+              ctx.beginPath();
+              ctx.moveTo(x, y);
+              ctx.bezierCurveTo(bend, y, bend, top, center, top);
+              ctx.lineTo(center, top + band);
+              ctx.bezierCurveTo(bend, top + band, bend, y + band, x, y + band);
+              ctx.closePath();
+              ctx.fill();
+              top += band;
+            }
+          }
+        });
+        function render(report) {
+          lastReport = report;
+          const historical = Object.values(report.totals).some((total) => total.quarters > 0);
+          if (!historical && !report.meters) return false;
+          method.options[0].disabled = !report.meters;
+          method.options[1].disabled = !historical;
+          method.value =
+            report.meters && (preference !== 'history' || !historical) ? 'meters' : 'history';
+          meterReport = method.value === 'meters' ? report.meters : null;
+          const totals = meterReport?.totals ?? report.totals;
+          document.getElementById('history-explanation').hidden = !!meterReport;
+          document.getElementById('flow-status').textContent = meterReport
+            ? 'Beräknad fördelning · ' +
+              value((100 * meterReport.ms) / meterReport.expectedMs) +
+              ' % mättäckning'
+            : 'Kvartssummor. Batteri och DC visas netto per kvart.' +
+              (report.meters ? '' : ' Perioden saknar sammanhängande flödesräknare.');
+
+          const {
+            estimatedQuarters,
+            range: { expectedQuarters },
+          } = report;
+
+          for (const { id, field, channels } of sides) {
+            const list = document.getElementById('energy-' + id);
+            list.replaceChildren();
+            const sum = channels.reduce((n, [key]) => n + (totals[key]?.[field] ?? 0), 0);
+            for (const [key, label] of channels) {
+              if (key === 'generator' && !totals.generator?.inKWh) continue;
+              const kwh = totals[key][field];
+              const node = document.createElement('li');
+              node.className = 'node';
+              node.dataset.key = key;
+              node.dataset.kwh = kwh ?? '';
+              node.dataset.active = kwh > 0;
+              node.style.setProperty('--series', 'var(--' + key + ', var(--muted))');
+              node.style.flexGrow = sum > 0 ? (kwh ?? 0) / sum : 0;
+              const name = document.createElement('span');
+              name.className = 'node-name';
+              name.textContent = label;
+              const amount = document.createElement('strong');
+              amount.textContent = value(kwh);
+              node.append(name, amount);
+              if (kwh > 0) {
+                const share = document.createElement('small');
+                share.textContent = value((100 * kwh) / sum) + ' %';
+                node.append(share);
+              }
+              list.append(node);
+            }
+          }
+          const details = document.getElementById('flow-details');
+          details.replaceChildren();
+          const links = document.getElementById('flow-links');
+          links.replaceChildren();
+          if (meterReport) {
+            const labels = { ...globalThis.HistoryWidget.labels, generator: 'Generator' };
+            const listItem = (text) => {
+              const li = document.createElement('li');
+              li.textContent = text;
+              links.append(li);
+            };
+            for (const { id, field, channels } of sides) {
+              for (const [key, label] of channels) {
+                if (key === 'generator' && !totals.generator.inKWh) continue;
+                const kw = (totals[key][field] * 3600000) / meterReport.ms;
+                const item = document.createElement('li');
+                item.textContent =
+                  label + ' ' + (id === 'into' ? 'in' : 'ut') + ': ' + value(kw) + ' kW i medel';
+                details.append(item);
+              }
+            }
+            for (const { from, to, kWh } of meterReport.links)
+              listItem(labels[from] + ' → ' + labels[to] + ': ' + value(kWh) + ' kWh');
+            const matched = meterReport.links.reduce((n, link) => n + link.kWh, 0);
+            for (const [field, label] of [
+              ['inKWh', 'Ofördelat från källor'],
+              ['outKWh', 'Användning med okänd källa'],
+            ]) {
+              listItem(
+                label +
+                  ': ' +
+                  value(
+                    Math.max(0, Object.values(totals).reduce((n, t) => n + t[field], 0) - matched),
+                  ) +
+                  ' kWh',
+              );
+            }
+            document.getElementById('flow-coverage').textContent =
+              'Räknarnas förändring per avläsning (cirka en minut). Samtidiga källor fördelas proportionellt. Skillnader i energibalansen och intervall med riktningsbyte lämnas ofördelade.';
+          } else {
+            for (const [key, label] of Object.entries(globalThis.HistoryWidget.labels)) {
+              const item = document.createElement('li');
+              item.textContent =
+                label + ': ' + totals[key].quarters + ' av ' + expectedQuarters + ' kvart';
+              details.append(item);
+            }
+            document.getElementById('flow-coverage').textContent =
+              expectedQuarters +
+              ' avslutade kvart' +
+              (estimatedQuarters ? ' · ' + estimatedQuarters + ' med uppskattad energi' : '') +
+              '. Streck betyder att mätning saknas.';
+          }
+          redraw();
+          return true;
+        }
+        mount(Homey, render);
+      }
+    </script>
+  </body>
+</html>

@@ -362,7 +362,7 @@ test('missed EV goals or home terminal state suppress net cost differences, whil
   assert.equal(s.candidates[0].reason, 'terminal-energy-not-restored');
   assert.equal(s.candidates[0].indicativeNetDifferenceSek, null);
 });
-test('independent power coverage starts with new observations and survives export 8 and restore', () => {
+test('independent power coverage starts with new observations and survives export and restore', () => {
   let now = START + Q;
   const map = new Map(),
     settings = { get: (k) => map.get(k), set: (k, v) => map.set(k, structuredClone(v)) },
@@ -373,7 +373,7 @@ test('independent power coverage starts with new observations and survives expor
   const row = h.getSlots()[0];
   assert.deepEqual(row.fieldCoverageMs, { gridW: Q, pvW: Q, essW: Q, evW: Q });
   const file = h.export();
-  assert.equal(file.schema, 8);
+  assert.equal(file.schema, 14);
   assert.doesNotThrow(() => parseExport(file, now));
   const restoredMap = new Map();
   const restored = new HistoryStore(
@@ -385,6 +385,7 @@ test('independent power coverage starts with new observations and survives expor
   assert.throws(() => parseExport({ ...file, schema: 5 }, now), /schema 6/);
   const old = structuredClone(file);
   old.schema = 5;
+  delete old.slots[0].fiveMinute;
   delete old.slots[0].fieldCoverageMs;
   assert.doesNotThrow(() => parseExport(old, now));
   const bad = structuredClone(file);
@@ -407,6 +408,7 @@ test('upgrade coverage never borrows older grid/ESS duration or bridges invalid 
   assert.equal(h.getSlots()[0].fieldCoverageMs.pvW, Q - 60000);
   assert.equal(h.getSlots()[0].fieldCoverageMs.gridW, Q);
   const old = map.get('historyState');
+  delete old.slots[0].fiveMinute;
   delete old.slots[0].fieldCoverageMs;
   settings.set('historyState', old);
   const fresh = new HistoryStore(settings, () => START + Q + 30000);

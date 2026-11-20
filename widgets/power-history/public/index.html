@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Effekthistorik</title>
+    <link rel="stylesheet" href="history-widget.css" />
+    <style>
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-bottom: 8px;
+      }
+      .legend button {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 8px;
+        border-radius: 16px;
+        min-height: 32px;
+        font-size: 12px;
+      }
+      .legend button[aria-pressed='false'] {
+        background: transparent;
+        color: var(--muted);
+        text-decoration: line-through;
+      }
+      .plot {
+        height: clamp(200px, 60vw, 260px);
+        background: var(--panel);
+        border-radius: 12px;
+      }
+      @media (prefers-color-scheme: light) {
+        .plot,
+        .legend,
+        .readings {
+          --grid: #525abd;
+          --solar: #5b7926;
+          --battery: #008880;
+          --dc: #ae6b10;
+          --ac: #bc4c4d;
+          --house: #8549af;
+        }
+      }
+      .inspector {
+        display: grid;
+        gap: 5px;
+        margin: 9px 0;
+      }
+      .inspector input {
+        margin: 0;
+        width: 100%;
+        accent-color: var(--focus);
+      }
+      .readings {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 3px 8px;
+        font-size: 12px;
+      }
+      .time {
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .chart-summary {
+        display: grid;
+        gap: 3px;
+      }
+    </style>
+    <script src="widget-layout.js" defer></script>
+    <script src="history-widget.js" defer></script>
+  </head>
+  <body>
+    <main id="widget-content">
+      <header class="heading">
+        <h1>Effekthistorik</h1>
+        <span class="unit">kW</span>
+      </header>
+      <div class="controls">
+        <button id="history-back" type="button" aria-label="Föregående dygn" disabled>‹</button>
+        <input id="history-date" type="date" aria-label="Välj dygn" />
+        <button id="history-next" type="button" aria-label="Nästa dygn" disabled>›</button>
+      </div>
+      <p id="history-status" role="status"></p>
+      <figure id="history-results" hidden>
+        <div class="legend" id="chart-legend" role="group" aria-label="Mätserier"></div>
+        <canvas id="power-chart" class="plot" aria-hidden="true"></canvas>
+        <div class="inspector">
+          <label for="chart-quarter" class="time" id="chart-time"></label>
+          <input
+            id="chart-quarter"
+            type="range"
+            min="0"
+            max="0"
+            aria-label="Tidsintervall i diagrammet"
+          />
+          <div id="chart-readings" class="readings values"></div>
+        </div>
+        <figcaption class="sub chart-summary">
+          <p id="chart-coverage"></p>
+          <p>Över noll är energi in. Under noll är export, laddning eller förbrukning.</p>
+        </figcaption>
+      </figure>
+    </main>
+    <script>
+      function onHomeyReady(Homey) {
+        const { mount, canvasPainter, value, labels, time, timeWithOffset, QUARTER } =
+          globalThis.HistoryWidget;
+        const canvas = document.getElementById('power-chart');
+        const legend = document.getElementById('chart-legend');
+        const readings = document.getElementById('chart-readings');
+        const slider = document.getElementById('chart-quarter');
+        const hidden = new Set();
+        const keys = Object.keys(labels);
+        let range, points, selectedTime, toTime;
+        const tracked = () => keys.filter((key) => !hidden.has(key));
+        const hasValues = (point) => keys.some((key) => Number.isFinite(point.kw[key]));
+        const marker = (key) => {
+          const dot = document.createElement('i');
+          dot.className = 'dot';
+          dot.style.setProperty('--series', 'var(--' + key + ')');
+          return dot;
+        };
+
+        const redraw = canvasPainter(canvas, (ctx, width, height, palette) => {
+          if (!points?.length) return;
+          const left = 35,
+            right = width - 12,
+            top = 12,
+            bottom = height - 25;
+          const x = (t) => left + ((t - range.start) / (range.end - range.start)) * (right - left);
+          toTime = (pixel) =>
+            range.start + ((pixel - left) / (right - left)) * (range.end - range.start);
+          const readings = points
+            .flatMap((row) => tracked().map((key) => row.kw[key]))
+            .filter(Number.isFinite);
+          const low = Math.min(0, ...readings),
+            high = Math.max(1, ...readings);
+          const magnitude = 10 ** Math.floor(Math.log10((high - low) / 4));
+          const step = [1, 2, 5, 10].map((n) => n * magnitude).find((n) => n >= (high - low) / 4);
+          const min = Math.floor(low / step) * step,
+            max = Math.ceil(high / step) * step;
+          const y = (n) => top + ((max - n) / (max - min)) * (bottom - top);
+          ctx.font = '11px system-ui';
+          ctx.fillStyle = palette.muted;
+          ctx.textAlign = 'right';
+          ctx.textBaseline = 'middle';
+          for (let tick = Math.ceil(min / step); tick <= Math.round(max / step); tick++) {
+            const n = tick * step;
+            const pos = y(n);
+            ctx.beginPath();
+            ctx.setLineDash(tick === 0 ? [] : [3, 5]);
+            ctx.strokeStyle = tick === 0 ? palette.muted : palette.line;
+            ctx.moveTo(left, pos);
+            ctx.lineTo(right, pos);
+            ctx.stroke();
+            ctx.fillText(value(n), left - 5, pos, left - 8);
+          }
+          ctx.setLineDash([]);
+          const hours = width < 350 ? [0, 6, 12, 18] : [0, 4, 8, 12, 16, 20];
+          ctx.textAlign = 'center';
+          for (const hour of hours) {
+            const t = range.start + hour * 3600000;
+            ctx.fillText(time.format(t), x(t), bottom + 13);
+          }
+          for (const key of tracked()) {
+            ctx.beginPath();
+            ctx.strokeStyle = ctx.fillStyle = palette[key];
+            ctx.lineWidth = 1.7;
+            let previous;
+            for (const p of points) {
+              const n = p.kw[key];
+              if (!Number.isFinite(n)) {
+                previous = null;
+                continue;
+              }
+              const px = x(p.t + p.durationMs / 2),
+                py = y(n);
+              if (previous) {
+                ctx.moveTo(...previous);
+                ctx.lineTo(px, py);
+              }
+              ctx.fillRect(px - 1, py - 1, 2, 2);
+              previous = [px, py];
+            }
+            ctx.stroke();
+          }
+          if (selectedTime !== undefined) {
+            const view = x(selectedTime + points[Number(slider.value)].durationMs / 2);
+            ctx.beginPath();
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = palette.ink;
+            ctx.moveTo(view, top);
+            ctx.lineTo(view, bottom);
+            ctx.stroke();
+          }
+        });
+
+        function inspect() {
+          const point = points?.[Number(slider.value)];
+          if (!point) return;
+          selectedTime = point.t;
+          const timeLabel =
+            timeWithOffset.format(point.t) +
+            ' – ' +
+            timeWithOffset.format(point.t + point.durationMs);
+          document.getElementById('chart-time').textContent =
+            timeLabel + (point.estimated ? ' · uppskattad energi ingår' : '');
+          slider.setAttribute('aria-valuetext', timeLabel);
+          readings.replaceChildren();
+          for (const key of tracked()) {
+            const item = document.createElement('span');
+            item.className = 'measure';
+            const amount = value(point.kw[key]);
+            item.append(marker(key), `${labels[key]} ${amount}${amount === '–' ? '' : ' kW'}`);
+            readings.appendChild(item);
+          }
+          redraw();
+        }
+
+        for (const key of keys) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.setAttribute('aria-pressed', 'true');
+          button.append(marker(key), labels[key]);
+          button.onclick = () => {
+            if (hidden.has(key)) hidden.delete(key);
+            else hidden.add(key);
+            button.setAttribute('aria-pressed', String(!hidden.has(key)));
+            inspect();
+          };
+          legend.appendChild(button);
+        }
+        slider.oninput = inspect;
+        canvas.onclick = (event) => {
+          if (!toTime || !points?.length) return;
+          const clickedTime = toTime(event.offsetX);
+          const index = points.findIndex((p) => clickedTime < p.t + p.durationMs);
+          slider.value = index < 0 ? points.length - 1 : index;
+          inspect();
+        };
+        mount(Homey, (report) => {
+          const previousTime = range?.date === report.range.date ? selectedTime : undefined;
+          range = report.range;
+          points = report.points;
+          const available = points.filter(hasValues).length;
+          if (available === 0) return false;
+          slider.max = points.length - 1;
+          const previousIndex = points.findIndex((point) => point.t === previousTime);
+          slider.value = previousIndex >= 0 ? previousIndex : points.findLastIndex(hasValues);
+          const estimated = points.filter((point) => point.estimated).length;
+          const intervals = new Set(points.filter(hasValues).map((p) => p.durationMs));
+          const resolution =
+            intervals.size > 1
+              ? '5- och 15-minutersmedel'
+              : intervals.has(QUARTER)
+                ? '15-minutersmedel'
+                : '5-minutersmedel';
+          document.getElementById('chart-coverage').textContent =
+            `${resolution} · ${available} av ${points.length} intervall med minst en serie` +
+            (estimated ? ` · ${estimated} med uppskattad energi.` : '.');
+          inspect();
+          return true;
+        });
+      }
+    </script>
+  </body>
+</html>

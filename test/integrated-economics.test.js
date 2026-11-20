@@ -385,7 +385,7 @@ test('dated observed ledger does not reprice history when the draft changes', ()
   assert.equal(g.source.ledger().missingContractHours, 4);
   assert.equal(g.source.ledger().totals, null);
 });
-test('new battery coverage is independently integrated and survives export 8, restore and restart', () => {
+test('new battery coverage is independently integrated and survives export, restore and restart', () => {
   let now = START + Q;
   const map = new Map(),
     settings = { get: (k) => map.get(k), set: (k, v) => map.set(k, structuredClone(v)) };
@@ -396,7 +396,7 @@ test('new battery coverage is independently integrated and survives export 8, re
   assert.equal(row.essCoverageMs, Q);
   close(row.essWh, 250);
   const exported = h.export();
-  assert.equal(exported.schema, 8);
+  assert.equal(exported.schema, 14);
   const freshMap = new Map(),
     fresh = new HistoryStore(
       { get: (k) => freshMap.get(k), set: (k, v) => freshMap.set(k, v) },
@@ -408,6 +408,7 @@ test('new battery coverage is independently integrated and survives export 8, re
   const legacy = structuredClone(exported);
   legacy.schema = 4;
   for (const s of legacy.slots) {
+    delete s.fiveMinute;
     delete s.essCoverageMs;
     delete s.fieldCoverageMs;
   }

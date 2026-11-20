@@ -2688,11 +2688,12 @@
               if (detail.textContent) el.appendChild(detail);
             }
             if (key === 'household' && status.usable) {
-              const { totalKWh, averageKW } = values.householdCounterStatus;
+              const { totalKWh, averageKW, powerW } = values.householdCounterStatus;
               const number = (value) => value.toLocaleString('sv-SE', { maximumFractionDigits: 2 });
               const detail = document.createElement('p');
               detail.className = 'sub';
               detail.textContent = [
+                Number.isFinite(powerW) && 'Huseffekt ' + number(powerW / 1000) + ' kW',
                 Number.isFinite(totalKWh) && 'Räknarställning ' + number(totalKWh) + ' kWh',
                 Number.isFinite(averageKW) &&
                   'Medel sedan förra avläsningen ' + number(averageKW) + ' kW',
@@ -2966,75 +2967,55 @@
           });
         };
       }
+      let simulationRequest = 0;
       function runSimulation(Homey) {
         const body = document.getElementById('simulationRows');
         const status = document.getElementById('simulationStatus');
         body.replaceChildren();
         status.textContent = 'Läser simuleringsunderlag…';
-        readHistory(Homey, (historyError, history) => {
-          if (historyError) {
-            status.textContent = historyError.message;
+        const request = ++simulationRequest;
+        Homey.api('GET', '/optimization/preview', null, (error, result) => {
+          if (request !== simulationRequest) return;
+          if (error) {
+            status.textContent = error.message;
             return;
           }
-          Homey.get('optimizerConfig', (error, config) => {
-            if (error || !config) {
-              status.textContent = 'Spara simuleringsparametrarna först.';
+          try {
+            const a = result.assumptions,
+              coverage = result.coverage;
+            const context =
+              result.backupAdvisory.reason +
+              ` Historisk simulering. Modell: ${result.model}. Start-SoC ${a.initialSocPercent} %, kapacitet ${a.batteryCapacityKWh} kWh. Reserv ${a.reserveMinPercent}–${a.reserveMaxPercent} %, reservkraft ${a.backupReservePercent} %. Historik ${coverage.validSlots}/${coverage.expectedSlots} kvartstimmar (${Math.round(coverage.coverageFraction * 100)} %), ${coverage.missingSlots} saknade, ${coverage.excludedSlots} ogiltiga poster. Ingen uppladdning eller priser tillförda. Start-SoC och aktuella batterigränser är antaganden för historiken. Luckor modelleras inte. Inga styrkommandon skickas.`;
+            if (result.status !== 'illustrative') {
+              status.textContent =
+                'Otillräckligt underlag: minst ' +
+                a.minValidSlots +
+                ' giltiga kvartstimmar och ' +
+                Math.round(a.minCoverageFraction * 100) +
+                ' % täckning krävs. ' +
+                context;
               return;
             }
-            SourceStatus.readSources(Homey, (sources, values) => {
-              Homey.get('autoBatteryValues', (autoError, auto) => {
-                if (autoError) {
-                  status.textContent = 'Batteriets indataval kunde inte läsas.';
-                  return;
-                }
-                try {
-                  const effective = Simulator.effectiveBatteryConfig(
-                    config,
-                    values.batteryTelemetry,
-                    {
-                      autoBatteryValues: auto !== false,
-                      status: sources.battery,
-                    },
-                  );
-                  const result = Simulator.simulate(history.slots || [], effective);
-                  const a = result.assumptions,
-                    coverage = result.coverage;
-                  const context =
-                    SourceStatus.backupAdvisory(values, Date.now(), sources.sigenergy).reason +
-                    ` Historisk simulering. Modell: ${result.model}. Start-SoC ${a.initialSocPercent} %, kapacitet ${a.batteryCapacityKWh} kWh. Reserv ${a.reserveMinPercent}–${a.reserveMaxPercent} %, reservkraft ${a.backupReservePercent} %. Historik ${coverage.validSlots}/${coverage.expectedSlots} kvartstimmar (${Math.round(coverage.coverageFraction * 100)} %), ${coverage.missingSlots} saknade, ${coverage.excludedSlots} ogiltiga poster. Ingen uppladdning eller priser tillförda. Start-SoC och aktuella batterigränser är antaganden för historiken. Luckor modelleras inte. Inga styrkommandon skickas.`;
-                  if (result.status !== 'illustrative') {
-                    status.textContent =
-                      'Otillräckligt underlag: minst ' +
-                      a.minValidSlots +
-                      ' giltiga kvartstimmar och ' +
-                      Math.round(a.minCoverageFraction * 100) +
-                      ' % täckning krävs. ' +
-                      context;
-                    return;
-                  }
-                  result.candidates.slice(0, 25).forEach((x) => {
-                    const tr = document.createElement('tr');
-                    [
-                      x.capKW.toFixed(3) + ' kW',
-                      x.reservePercent + ' %',
-                      x.peakKW.toFixed(2) + ' kW',
-                      x.unshavedKWh.toFixed(2) + ' kWh',
-                      x.validSlots + '/' + x.expectedSlots,
-                    ].forEach((text) => {
-                      const td = document.createElement('td');
-                      td.textContent = text;
-                      tr.appendChild(td);
-                    });
-                    body.appendChild(tr);
-                  });
-                  status.textContent =
-                    'Illustrativt historiskt scenario, ingen garanterad besparing. ' + context;
-                } catch (error) {
-                  status.textContent = error.message;
-                }
+            result.candidates.slice(0, 25).forEach((x) => {
+              const tr = document.createElement('tr');
+              [
+                x.capKW.toFixed(3) + ' kW',
+                x.reservePercent + ' %',
+                x.peakKW.toFixed(2) + ' kW',
+                x.unshavedKWh.toFixed(2) + ' kWh',
+                x.validSlots + '/' + x.expectedSlots,
+              ].forEach((text) => {
+                const td = document.createElement('td');
+                td.textContent = text;
+                tr.appendChild(td);
               });
+              body.appendChild(tr);
             });
-          });
+            status.textContent =
+              'Illustrativt historiskt scenario, ingen garanterad besparing. ' + context;
+          } catch (error) {
+            status.textContent = error.message;
+          }
         });
       }
       function bindChargingPreview(Homey) {

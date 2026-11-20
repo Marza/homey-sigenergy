@@ -14,7 +14,7 @@ const {
 const { compareScenarios } = require('./lib/optimization/advanced-simulator');
 const { recommend } = require('./lib/optimization/recommendation');
 const { evaluateTariffScenarios } = require('./lib/optimization/tariff-optimizer');
-const { HistoryStore } = require('./lib/history');
+const { HistoryStore, calculationSlots } = require('./lib/history');
 const { DataDiagnostics } = require('./lib/data-diagnostics');
 const { validateState: validateMeterHistory } = require('./lib/pricing/consumption-history');
 const { calculateDemandCharge, validateTariff } = require('./lib/demand-tariff');
@@ -289,13 +289,14 @@ module.exports = class SigenergyApp extends Homey.App {
           status: this.getDiagnostics().battery,
         },
       );
+      const slots = calculationSlots(this.history);
       this.homey.settings.set(
         'optimizationRecommendation',
         this.getBackupAdvisory().restricted
           ? { ...this.getBackupAdvisory(), updatedAt: new Date().toISOString() }
-          : recommend(this.history.getSlots(), config),
+          : recommend(slots, config),
       );
-      this.refreshDemandEstimate();
+      this.refreshDemandEstimate(slots);
       const tariff = this.homey.settings.get('demandTariff');
       if (tariff) {
         const month = new Intl.DateTimeFormat('en-CA', {
@@ -304,7 +305,7 @@ module.exports = class SigenergyApp extends Homey.App {
           month: '2-digit',
         }).format(new Date());
         this.homey.settings.set('tariffOptimization', {
-          ...evaluateTariffScenarios(this.history.getSlots(), config, tariff, month),
+          ...evaluateTariffScenarios(slots, config, tariff, month),
           historicalOnly: true,
           backupAdvisory: this.getBackupAdvisory(),
         });
@@ -389,7 +390,7 @@ module.exports = class SigenergyApp extends Homey.App {
       this.consumptionRefreshing = false;
     }
   }
-  refreshDemandEstimate() {
+  refreshDemandEstimate(slots) {
     try {
       const tariff = this.homey.settings.get('demandTariff');
       if (!tariff) {
@@ -402,7 +403,7 @@ module.exports = class SigenergyApp extends Homey.App {
         year: 'numeric',
         month: '2-digit',
       }).format(new Date());
-      this.homey.settings.set('demandEstimate', this.getDemandCharge(month));
+      this.homey.settings.set('demandEstimate', this.getDemandCharge(month, slots));
       this.homey.settings.set('meterDemandEstimate', this.getMeterDemandCharge(month));
     } catch (error) {
       this.homey.settings.set('demandEstimate', { status: 'error', reason: String(error.message) });
@@ -431,7 +432,7 @@ module.exports = class SigenergyApp extends Homey.App {
       historicalOnly: true,
       backupAdvisory: this.getBackupAdvisory(),
       ...simulate(
-        this.history.getSlots(),
+        calculationSlots(this.history),
         effectiveBatteryConfig(
           this.homey.settings.get('optimizerConfig'),
           this.homey.settings.get('batteryTelemetry'),
@@ -448,7 +449,7 @@ module.exports = class SigenergyApp extends Homey.App {
       historicalOnly: true,
       backupAdvisory: this.getBackupAdvisory(),
       ...compareScenarios(
-        this.history.getSlots(),
+        calculationSlots(this.history),
         effectiveBatteryConfig(
           this.homey.settings.get('optimizerConfig'),
           this.homey.settings.get('batteryTelemetry'),
@@ -484,15 +485,11 @@ module.exports = class SigenergyApp extends Homey.App {
       fetchedAt: state.fetchedAt,
     };
   }
-  getDemandCharge(month) {
+  getDemandCharge(month, slots) {
     const tariff = this.homey.settings.get('demandTariff');
     if (!tariff) return { status: 'not-configured' };
     validateTariff(tariff);
-    return calculateDemandCharge(
-      this.history.getEnergySlots?.() ?? this.history.getSlots(),
-      tariff,
-      month,
-    );
+    return calculateDemandCharge(slots ?? calculationSlots(this.history), tariff, month);
   }
   getChargingPreview(input, now = new Date()) {
     const advisory = this.getBackupAdvisory(now.getTime());

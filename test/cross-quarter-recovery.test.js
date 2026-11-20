@@ -199,10 +199,10 @@ test('failed writes retry both sides once, and a missing/overlapping/full target
     assert.deepEqual([...map], saved, mode);
   }
 });
-test('backup version 8 preserves allocation evidence, rejects metadata tampering and supports old version 7', () => {
+test('backup preserves allocation evidence, rejects metadata tampering and supports old version 7', () => {
   const f = collect(fixture()),
     file = f.history.export();
-  assert.equal(file.schema, 8);
+  assert.equal(file.schema, 14);
   const g = fixture();
   g.at(1800);
   g.history.import(file);
@@ -227,6 +227,7 @@ test('backup version 8 preserves allocation evidence, rejects metadata tampering
   }
   const old = structuredClone(file);
   old.schema = 7;
+  for (const row of old.slots) delete row.fiveMinute;
   for (const r of old.slots) delete r.counterRecovery;
   assert.doesNotThrow(() => parseExport(old, T + 1800000));
   // A retained/imported single quarter keeps its own explicit share, never the whole counter delta.
