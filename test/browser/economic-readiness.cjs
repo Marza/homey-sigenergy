@@ -5,6 +5,7 @@ const assert = require('node:assert/strict'),
   path = require('node:path');
 const { chromium } = require('playwright');
 const { fixture } = require('../fixtures/readiness.cjs');
+const { timelineStatus, publishContract } = require('../../lib/pricing/contract-timeline');
 const { compareEvdcSession } = require('../../lib/pricing/evdc-session-replay');
 const { checkReadiness } = require('../../lib/pricing/comparison-readiness');
 const root = path.resolve(__dirname, '../..');
@@ -204,6 +205,21 @@ const server = http.createServer((req, res) => {
       reset();
       for (const row of f.rows.slice(8, 12))
         Object.assign(row, { evWh: 2500, gridWh: 2750, importWh: 2750 });
+      Object.assign(f.rows[11], { evWh: 2250, gridWh: 2500, importWh: 2500 });
+      f.data.demandTariff.rateSekPerKw = 0;
+      const saved = timelineStatus(f.homey);
+      publishContract(
+        f.homey,
+        {
+          from: '2026-02-01',
+          includeNetwork: true,
+          confirmEffectiveDate: true,
+          confirmTradeComponents: true,
+          expectedRevision: saved.revision,
+          draftHash: saved.draftHash,
+        },
+        f.now,
+      );
       await page.getByText('4. Flytta ett uppmätt DC-laddpass').click();
       await page.locator('#evdc-replay-find').click();
       await page.locator('#evdc-replay-options').waitFor({ state: 'visible' });
@@ -225,6 +241,17 @@ const server = http.createServer((req, res) => {
       assert.match(output, /Högsta timmedel för nätimport/);
       await page.locator('#evdc-replay-minutes').fill('30');
       assert.equal(await page.locator('#evdc-replay-results').innerText(), '');
+      await page.locator('#evdc-replay-optimise').click();
+      await page.getByText(/Total kostnadsskillnad/).waitFor();
+      assert.match(
+        await page.locator('#evdc-replay-results').innerText(),
+        /Ändring av effektavgift 0,00 kr/,
+      );
+      await page.getByText('Visa den billigaste laddprofilen').click();
+      assert.match(
+        await page.locator('#evdc-replay-results details ul').innerText(),
+        /total nätimport/,
+      );
     }
     assert.deepEqual(errors, []);
     console.log(

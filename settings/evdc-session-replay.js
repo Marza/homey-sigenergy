@@ -11,8 +11,31 @@
       'Ange tidigare start i steg om 15 minuter och en verkningsgrad på 50–100 %.',
     'evdc-window-blocked': 'Jämförelsen kan inte beräknas för vald starttid.',
     'invalid-history': 'Historiken kunde inte läsas.',
+    'evdc-import-limit-required':
+      'Spara en importgräns eller trefas huvudsäkring under Hushåll först.',
+    'evdc-prices-required': 'En billigaste profil kräver komplett pris- och tariffunderlag.',
+    'evdc-original-in-tariff':
+      'Det uppmätta passet överlappar tariffens effekttimmar. Det här läget jämför pass som ryms utanför dem.',
+    'evdc-household-over-limit': 'Hushållets övriga import överskrider gränsen i perioden.',
+    'evdc-tail-over-limit': 'Sista laddkvartens uppmätta energi ryms inte under gränsen.',
+    'evdc-insufficient-headroom':
+      'Laddenergin ryms inte under gränsen före sluttiden. Prova en längre sökperiod.',
+    'evdc-inverted-prices':
+      'Säljpriset är högre än köppriset i en kvart med export. Sökningen kan inte jämföra den säkert.',
     'invalid-household-import-limits': 'Kontrollera importgränserna under Inställningar → Hushåll.',
   };
+  const priceLabels = {
+    contractQuarters: 'daterade villkor',
+    purchasePriceQuarters: 'köppris',
+    productionPriceQuarters: 'säljpris',
+    'tibber-home-not-confirmed': 'bekräftad mätpunkt',
+    'tibber-source-unavailable': 'Tibberkälla',
+    'historical-prices-unavailable': 'historiska priser',
+    'dated-contract-required': 'daterade villkor',
+    'invalid-contract-timeline': 'daterade villkor',
+  };
+  const priceDetails = (gaps) =>
+    [...new Set(gaps.map((key) => priceLabels[key] || 'prisunderlag'))].join(', ');
   const date = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Europe/Stockholm',
     month: 'short',
@@ -65,6 +88,11 @@
                 label + ' i ' + result[key].length + ' kvart, från ' + time(result[key][0]) + '.',
               );
           }
+          if (result.priceGaps?.length)
+            paragraph('Kontrollera ' + priceDetails(result.priceGaps) + '.');
+          if (Number.isFinite(result.missingKWh))
+            paragraph('Energi som inte ryms: ' + fmt(result.missingKWh) + ' kWh.');
+          if (Number.isFinite(result.at)) paragraph('Berörd kvart börjar ' + time(result.at) + '.');
           return;
         }
         try {
@@ -96,7 +124,7 @@
       el('status').textContent = '';
     };
     el('minutes').oninput = el('efficiency').oninput = invalidate;
-    el('run').onclick = () => {
+    function run(optimise) {
       if (!session) return;
       const minutes = el('minutes'),
         efficiency = el('efficiency');
@@ -104,7 +132,8 @@
         !minutes.value ||
         !efficiency.value ||
         !minutes.checkValidity() ||
-        !efficiency.checkValidity()
+        !efficiency.checkValidity() ||
+        (!optimise && Number(minutes.value) === 0)
       ) {
         version++;
         clear();
@@ -117,6 +146,7 @@
           sessionEnd: session.end,
           minutesEarlier: Number(minutes.value),
           efficiency: Number(efficiency.value) / 100,
+          ...(optimise ? { optimise: true } : {}),
         },
         (r) => {
           if (r?.status !== 'indicative') throw Error('Invalid comparison');
@@ -195,25 +225,42 @@
             );
           }
           if (r.priceGaps.length) {
-            const labels = {
-              contractQuarters: 'daterade villkor',
-              purchasePriceQuarters: 'köppris',
-              productionPriceQuarters: 'säljpris',
-              'tibber-home-not-confirmed': 'bekräftad mätpunkt',
-              'tibber-source-unavailable': 'Tibberkälla',
-              'historical-prices-unavailable': 'historiska priser',
-              'dated-contract-required': 'daterade villkor',
-              'invalid-contract-timeline': 'daterade villkor',
-            };
-            paragraph(
-              'Energikostnad saknas. Kontrollera ' +
-                [...new Set(r.priceGaps.map((key) => labels[key] || 'prisunderlag'))].join(', ') +
-                '.',
-            );
+            paragraph('Energikostnad saknas. Kontrollera ' + priceDetails(r.priceGaps) + '.');
           } else metric('Uppskattad rörlig energikostnad', a.energyCostSek, b.energyCostSek, 'kr');
-          paragraph(
-            'Energikostnaden använder historiska timpriser. Månadsavgiften för effekt, fasta avgifter och batterislitage ingår inte.',
-          );
+          if (r.planQuarters) {
+            paragraph(
+              'Ändring av effektavgift ' +
+                fmt(r.demandCostDifferenceSek) +
+                ' kr. Samma import ligger inom effekttariffens tider.',
+            );
+            paragraph(
+              'Total kostnadsskillnad (energi och effekt): ' +
+                delta(r.totalCostDifferenceSek) +
+                ' kr. Fasta avgifter är lika i båda alternativen.',
+            );
+            const details = document.createElement('details');
+            details.className = 'settings-details';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Visa den billigaste laddprofilen';
+            details.appendChild(summary);
+            const quarters = document.createElement('ul');
+            for (const row of r.planQuarters) {
+              const li = document.createElement('li');
+              li.textContent =
+                time(row.t) +
+                ' · DC ' +
+                fmt(row.chargeKW) +
+                ' kW · total nätimport ' +
+                fmt(row.importKW) +
+                ' kW';
+              quarters.appendChild(li);
+            }
+            details.appendChild(quarters);
+            el('results').appendChild(details);
+          } else
+            paragraph(
+              'Energikostnaden använder historiska timpriser. Månadsavgiften för effekt, fasta avgifter och batterislitage ingår inte.',
+            );
           if (r.estimatedGridQuarters || r.mixedDirectionQuarters)
             paragraph(
               'Nätunderlag: ' +
@@ -224,7 +271,9 @@
             );
         },
       );
-    };
+    }
+    el('run').onclick = () => run(false);
+    el('optimise').onclick = () => run(true);
     return invalidate;
   }
   root.EvdcSessionReplay = { bind };

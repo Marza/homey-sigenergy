@@ -2162,12 +2162,12 @@
                 <fieldset id="evdc-replay-options" hidden>
                   <legend>Alternativ start</legend>
                   <label class="hy-nostyle">
-                    Minuter tidigare (steg om 15 minuter)
+                    Minuter tidigare eller sökutrymme (steg om 15 minuter)
                     <input
                       type="number"
                       class="hy-nostyle"
                       id="evdc-replay-minutes"
-                      min="15"
+                      min="0"
                       max="1440"
                       step="15"
                       value="60"
@@ -2193,6 +2193,13 @@
                   <button type="button" class="hy-nostyle" id="evdc-replay-run">
                     Jämför med tidigare start
                   </button>
+                  <button type="button" class="hy-nostyle" id="evdc-replay-optimise">
+                    Hitta billigaste profilen under importgränsen
+                  </button>
+                  <p>
+                    Sökningen behåller energin i sista laddkvarten och använder högst den uppmätta
+                    toppeffekten för DC. Den lägger bara laddning utanför tider med effektavgift.
+                  </p>
                 </fieldset>
                 <p id="evdc-replay-status" role="status" aria-live="polite"></p>
                 <div id="evdc-replay-results"></div>

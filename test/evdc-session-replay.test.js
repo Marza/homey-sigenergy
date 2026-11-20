@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { compareEvdcSession } = require('../lib/pricing/evdc-session-replay');
+const { timelineStatus, publishContract } = require('../lib/pricing/contract-timeline');
 const { readImportLimits } = require('../lib/energy/import-limits');
 const { fixture, H, Q } = require('./fixtures/readiness.cjs');
 
@@ -104,4 +105,60 @@ test('mixed flows preserve the signed energy balance when a moved load takes up 
   assert.equal(r.scenario.exportKWh, 0);
   assert.equal(r.scenario.importKWh, r.baseline.importKWh - 0.5);
   assert.equal(r.mixedDirectionQuarters, 1);
+});
+
+function setTariff(f, start, end) {
+  f.data.demandTariff = { ...f.data.demandTariff, start, end };
+  const state = timelineStatus(f.homey);
+  publishContract(
+    f.homey,
+    {
+      from: '2026-06-01',
+      includeNetwork: true,
+      confirmEffectiveDate: true,
+      confirmTradeComponents: true,
+      expectedRevision: state.revision,
+      draftHash: state.draftHash,
+    },
+    f.now,
+  );
+}
+
+test('the cheapest profile keeps DC energy and the final quarter, charges harder when cheaper and preserves demand cost', () => {
+  const f = sample();
+  setTariff(f, '10:00', '11:00');
+  f.data.householdImportLimits = { importLimitKW: 12 };
+  // The cheapest hour lies inside the tariff. The cheapest *allowed* hour is later.
+  f.data.tibberHistoryPriceCache.rows[0].consumption.price = 0.1;
+  const r = f.compare({ ...f.input, minutesEarlier: 120, optimise: true });
+  assert.equal(r.status, 'indicative');
+  assert.equal(r.shifted.end, f.input.sessionEnd);
+  assert.equal(r.planQuarters.at(-1).dcKWh, 2.5);
+  assert.ok(r.planQuarters.every((row) => row.importKW < 12 && row.t >= f.from + H));
+  assert.ok(Math.abs(r.planQuarters.reduce((sum, row) => sum + row.dcKWh, 0) - 10) < 1e-8);
+  assert.equal(r.demandCostDifferenceSek, 0);
+  assert.deepEqual(r.baseline.tariffPeak, r.scenario.tariffPeak);
+  assert.ok(Math.abs(r.totalCostDifferenceSek + 3.75) < 1e-8);
+  const stretched = f.compare();
+  assert.ok(r.scenario.peak.kw > stretched.scenario.peak.kw);
+  assert.ok(r.scenario.energyCostSek < stretched.scenario.energyCostSek);
+});
+
+test('optimizer blocks tariff impacts and missing data instead of assuming zero cost', () => {
+  const f = sample();
+  const request = { ...f.input, optimise: true };
+  assert.equal(f.compare(request).reason, 'evdc-import-limit-required');
+  f.data.householdImportLimits = { importLimitKW: 12 };
+  assert.equal(f.compare(request).reason, 'evdc-original-in-tariff');
+  setTariff(f, '13:00', '20:00');
+  delete f.data.tibberHistoryPriceCache.rows[1].consumption;
+  assert.equal(f.compare(request).reason, 'evdc-prices-required');
+  f.data.tibberHistoryPriceCache.rows[1].consumption = { price: 0.5 };
+  f.data.householdImportLimits.importLimitKW = 10;
+  assert.equal(f.compare(request).reason, 'evdc-tail-over-limit');
+  f.data.householdImportLimits.importLimitKW = 11.01;
+  Object.assign(f.rows[10], { importWh: 3000, gridWh: 3000 });
+  const narrow = f.compare({ ...request, minutesEarlier: 0 });
+  assert.equal(narrow.reason, 'evdc-insufficient-headroom');
+  assert.ok(narrow.missingKWh > 0);
 });
