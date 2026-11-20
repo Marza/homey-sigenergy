@@ -272,6 +272,10 @@ test('the device polls inverter and grid phase current on their separate Modbus 
         assert.deepEqual([host, port, unitId], ['192.0.2.10', 502, 7]);
         return [8, 7, 6];
       }
+      if (source === 'gateway') {
+        assert.deepEqual([host, port, unitId], ['192.0.2.10', 502, 247]);
+        return [3, 4, 5];
+      }
       assert.equal(source, 'grid');
       assert.deepEqual([host, port, unitId], ['192.0.2.12', 1502, 4]);
       return [11, 24, 9];
@@ -295,6 +299,16 @@ test('the device polls inverter and grid phase current on their separate Modbus 
     ['grid', [11, 24, 9]],
     ['inverter', [8, 7, 6]],
   ]);
+  const meter = settings.get('gridPhaseCurrent');
+  await device.onSettings({
+    newSettings: { ...device.getSettings(), phaseMeterSource: 'gateway' },
+  });
+  await tick();
+  const gateway = settings.get('gridPhaseCurrent');
+  assert.equal(gateway.profile, 'gateway');
+  assert.notEqual(gateway.binding, meter.binding);
+  assert.deepEqual(gateway.amps, [3, 4, 5]);
+  assert.deepEqual(observed.at(-2), ['grid', [3, 4, 5]]);
   await device.onUninit();
   assert.ok(readers.every((reader) => reader.closed));
 });

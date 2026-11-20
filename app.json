@@ -405,6 +405,31 @@
           "max": 246
         },
         {
+          "id": "phaseMeterSource",
+          "type": "dropdown",
+          "label": {
+            "en": "Grid phase current source",
+            "sv": "Källa för nätets fasström"
+          },
+          "value": "sdm630",
+          "values": [
+            {
+              "id": "sdm630",
+              "label": {
+                "en": "SDM630 (off when address is empty)",
+                "sv": "SDM630 (av om adressen är tom)"
+              }
+            },
+            {
+              "id": "gateway",
+              "label": {
+                "en": "Sigenergy Gateway (requires compatible firmware)",
+                "sv": "Sigenergy Gateway (kräver kompatibel firmware)"
+              }
+            }
+          ]
+        },
+        {
           "id": "phaseMeterHost",
           "type": "text",
           "label": {

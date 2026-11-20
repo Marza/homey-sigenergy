@@ -273,8 +273,8 @@
       <h4>Sigenergy-växelriktare</h4>
       <p id="inverterPhaseStatus" aria-live="polite">Väntar på mätdata…</p>
       <p class="sub">
-        Ställ in mätarnas Modbus-adresser i Sigenergy-enhetens avancerade inställningar. För
-        kontroll av huvudsäkringen används en SDM630 vid nätanslutningen.
+        Välj Sigenergy Gateway eller SDM630 under Källa för nätets fasström i Sigenergy-enhetens
+        avancerade inställningar. Gateway använder anläggningens befintliga Modbus-anslutning.
       </p>
       <h3>Temperatur och batterigränser</h3>
       <p id="temperatureStatus">Väntar på mätdata…</p>
@@ -2602,7 +2602,7 @@
               elapsed <= reading.maxAgeMs &&
               reading.amps?.length === 3 &&
               reading.amps.every((amps) => Number.isFinite(amps) && amps >= 0);
-            document.getElementById(id).textContent = live
+            const text = live
               ? reading.amps
                   .map(
                     (amps, i) =>
@@ -2616,6 +2616,8 @@
               : error
                 ? 'Status kunde inte läsas.'
                 : states[reading?.state] || 'Ingen fasström konfigurerad.';
+            document.getElementById(id).textContent =
+              reading?.profile === 'gateway' ? 'Sigenergy Gateway · ' + text : text;
           });
         }
         SourceStatus.readSources(Homey, (sources, values) => {

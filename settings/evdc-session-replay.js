@@ -14,7 +14,7 @@
     'evdc-import-limit-required':
       'Spara en importgräns eller trefas huvudsäkring under Hushåll först.',
     'evdc-phase-meter-required':
-      'Huvudsäkringen kräver en SDM630-nätmätare. Konfigurera den i Sigenergy-enhetens avancerade inställningar.',
+      'Huvudsäkringen kräver fasström vid nätanslutningen. Välj Sigenergy Gateway eller SDM630 i enhetens avancerade inställningar.',
     'evdc-phase-coverage-required':
       'Huvudsäkringen kan bedömas när nätmätaren har sparat hela kvartar för alla tre faser.',
     'evdc-phase-over-limit': 'Uppmätt eller beräknad fasström överskrider huvudsäkringens gräns.',

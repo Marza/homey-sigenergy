@@ -242,7 +242,7 @@ const server = http.createServer((req, res) => {
       await page.locator('#evdc-replay-minutes').fill('30');
       assert.equal(await page.locator('#evdc-replay-results').innerText(), '');
       await page.locator('#evdc-replay-optimise').click();
-      await page.getByText(/Huvudsäkringen kräver en SDM630-nätmätare/).waitFor();
+      await page.getByText(/Huvudsäkringen kräver fasström vid nätanslutningen/).waitFor();
       const binding = 'a'.repeat(24);
       f.data.gridPhaseCurrent = { binding };
       for (const [i, row] of f.rows.entries()) {
