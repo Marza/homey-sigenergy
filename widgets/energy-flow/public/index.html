@@ -6,55 +6,92 @@
     <title>Energiflöden</title>
     <link rel="stylesheet" href="history-widget.css" />
     <style>
+      .flow-headings,
+      .flow-board {
+        display: grid;
+        grid-template-columns: 29% 1fr 29%;
+      }
+      .flow-headings {
+        margin: 18px 0 7px;
+        align-items: end;
+      }
+      .flow-headings h2 {
+        font-size: 13px;
+      }
+      .flow-headings h2:last-child {
+        grid-column: 3;
+        text-align: right;
+      }
+      .flow-board {
+        position: relative;
+        min-height: 355px;
+        height: clamp(355px, 97vw, 425px);
+        isolation: isolate;
+      }
       .flow-diagram {
-        height: 120px;
-        border-radius: 12px;
-        background: var(--panel);
+        position: absolute;
+        inset: 0;
+        height: 100%;
+        z-index: -1;
       }
-      .flow-columns {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-        margin: 10px 0;
-      }
-      .flow-column h2 {
-        border-bottom: 1px solid var(--line);
-        padding-bottom: 5px;
-      }
-      .flow-column ul {
-        list-style: none;
-        padding: 0;
+      .nodes {
         margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
       }
-      .flow-column li {
-        display: grid;
-        gap: 1px;
-        padding: 5px 0;
-        border-bottom: 1px solid var(--line);
+      #energy-out {
+        grid-column: 3;
       }
-      .flow-column strong {
-        font-size: 15px;
+      .node {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 4px 7px;
+        min-height: min-content;
+        border-radius: 5px;
+        color: #182335;
+        background: linear-gradient(
+          115deg,
+          color-mix(in srgb, var(--series), white 36%),
+          var(--series)
+        );
       }
-      .flow-column .measure {
-        font-size: 12px;
-      }
-      .flow-column small {
+      .node[data-active='false'] {
+        background: var(--panel);
         color: var(--muted);
-        font-size: 11px;
+      }
+      .node-name {
+        font-size: 12px;
+        font-weight: 680;
+      }
+      .node strong {
+        font-size: clamp(15px, 4.5vw, 21px);
+        line-height: 1.18;
+        letter-spacing: -0.04em;
+        overflow-wrap: anywhere;
+      }
+      .node small {
+        font-size: 10px;
+      }
+      .node[data-active='false'] strong {
+        font-size: 13px;
       }
       .flow-summary {
-        display: grid;
-        gap: 3px;
+        margin-top: 13px;
       }
-      @media (min-width: 380px) {
-        .flow-column li {
-          grid-template-columns: minmax(0, 1fr) auto;
-          column-gap: 4px;
-          align-items: baseline;
-        }
-        .flow-column small {
-          grid-column: 1 / -1;
-        }
+      .flow-summary summary {
+        cursor: pointer;
+        font-weight: 650;
+        color: var(--ink);
+      }
+      .flow-summary p {
+        margin-top: 6px;
+      }
+      #flow-details {
+        padding-left: 16px;
       }
     </style>
     <script src="widget-layout.js" defer></script>
@@ -78,109 +115,142 @@
       </div>
       <p id="history-status" role="status"></p>
       <figure id="history-results" hidden>
-        <canvas id="flow-diagram" class="flow-diagram" aria-hidden="true"></canvas>
-        <div class="flow-columns">
-          <section class="flow-column" aria-labelledby="into-title">
-            <h2 id="into-title">Tillförd energi</h2>
-            <ul id="energy-into" class="values"></ul>
-          </section>
-          <section class="flow-column" aria-labelledby="out-title">
-            <h2 id="out-title">Användning och export</h2>
-            <ul id="energy-out" class="values"></ul>
-          </section>
+        <div class="flow-headings">
+          <h2 id="into-title">Tillfört</h2>
+          <h2 id="out-title">Använt / export</h2>
+        </div>
+        <div class="flow-board">
+          <canvas id="flow-diagram" class="flow-diagram" aria-hidden="true"></canvas>
+          <ul id="energy-into" class="nodes values" aria-labelledby="into-title"></ul>
+          <ul id="energy-out" class="nodes values" aria-labelledby="out-title"></ul>
         </div>
         <figcaption class="sub flow-summary">
-          <p id="flow-coverage"></p>
-          <p>Banden visar volym per riktning. Batteri och DC delas efter kvartens netto.</p>
+          <details>
+            <summary>Mättäckning och andelar</summary>
+            <p id="flow-coverage"></p>
+            <ul id="flow-details"></ul>
+            <p>
+              Andelen gäller uppmätt energi på respektive sida. Banden möts i anläggningen. Hur
+              mycket varje källa levererade till varje last är okänt.
+            </p>
+            <p>Batteri och DC delas efter kvartens netto. Hus är förbrukningen utan billaddning.</p>
+          </details>
         </figcaption>
       </figure>
     </main>
     <script>
       function onHomeyReady(Homey) {
         const { mount, canvasPainter, value } = globalThis.HistoryWidget;
-        const channels = {
-          into: [
-            ['solar', 'Solproduktion'],
-            ['grid', 'Nätimport'],
-            ['battery', 'Batteri urladdat'],
-            ['dc', 'DC urladdat'],
-          ],
-          out: [
-            ['house', 'Hus utan billaddning'],
-            ['battery', 'Batteri laddat'],
-            ['dc', 'DC laddat'],
-            ['ac', 'AC laddat'],
-            ['grid', 'Nätexport'],
-          ],
-        };
-        let totals;
+        const sides = [
+          {
+            id: 'into',
+            field: 'inKWh',
+            channels: [
+              ['solar', 'Sol'],
+              ['battery', 'Batteri'],
+              ['dc', 'EVDC'],
+              ['grid', 'Nät'],
+            ],
+          },
+          {
+            id: 'out',
+            field: 'outKWh',
+            channels: [
+              ['battery', 'Batteri'],
+              ['dc', 'EVDC'],
+              ['house', 'Hus'],
+              ['ac', 'EVAC'],
+              ['grid', 'Nät'],
+            ],
+          },
+        ];
         const canvas = document.getElementById('flow-diagram');
         const redraw = canvasPainter(canvas, (ctx, width, height, palette) => {
-          if (!totals) return;
-          const amount = (side, key) => totals[key][side === 'into' ? 'inKWh' : 'outKWh'] ?? 0;
-          const sum = (side) => channels[side].reduce((n, [key]) => n + amount(side, key), 0);
-          const scale = (height - 24) / Math.max(0.001, sum('into'), sum('out'));
-          const center = width / 2;
-          for (const side of ['into', 'out']) {
-            const left = side === 'into';
-            const outside = left ? 14 : width - 14;
-            const inside = center + (left ? -4 : 4);
-            const elbow = (outside + inside) / 2;
-            let top = (height - sum(side) * scale) / 2;
-            for (const [key] of channels[side]) {
-              const depth = amount(side, key) * scale;
-              if (depth === 0) continue;
-              const nearTop = height / 2 + (top - height / 2) * 0.72;
-              const nearBottom = nearTop + depth * 0.72;
+          const bounds = canvas.getBoundingClientRect();
+          const groups = sides.map(({ id }) =>
+            [...document.getElementById('energy-' + id).children]
+              .filter((node) => Number(node.dataset.kwh) > 0)
+              .map((node) => ({
+                rect: node.getBoundingClientRect(),
+                amount: Number(node.dataset.kwh),
+                key: node.dataset.key,
+              })),
+          );
+          // One thickness scale on both sides. The common bus represents an unknown mix.
+          const scale = Math.min(...groups.flat().map(({ rect, amount }) => rect.height / amount));
+          if (!Number.isFinite(scale)) return;
+          for (const [index, nodes] of groups.entries()) {
+            const depth = nodes.reduce((sum, node) => sum + node.amount * scale, 0);
+            let top = (height - depth) / 2;
+            const center = width / 2 + (index === 0 ? -1 : 1);
+            // Stack incoming bands in reverse order at the common junction.
+            for (const { rect, amount, key } of index === 0 ? [...nodes].reverse() : nodes) {
+              const x = (index === 0 ? rect.right : rect.left) - bounds.left;
+              const band = amount * scale;
+              const y = rect.top - bounds.top + (rect.height - band) / 2;
+              const bend = (x + center) / 2;
+              const gradient = ctx.createLinearGradient(x, 0, center, 0);
+              gradient.addColorStop(0, palette[key]);
+              gradient.addColorStop(1, palette.muted);
+              ctx.fillStyle = gradient;
+              ctx.globalAlpha = 0.78;
               ctx.beginPath();
-              ctx.moveTo(outside, top);
-              ctx.bezierCurveTo(elbow, top, elbow, nearTop, inside, nearTop);
-              ctx.lineTo(inside, nearBottom);
-              ctx.bezierCurveTo(elbow, nearBottom, elbow, top + depth, outside, top + depth);
+              ctx.moveTo(x, y);
+              ctx.bezierCurveTo(bend, y, bend, top, center, top);
+              ctx.lineTo(center, top + band);
+              ctx.bezierCurveTo(bend, top + band, bend, y + band, x, y + band);
               ctx.closePath();
-              ctx.fillStyle = palette[key];
-              ctx.globalAlpha = 0.72;
               ctx.fill();
-              ctx.globalAlpha = 1;
-              ctx.fillRect(left ? outside - 4 : outside, top, 4, depth);
-              ctx.strokeStyle = palette.line;
-              ctx.stroke();
-              top += depth;
+              top += band;
             }
           }
-          ctx.fillStyle = palette.line;
-          ctx.fillRect(center - 1, 8, 2, height - 16);
         });
         mount(Homey, (report) => {
-          totals = report.totals;
-          const expected = report.range.expectedQuarters;
+          const {
+            totals,
+            estimatedQuarters,
+            range: { expectedQuarters },
+          } = report;
           if (!Object.values(totals).some((total) => total.quarters > 0)) return false;
-          for (const side of ['into', 'out']) {
-            const list = document.getElementById('energy-' + side);
+          for (const { id, field, channels } of sides) {
+            const list = document.getElementById('energy-' + id);
             list.replaceChildren();
-            for (const [key, label] of channels[side]) {
-              const total = totals[key];
-              const row = document.createElement('li');
+            const sum = channels.reduce((n, [key]) => n + (totals[key][field] ?? 0), 0);
+            for (const [key, label] of channels) {
+              const kwh = totals[key][field];
+              const node = document.createElement('li');
+              node.className = 'node';
+              node.dataset.key = key;
+              node.dataset.kwh = kwh ?? '';
+              node.dataset.active = kwh > 0;
+              node.style.setProperty('--series', 'var(--' + key + ')');
+              node.style.flexGrow = sum > 0 ? (kwh ?? 0) / sum : 0;
               const name = document.createElement('span');
-              name.className = 'measure';
-              const dot = document.createElement('i');
-              dot.className = 'dot';
-              dot.style.setProperty('--series', 'var(--' + key + ')');
-              name.append(dot, label);
+              name.className = 'node-name';
+              name.textContent = label;
               const amount = document.createElement('strong');
-              amount.textContent = value(total[side === 'into' ? 'inKWh' : 'outKWh']);
-              const coverage = document.createElement('small');
-              coverage.textContent =
-                total.quarters === expected ? '' : `${total.quarters} av ${expected} kvart`;
-              row.append(name, amount);
-              if (coverage.textContent) row.appendChild(coverage);
-              list.appendChild(row);
+              amount.textContent = value(kwh);
+              node.append(name, amount);
+              if (kwh > 0) {
+                const share = document.createElement('small');
+                share.textContent = value((100 * kwh) / sum) + ' %';
+                node.append(share);
+              }
+              list.append(node);
             }
           }
-          const estimated = report.estimatedQuarters;
+          const details = document.getElementById('flow-details');
+          details.replaceChildren();
+          for (const [key, label] of Object.entries(globalThis.HistoryWidget.labels)) {
+            const item = document.createElement('li');
+            item.textContent =
+              label + ': ' + totals[key].quarters + ' av ' + expectedQuarters + ' kvart';
+            details.append(item);
+          }
           document.getElementById('flow-coverage').textContent =
-            `${expected} avslutade kvart` +
-            (estimated ? ` · ${estimated} med uppskattad energi` : '') +
+            expectedQuarters +
+            ' avslutade kvart' +
+            (estimatedQuarters ? ' · ' + estimatedQuarters + ' med uppskattad energi' : '') +
             '. Streck betyder att mätning saknas.';
           redraw();
           return true;

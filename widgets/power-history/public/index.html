@@ -16,7 +16,8 @@
         display: flex;
         align-items: center;
         gap: 5px;
-        padding: 3px 7px;
+        padding: 3px 8px;
+        border-radius: 16px;
         min-height: 32px;
         font-size: 12px;
       }
@@ -29,6 +30,18 @@
         height: clamp(200px, 60vw, 260px);
         background: var(--panel);
         border-radius: 12px;
+      }
+      @media (prefers-color-scheme: light) {
+        .plot,
+        .legend,
+        .readings {
+          --grid: #525abd;
+          --solar: #5b7926;
+          --battery: #008880;
+          --dc: #ae6b10;
+          --ac: #bc4c4d;
+          --house: #8549af;
+        }
       }
       .inspector {
         display: grid;
@@ -137,12 +150,14 @@
             const n = tick * step;
             const pos = y(n);
             ctx.beginPath();
+            ctx.setLineDash(tick === 0 ? [] : [3, 5]);
             ctx.strokeStyle = tick === 0 ? palette.muted : palette.line;
             ctx.moveTo(left, pos);
             ctx.lineTo(right, pos);
             ctx.stroke();
             ctx.fillText(value(n), left - 5, pos, left - 8);
           }
+          ctx.setLineDash([]);
           const hours = width < 350 ? [0, 6, 12, 18] : [0, 4, 8, 12, 16, 20];
           ctx.textAlign = 'center';
           for (const hour of hours) {

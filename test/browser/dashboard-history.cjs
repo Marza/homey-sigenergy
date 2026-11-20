@@ -136,9 +136,15 @@ async function run() {
         );
         await content.waitFor({ state: 'visible' });
         if (widget === 'energy-flow') {
-          assert.match(await page.locator('#energy-into').innerText(), /Solproduktion/);
-          assert.match(await page.locator('#energy-out').innerText(), /Hus utan billaddning/);
-          assert.match(await page.locator('#energy-out').innerText(), /86 av 96 kvart/);
+          assert.match(await page.locator('#energy-into').innerText(), /Sol/);
+          assert.match(await page.locator('#energy-into [data-key=grid]').innerText(), /%/);
+          assert.equal(
+            await page.locator('#energy-into [data-key=dc]').getAttribute('data-active'),
+            'false',
+          );
+          assert.match(await page.locator('#energy-out').innerText(), /Hus/);
+          await page.getByText('Mättäckning och andelar').click();
+          assert.match(await page.locator('#flow-details').innerText(), /86 av 96 kvart/);
           await page.locator('#history-period').selectOption('week');
           await content.waitFor({ state: 'visible' });
           assert.match(await page.locator('#flow-coverage').innerText(), /377 avslutade kvart/);

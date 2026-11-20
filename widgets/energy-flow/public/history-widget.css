@@ -5,12 +5,12 @@
   --panel: #edf3f5;
   --line: #c7d5dc;
   --focus: #056078;
-  --grid: #3058aa;
-  --solar: #986003;
-  --battery: #007467;
-  --dc: #ae3c31;
-  --ac: #506c18;
-  --house: #73429f;
+  --grid: #8191f7;
+  --solar: #b0d966;
+  --battery: #45d6ce;
+  --dc: #f7b956;
+  --ac: #f28c89;
+  --house: #ba91ef;
   font:
     14px / 1.4 system-ui,
     sans-serif;
@@ -19,15 +19,15 @@
   :root {
     --ink: #edf4fa;
     --muted: #b2c2ce;
-    --panel: #202f3d;
-    --line: #415565;
+    --panel: #343944;
+    --line: #59606c;
     --focus: #79d8eb;
-    --grid: #89adff;
-    --solar: #f2bf64;
-    --battery: #62cdb9;
-    --dc: #ff9d89;
-    --ac: #bddc7a;
-    --house: #d5aaf8;
+    --grid: #929aff;
+    --solar: #b0df62;
+    --battery: #4bd9d1;
+    --dc: #ffc367;
+    --ac: #fa9491;
+    --house: #bb86fa;
   }
 }
 *,
