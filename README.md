@@ -23,7 +23,7 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | Tibber prices and EV planning | Cached consumption prices and a manual-SoC charging-plan preview | Authenticated dry run with coverage, deadlines and unmet targets; no charging commands |
 | Peak shaving | Historical replay, configurable caps/reserves, stored advisory recommendations | Illustrative scenarios, not a forecast or guaranteed power limit |
 | Demand charges | Configurable hourly peak selection and historical tariff scenarios | Provisional; dated Telge rules documented, billing comparison pending |
-| Dashboard | Energy overview widget with history, outdoor temperature, recommendations and demand estimates | Registered and package-checked; physical Dashboard testing pending; history is not live telemetry |
+| Dashboard | Energy overview, historical energy flows, and quarter-hour power history | Uses local saved data with explicit measurement coverage |
 | Marginal energy costs | Separate import/export, tax, grid-fee and battery-wear calculations | Standalone tested module; not connected to production prices, Dashboard or runtime scenario ranking |
 
 The app settings page is primarily Swedish. It includes **Översikt** (overview), **Elpriser** (prices), **Historik** (history), **Optimering** (optimization), **Diagnostik** (diagnostics) and **Inställningar** (settings).
@@ -169,6 +169,8 @@ The settings page refreshes every 15 seconds and the widget every 30 seconds. Fa
 
 The overview and widget use saved quarter-hour averages rather than live device capabilities and label them as history. Historical charts remain available with their timestamps; overview cards clear on missing/failed history or intervals older than 30 minutes. Recommendations older than 35 minutes or dated in the future are hidden. The widget uses its scoped read-only API and is checked in the built app and extracted release archive. Local synthetic light/dark browser previews are available; add/remove and runtime behavior on physical Homey remain unverified. See [Dashboard verification](docs/dashboard-widget.md).
 
+Add **Energiflöden** or **Effekthistorik** from the Sigenergy section of the Homey Dashboard widget picker. Energiflöden sums energy entering and leaving the system for a selected Stockholm day, week or month. It shows each channel's coverage from the retained quarter history (up to 32 days). Bands represent individual energy streams on each side of the system boundary. Battery and DC charging directions use each quarter's net energy. House consumption comes from the Sigenergy common-load counter, which excludes EV charging. Effekthistorik plots signed daily quarter averages in kW, provides per-series toggles and lets you inspect each quarter. Both views distinguish measured zeros, missing data and periods with estimated energy. These widgets use stored measurements and have no forecast source. [How the Dashboard widgets are verified](docs/dashboard-widget.md).
+
 The settings page and runtime use the same [shared simulation engine](lib/optimization/simulator.js), including validation, chronological interval handling, battery limits and minimum-data checks. The settings-page simulator assumes no recharge. Advanced replay accepts explicitly supplied unused solar surplus and timestamp-matched prices; it does not infer surplus from PV production. Runtime recommendations refresh every 15 minutes. Tariff scenarios compare the same hourly model for baseline and replay; without complete matching energy-price inputs, runtime results concern demand charges only, not total economic savings.
 
 Simulation requires at least eight valid, aligned quarter-hour observations and the configured coverage fraction (default 80%) over the supplied history span, counting completely absent quarters. Duplicate timestamps invalidate all copies; unaligned, missing-energy and invalid-coverage records are excluded. Below that threshold the UI clears scenario rows and returns `insufficient-data`, not an empty-history optimum. Limits of 200 values per axis, 1,000 scenarios and 3,072 input quarters prevent unbounded loops; excessive ranges are rejected rather than silently truncated.
@@ -199,7 +201,7 @@ npm run build:homey
 | `app.json`, `package.json` | Manifest, capabilities, device settings and dependencies |
 | `app.js` | Runtime polling, caches and advisory calculations |
 | `drivers/sigenergy/` | Fixed-identity pairing and plant polling |
-| `settings/`, `widgets/` | App settings UI and Dashboard widget candidate |
+| `settings/`, `widgets/` | App settings UI and Dashboard widgets |
 | `lib/` | Readers, history, pricing and planning modules |
 | `test/` | Automated calculation and mocked-reader tests |
 

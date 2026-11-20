@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Energiflöden</title>
+    <link rel="stylesheet" href="history-widget.css" />
+    <style>
+      .flow-diagram {
+        height: 120px;
+        border-radius: 12px;
+        background: var(--panel);
+      }
+      .flow-columns {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        margin: 10px 0;
+      }
+      .flow-column h2 {
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 5px;
+      }
+      .flow-column ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .flow-column li {
+        display: grid;
+        gap: 1px;
+        padding: 5px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .flow-column strong {
+        font-size: 15px;
+      }
+      .flow-column .measure {
+        font-size: 12px;
+      }
+      .flow-column small {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .flow-summary {
+        display: grid;
+        gap: 3px;
+      }
+      @media (min-width: 380px) {
+        .flow-column li {
+          grid-template-columns: minmax(0, 1fr) auto;
+          column-gap: 4px;
+          align-items: baseline;
+        }
+        .flow-column small {
+          grid-column: 1 / -1;
+        }
+      }
+    </style>
+    <script src="widget-layout.js" defer></script>
+    <script src="history-widget.js" defer></script>
+  </head>
+  <body>
+    <main id="widget-content">
+      <header class="heading">
+        <h1>Energiflöden</h1>
+        <span class="unit">kWh</span>
+      </header>
+      <div class="controls">
+        <button id="history-back" type="button" aria-label="Föregående period" disabled>‹</button>
+        <input id="history-date" type="date" aria-label="Datum i perioden" />
+        <button id="history-next" type="button" aria-label="Nästa period" disabled>›</button>
+        <select id="history-period" aria-label="Summeringsperiod">
+          <option value="day">Dygn</option>
+          <option value="week">Vecka</option>
+          <option value="month">Månad</option>
+        </select>
+      </div>
+      <p id="history-status" role="status"></p>
+      <figure id="history-results" hidden>
+        <canvas id="flow-diagram" class="flow-diagram" aria-hidden="true"></canvas>
+        <div class="flow-columns">
+          <section class="flow-column" aria-labelledby="into-title">
+            <h2 id="into-title">Tillförd energi</h2>
+            <ul id="energy-into" class="values"></ul>
+          </section>
+          <section class="flow-column" aria-labelledby="out-title">
+            <h2 id="out-title">Användning och export</h2>
+            <ul id="energy-out" class="values"></ul>
+          </section>
+        </div>
+        <figcaption class="sub flow-summary">
+          <p id="flow-coverage"></p>
+          <p>Banden visar volym per riktning. Batteri och DC delas efter kvartens netto.</p>
+        </figcaption>
+      </figure>
+    </main>
+    <script>
+      function onHomeyReady(Homey) {
+        const { mount, canvasPainter, value } = globalThis.HistoryWidget;
+        const channels = {
+          into: [
+            ['solar', 'Solproduktion'],
+            ['grid', 'Nätimport'],
+            ['battery', 'Batteri urladdat'],
+            ['dc', 'DC urladdat'],
+          ],
+          out: [
+            ['house', 'Hus utan billaddning'],
+            ['battery', 'Batteri laddat'],
+            ['dc', 'DC laddat'],
+            ['ac', 'AC laddat'],
+            ['grid', 'Nätexport'],
+          ],
+        };
+        let totals;
+        const canvas = document.getElementById('flow-diagram');
+        const redraw = canvasPainter(canvas, (ctx, width, height, palette) => {
+          if (!totals) return;
+          const amount = (side, key) => totals[key][side === 'into' ? 'inKWh' : 'outKWh'] ?? 0;
+          const sum = (side) => channels[side].reduce((n, [key]) => n + amount(side, key), 0);
+          const scale = (height - 24) / Math.max(0.001, sum('into'), sum('out'));
+          const center = width / 2;
+          for (const side of ['into', 'out']) {
+            const left = side === 'into';
+            const outside = left ? 14 : width - 14;
+            const inside = center + (left ? -4 : 4);
+            const elbow = (outside + inside) / 2;
+            let top = (height - sum(side) * scale) / 2;
+            for (const [key] of channels[side]) {
+              const depth = amount(side, key) * scale;
+              if (depth === 0) continue;
+              const nearTop = height / 2 + (top - height / 2) * 0.72;
+              const nearBottom = nearTop + depth * 0.72;
+              ctx.beginPath();
+              ctx.moveTo(outside, top);
+              ctx.bezierCurveTo(elbow, top, elbow, nearTop, inside, nearTop);
+              ctx.lineTo(inside, nearBottom);
+              ctx.bezierCurveTo(elbow, nearBottom, elbow, top + depth, outside, top + depth);
+              ctx.closePath();
+              ctx.fillStyle = palette[key];
+              ctx.globalAlpha = 0.72;
+              ctx.fill();
+              ctx.globalAlpha = 1;
+              ctx.fillRect(left ? outside - 4 : outside, top, 4, depth);
+              ctx.strokeStyle = palette.line;
+              ctx.stroke();
+              top += depth;
+            }
+          }
+          ctx.fillStyle = palette.line;
+          ctx.fillRect(center - 1, 8, 2, height - 16);
+        });
+        mount(Homey, (report) => {
+          totals = report.totals;
+          const expected = report.range.expectedQuarters;
+          if (!Object.values(totals).some((total) => total.quarters > 0)) return false;
+          for (const side of ['into', 'out']) {
+            const list = document.getElementById('energy-' + side);
+            list.replaceChildren();
+            for (const [key, label] of channels[side]) {
+              const total = totals[key];
+              const row = document.createElement('li');
+              const name = document.createElement('span');
+              name.className = 'measure';
+              const dot = document.createElement('i');
+              dot.className = 'dot';
+              dot.style.setProperty('--series', 'var(--' + key + ')');
+              name.append(dot, label);
+              const amount = document.createElement('strong');
+              amount.textContent = value(total[side === 'into' ? 'inKWh' : 'outKWh']);
+              const coverage = document.createElement('small');
+              coverage.textContent =
+                total.quarters === expected ? '' : `${total.quarters} av ${expected} kvart`;
+              row.append(name, amount);
+              if (coverage.textContent) row.appendChild(coverage);
+              list.appendChild(row);
+            }
+          }
+          const estimated = report.estimatedQuarters;
+          document.getElementById('flow-coverage').textContent =
+            `${expected} avslutade kvart` +
+            (estimated ? ` · ${estimated} med uppskattad energi` : '') +
+            '. Streck betyder att mätning saknas.';
+          redraw();
+          return true;
+        });
+      }
+    </script>
+  </body>
+</html>

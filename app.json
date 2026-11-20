@@ -762,6 +762,23 @@
     ]
   },
   "widgets": {
+    "energy-flow": {
+      "id": "energy-flow",
+      "name": { "en": "Energy flows", "sv": "Energiflöden" },
+      "description": {
+        "en": "Energy entering and leaving the system",
+        "sv": "Tillförd och använd energi i kWh"
+      },
+      "settings": [],
+      "api": { "getHistory": { "method": "GET", "path": "/:date/:period" } }
+    },
+    "power-history": {
+      "id": "power-history",
+      "name": { "en": "Power history", "sv": "Effekthistorik" },
+      "description": { "en": "Power by quarter-hour", "sv": "Effekt per kvart i kW" },
+      "settings": [],
+      "api": { "getHistory": { "method": "GET", "path": "/:date" } }
+    },
     "energy-overview": {
       "id": "energy-overview",
       "name": {

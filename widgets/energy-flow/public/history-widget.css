@@ -1,0 +1,164 @@
+:root {
+  color-scheme: light dark;
+  --ink: #172631;
+  --muted: #526472;
+  --panel: #edf3f5;
+  --line: #c7d5dc;
+  --focus: #056078;
+  --grid: #3058aa;
+  --solar: #986003;
+  --battery: #007467;
+  --dc: #ae3c31;
+  --ac: #506c18;
+  --house: #73429f;
+  font:
+    14px / 1.4 system-ui,
+    sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #edf4fa;
+    --muted: #b2c2ce;
+    --panel: #202f3d;
+    --line: #415565;
+    --focus: #79d8eb;
+    --grid: #89adff;
+    --solar: #f2bf64;
+    --battery: #62cdb9;
+    --dc: #ff9d89;
+    --ac: #bddc7a;
+    --house: #d5aaf8;
+  }
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+html[data-widget-fits='true'],
+html[data-widget-fits='true'] body {
+  overflow-y: hidden;
+}
+@supports (overflow: clip) {
+  html[data-widget-fits='true'],
+  html[data-widget-fits='true'] body {
+    overflow-y: clip;
+  }
+}
+body {
+  color: var(--ink);
+  background: transparent;
+}
+main {
+  display: flow-root;
+  padding: 16px;
+}
+h1,
+h2,
+p,
+figure {
+  margin: 0;
+}
+h1 {
+  font-size: 20px;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+}
+h2 {
+  font-size: 13px;
+}
+.heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.unit {
+  color: var(--focus);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.controls {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  margin: 12px 0;
+}
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+button,
+select,
+input[type='date'] {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.controls button {
+  flex: 0 0 34px;
+  font-size: 21px;
+}
+.controls input {
+  min-width: 0;
+  flex: 1;
+  padding: 3px 5px;
+}
+.controls select {
+  padding: 0 5px;
+  max-width: 96px;
+}
+.sub,
+#history-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+#history-status:empty {
+  display: none;
+}
+.measure {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--series);
+}
+.values {
+  font-variant-numeric: tabular-nums;
+}
+canvas {
+  display: block;
+  width: 100%;
+  touch-action: pan-y;
+}

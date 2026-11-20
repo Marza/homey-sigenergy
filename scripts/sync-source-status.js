@@ -13,6 +13,10 @@ fs.copyFileSync('lib/optimization/simulator.js', 'settings/simulator.js');
 
 fs.copyFileSync('lib/charging/planner.js', 'settings/charging-planner.js');
 
-fs.copyFileSync('lib/widget-layout.js', 'widgets/energy-overview/public/widget-layout.js');
+for (const widget of ['energy-overview', 'energy-flow', 'power-history'])
+  fs.copyFileSync('lib/widget-layout.js', `widgets/${widget}/public/widget-layout.js`);
+
+for (const asset of ['history-widget.js', 'history-widget.css'])
+  fs.copyFileSync(`widgets/energy-flow/public/${asset}`, `widgets/power-history/public/${asset}`);
 
 fs.copyFileSync('lib/pricing/cost-model.js', 'settings/cost-model.js');
