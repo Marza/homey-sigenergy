@@ -5,6 +5,7 @@ const assert = require('node:assert/strict'),
   path = require('node:path');
 const { chromium } = require('playwright');
 const { fixture } = require('../fixtures/readiness.cjs');
+const { compareEvdcSession } = require('../../lib/pricing/evdc-session-replay');
 const { checkReadiness } = require('../../lib/pricing/comparison-readiness');
 const root = path.resolve(__dirname, '../..');
 let f,
@@ -25,7 +26,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/homey.js') {
     res.setHeader('Content-Type', 'text/javascript');
     res.end(
-      `window.Homey={get:(key,cb)=>fetch('/setting/'+key).then(r=>r.json()).then(v=>cb(null,v)).catch(cb),set:()=>{throw Error('No settings writes allowed');},api:(method,path,body,cb)=>fetch('/api'+path,{method,headers:{'Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify(body)}:{})}).then(r=>r.json()).then(v=>v.error?cb(Error(v.error)):cb(null,v)).catch(cb),ready:()=>window.appReady=true};document.addEventListener('DOMContentLoaded',()=>{const css=document.createElement('link');css.rel='stylesheet';css.href='/host.css';css.onload=()=>onHomeyReady(Homey);document.head.appendChild(css);});`,
+      `window.Homey={get:(key,cb)=>fetch('/setting/'+key).then(r=>r.json()).then(v=>cb(null,v)).catch(cb),set:(key,value,cb)=>fetch('/set/'+key,{method:'POST',body:JSON.stringify(value)}).then(r=>{if(!r.ok)throw Error('Save failed');cb(null);}).catch(cb),api:(method,path,body,cb)=>fetch('/api'+path,{method,headers:{'Content-Type':'application/json'},...(method==='POST'?{body:JSON.stringify(body)}:{})}).then(r=>r.json()).then(v=>v.error?cb(Error(v.error)):cb(null,v)).catch(cb),ready:()=>window.appReady=true};document.addEventListener('DOMContentLoaded',()=>{const css=document.createElement('link');css.rel='stylesheet';css.href='/host.css';css.onload=()=>onHomeyReady(Homey);document.head.appendChild(css);});`,
     );
     return;
   }
@@ -39,11 +40,24 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(f.data[req.url.slice(9)] ?? null));
     return;
   }
+  if (req.url === '/set/householdImportLimits') {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      f.data.householdImportLimits = JSON.parse(body);
+      res.end('{}');
+    });
+    return;
+  }
   if (req.url.startsWith('/api')) {
     res.setHeader('Content-Type', 'application/json');
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', () => {
+      if (req.url === '/api/economics/evdc-session-replay') {
+        res.end(JSON.stringify(compareEvdcSession(f.homey, JSON.parse(body), f.now)));
+        return;
+      }
       if (req.url !== '/api/economics/readiness') {
         res.end(JSON.stringify({ error: 'Synthetic unavailable data' }));
         return;
@@ -186,6 +200,26 @@ const server = http.createServer((req, res) => {
       await button.click();
       assert.equal(posts, before);
       assert.match(await status.innerText(), /168/);
+
+      reset();
+      for (const row of f.rows.slice(8, 12))
+        Object.assign(row, { evWh: 2500, gridWh: 2750, importWh: 2750 });
+      await page.getByText('4. Flytta ett uppmätt DC-laddpass').click();
+      await page.locator('#evdc-replay-find').click();
+      await page.locator('#evdc-replay-options').waitFor({ state: 'visible' });
+      await page.locator('#evdc-replay-limit').fill('10,5');
+      await page.locator('#evdc-replay-fuse').fill('16');
+      await page.locator('#evdc-replay-save-limits').click();
+      await page.getByText('Hushållets importgränser sparades.').waitFor();
+      assert.deepEqual(f.data.householdImportLimits, { importLimitKW: 10.5, mainFuseA: 16 });
+      await page.locator('#evdc-replay-run').click();
+      await page.getByText(/Uppskattad rörlig energikostnad/).waitFor();
+      const output = await page.locator('#evdc-replay-results').innerText();
+      assert.match(output, /Nätimport/);
+      assert.match(output, /Kvartar över 10,50 kW/);
+      assert.match(output, /Högsta timmedel för nätimport/);
+      await page.locator('#evdc-replay-minutes').fill('30');
+      assert.equal(await page.locator('#evdc-replay-results').innerText(), '');
     }
     assert.deepEqual(errors, []);
     console.log(

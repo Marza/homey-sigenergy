@@ -107,6 +107,11 @@
       "path": "/economics/solar-ev-replay",
       "public": false
     },
+    "compareEvdcSessionReplay": {
+      "method": "POST",
+      "path": "/economics/evdc-session-replay",
+      "public": false
+    },
     "inspectEconomicReadiness": {
       "method": "POST",
       "path": "/economics/readiness",

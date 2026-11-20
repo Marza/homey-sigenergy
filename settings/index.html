@@ -14,6 +14,7 @@
     <script src="solar-preview.js"></script>
     <script src="tibber-history-prices.js"></script>
     <script src="economic-replay.js"></script>
+    <script src="evdc-session-replay.js"></script>
     <script src="economic-readiness.js"></script>
     <script src="data-diagnostics.js"></script>
     <link rel="stylesheet" href="styles.css" />
@@ -2093,6 +2094,82 @@
                 </section>
               </div>
             </details>
+            <details class="settings-details">
+              <summary>4. Flytta ett uppmätt DC-laddpass</summary>
+              <div class="details-body">
+                <p>
+                  Jämför senaste avslutade DC-pass med en tidigare start. Samma laddenergi fördelas
+                  över den längre tiden och sluttiden förblir densamma.
+                </p>
+                <button type="button" class="hy-nostyle" id="evdc-replay-find">
+                  Hitta senaste DC-pass
+                </button>
+                <p id="evdc-replay-session"></p>
+                <fieldset>
+                  <legend>Hela hushållets importgräns</legend>
+                  <label class="hy-nostyle">
+                    Importgräns (kW, valfritt)
+                    <input inputmode="decimal" class="hy-nostyle" id="evdc-replay-limit" />
+                  </label>
+                  <label class="hy-nostyle">
+                    Huvudsäkring per fas (A, trefas, valfritt)
+                    <input
+                      type="number"
+                      class="hy-nostyle"
+                      id="evdc-replay-fuse"
+                      min="1"
+                      max="1000"
+                      step="1"
+                    />
+                  </label>
+                  <p>
+                    Gränsen jämförs med den totala nätimporten. Vid två värden används det lägre av
+                    importgränsen och den beräknade trefasgränsen.
+                  </p>
+                  <button type="button" class="hy-nostyle" id="evdc-replay-save-limits">
+                    Spara hushållets gränser
+                  </button>
+                  <p id="evdc-replay-limits-status" role="status" aria-live="polite"></p>
+                </fieldset>
+                <fieldset id="evdc-replay-options" hidden>
+                  <legend>Alternativ start</legend>
+                  <label class="hy-nostyle">
+                    Minuter tidigare (steg om 15 minuter)
+                    <input
+                      type="number"
+                      class="hy-nostyle"
+                      id="evdc-replay-minutes"
+                      min="15"
+                      max="1440"
+                      step="15"
+                      value="60"
+                    />
+                  </label>
+                  <label class="hy-nostyle">
+                    Antagen verkningsgrad från anläggningen till DC-uttaget (%)
+                    <input
+                      type="number"
+                      class="hy-nostyle"
+                      id="evdc-replay-efficiency"
+                      min="50"
+                      max="100"
+                      step="any"
+                      value="100"
+                    />
+                  </label>
+                  <p>
+                    100 % använder uppmätt DC-energi som motsvarande last. Lägre värden räknar med
+                    ytterligare förluster. Hus, sol, AC-laddning och husbatteri följer sina
+                    observerade flöden.
+                  </p>
+                  <button type="button" class="hy-nostyle" id="evdc-replay-run">
+                    Jämför med tidigare start
+                  </button>
+                </fieldset>
+                <p id="evdc-replay-status" role="status" aria-live="polite"></p>
+                <div id="evdc-replay-results"></div>
+              </div>
+            </details>
           </section>
           <section
             id="settings-data"
@@ -3368,6 +3445,7 @@
         bindEconomicHistory(Homey);
         TibberHistoryPricesSettings.bind(Homey);
         EconomicReplaySettings.bind(Homey);
+        EvdcSessionReplay.bind(Homey);
         EconomicReadinessSettings.bind(Homey);
         DataDiagnosticsSettings.bind(Homey);
         SolarPreview.bind(Homey);

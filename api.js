@@ -8,6 +8,7 @@ const {
   restoreTimeline,
 } = require('./lib/pricing/contract-timeline');
 const { checkReadiness } = require('./lib/pricing/comparison-readiness');
+const { compareEvdcSession } = require('./lib/pricing/evdc-session-replay');
 const { compareSolarEv } = require('./lib/pricing/solar-ev-comparison');
 const { compareReplay } = require('./lib/pricing/replay-comparison');
 const { getEnergyHistory } = require('./lib/pricing/energy-history');
@@ -19,6 +20,9 @@ module.exports = {
   },
   async inspectEconomicReadiness({ homey, body }) {
     return checkReadiness(homey, body);
+  },
+  async compareEvdcSessionReplay({ homey, body }) {
+    return compareEvdcSession(homey, body);
   },
   async compareSolarEvReplay({ homey, body }) {
     return compareSolarEv(homey, body);
