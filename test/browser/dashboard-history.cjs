@@ -31,6 +31,16 @@ for (const offset of [-96, 0]) {
       schema: 2,
       ...(offset === 0
         ? {
+            fiveMinute: Object.fromEntries(
+              Object.entries({
+                gridW,
+                pvW: solarW,
+                essW: batteryW,
+                evW: dcW,
+                ...(i === 53 ? {} : { evacW: acW }),
+                household: houseW,
+              }).map(([key, w]) => [key, [w / 12, 300000, w / 12, 300000]]),
+            ),
             meterFlow: addFlow(
               emptyFlow(),
               meterInterval(
@@ -55,7 +65,7 @@ for (const offset of [-96, 0]) {
       coverageMs: Q,
       directionalCoverageMs: Q,
       essCoverageMs: Q,
-      fieldCoverageMs: { pvW: Q, evW: Q, ...(i === 53 ? {} : { evacW: Q }) },
+      fieldCoverageMs: { gridW: Q, essW: Q, pvW: Q, evW: Q, ...(i === 53 ? {} : { evacW: Q }) },
       gridWh: gridW / 4,
       importWh: Math.max(0, gridW) / 4,
       exportWh: Math.max(0, -gridW) / 4,
@@ -155,6 +165,15 @@ async function run() {
             animations: 'disabled',
           });
         }
+        if (widget === 'power-history') {
+          const slider = page.locator('#chart-quarter');
+          assert.equal(await slider.getAttribute('max'), String(89 * 3 - 1));
+          await slider.fill('1');
+          assert.match(await page.locator('#chart-time').innerText(), /00:05.*00:10/);
+          assert.match(await page.locator('#chart-coverage').innerText(), /5-minutersmedel/);
+          await slider.fill('90');
+          assert.match(await page.locator('#chart-readings').innerText(), /Nät –/);
+        }
         if (widget === 'energy-flow') {
           assert.equal(await page.locator('#flow-method').inputValue(), 'meters');
           await page.getByText('Mättäckning och andelar').click();
@@ -188,6 +207,7 @@ async function run() {
           await content.waitFor({ state: 'visible' });
         } else {
           const slider = page.locator('#chart-quarter');
+          assert.match(await page.locator('#chart-coverage').innerText(), /15-minutersmedel/);
           await slider.fill('0');
           assert.match(await page.locator('#chart-readings').innerText(), /Nät 17 kW/);
           assert.match(await page.locator('#chart-readings').innerText(), /DC-laddare −14,3 kW/);

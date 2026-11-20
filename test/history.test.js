@@ -302,7 +302,7 @@ test('the supported one-minute boundary interval is integrated while invalid tim
   }
 });
 
-test('EVAC energy has independent quarter coverage and survives a version 9 backup', () => {
+test('EVAC energy has independent quarter coverage and survives a new backup', () => {
   const { history } = setup(T + 40000);
   history.append({ evacW: 7200, evW: 3600, gridW: 10800 }, T);
   history.append({ evacW: 7200, evW: 3600, gridW: 10800 }, T + 10000);
@@ -310,7 +310,7 @@ test('EVAC energy has independent quarter coverage and survives a version 9 back
   history.append({ evacW: 0, evW: 3600, gridW: 10800 }, T + 30000);
   history.append({ evacW: 0, evW: 3600, gridW: 10800 }, T + 40000);
   const exported = history.export();
-  assert.equal(exported.schema, 9);
+  assert.equal(exported.schema, 14);
   const [row] = exported.slots;
   assert.equal(row.evacWh, 20);
   assert.equal(row.fieldCoverageMs.evacW, 20000);

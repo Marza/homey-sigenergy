@@ -120,7 +120,7 @@
           if (report.status !== 'ok') return fail();
           const hasData = render(report);
           results.hidden = !hasData;
-          status.textContent = hasData ? '' : 'Inga kompletta mätkvartar för perioden.';
+          status.textContent = hasData ? '' : 'Inga kompletta mätintervall för perioden.';
           layout.refresh();
         })
         .catch(fail)

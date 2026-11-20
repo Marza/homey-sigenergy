@@ -1,6 +1,6 @@
 {
   "name": { "en": "Power history", "sv": "Effekthistorik" },
-  "description": { "en": "Power by quarter-hour", "sv": "Effekt per kvart i kW" },
+  "description": { "en": "Five-minute power history", "sv": "Effekt per fem minuter i kW" },
   "settings": [],
   "api": { "getHistory": { "method": "GET", "path": "/:date" } }
 }

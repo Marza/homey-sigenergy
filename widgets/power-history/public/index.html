@@ -93,7 +93,7 @@
             type="range"
             min="0"
             max="0"
-            aria-label="Mätkvart i diagrammet"
+            aria-label="Tidsintervall i diagrammet"
           />
           <div id="chart-readings" class="readings values"></div>
         </div>
@@ -175,7 +175,7 @@
                 previous = null;
                 continue;
               }
-              const px = x(p.t + QUARTER / 2),
+              const px = x(p.t + p.durationMs / 2),
                 py = y(n);
               if (previous) {
                 ctx.moveTo(...previous);
@@ -187,7 +187,7 @@
             ctx.stroke();
           }
           if (selectedTime !== undefined) {
-            const view = x(selectedTime + QUARTER / 2);
+            const view = x(selectedTime + points[Number(slider.value)].durationMs / 2);
             ctx.beginPath();
             ctx.setLineDash([3, 3]);
             ctx.lineWidth = 1;
@@ -203,7 +203,9 @@
           if (!point) return;
           selectedTime = point.t;
           const timeLabel =
-            timeWithOffset.format(point.t) + ' – ' + timeWithOffset.format(point.t + QUARTER);
+            timeWithOffset.format(point.t) +
+            ' – ' +
+            timeWithOffset.format(point.t + point.durationMs);
           document.getElementById('chart-time').textContent =
             timeLabel + (point.estimated ? ' · uppskattad energi ingår' : '');
           slider.setAttribute('aria-valuetext', timeLabel);
@@ -234,11 +236,9 @@
         slider.oninput = inspect;
         canvas.onclick = (event) => {
           if (!toTime || !points?.length) return;
-          const t = toTime(event.offsetX);
-          slider.value = Math.max(
-            0,
-            Math.min(points.length - 1, Math.floor((t - range.start) / QUARTER)),
-          );
+          const clickedTime = toTime(event.offsetX);
+          const index = points.findIndex((p) => clickedTime < p.t + p.durationMs);
+          slider.value = index < 0 ? points.length - 1 : index;
           inspect();
         };
         mount(Homey, (report) => {
@@ -251,8 +251,15 @@
           const previousIndex = points.findIndex((point) => point.t === previousTime);
           slider.value = previousIndex >= 0 ? previousIndex : points.findLastIndex(hasValues);
           const estimated = points.filter((point) => point.estimated).length;
+          const intervals = new Set(points.filter(hasValues).map((p) => p.durationMs));
+          const resolution =
+            intervals.size > 1
+              ? '5- och 15-minutersmedel'
+              : intervals.has(QUARTER)
+                ? '15-minutersmedel'
+                : '5-minutersmedel';
           document.getElementById('chart-coverage').textContent =
-            `Kvartmedel · ${available} av ${points.length} kvart med minst en serie` +
+            `${resolution} · ${available} av ${points.length} intervall med minst en serie` +
             (estimated ? ` · ${estimated} med uppskattad energi.` : '.');
           inspect();
           return true;
