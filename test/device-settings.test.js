@@ -26,6 +26,7 @@ test('settings change connects with new settings before Homey updates getSetting
         if (id === '../../lib/data-diagnostics') return require('../lib/data-diagnostics');
         if (id === '../../lib/modbus') return { SigenergyReader: Reader };
         if (id === '../../lib/energy/meters') return require('../lib/energy/meters');
+        if (id === '../../lib/energy/phase-reader') return require('../lib/energy/phase-reader');
         if (id === '../../lib/charging/modbus-telemetry') return {};
         if (id === '../../lib/backup/island-controller')
           return require('../lib/backup/island-controller');

@@ -162,3 +162,54 @@ test('optimizer blocks tariff impacts and missing data instead of assuming zero 
   assert.equal(narrow.reason, 'evdc-insufficient-headroom');
   assert.ok(narrow.missingKWh > 0);
 });
+
+test('the cheapest profile respects the most loaded phase even below the total import cap', () => {
+  const f = sample();
+  setTariff(f, '13:00', '20:00');
+  const request = { ...f.input, optimise: true };
+  f.data.householdImportLimits = { mainFuseA: 25, importLimitKW: 17.3 };
+  const binding = 'a'.repeat(24);
+  const phase = (peakA) => ({ binding, ms: Q, peakA, ampMs: peakA.map((a) => a * Q) });
+  f.data.gridPhaseCurrent = { binding };
+  for (const [i, row] of f.rows.entries()) {
+    // Phase L2 nearly hits the fuse during the cheap hour, even though net import is low.
+    row.phaseCurrent = { grid: phase(i < 8 ? [3, 24, 5] : [16, 18, 16]) };
+  }
+  const r = f.compare(request);
+  assert.equal(r.status, 'indicative');
+  assert.equal(r.planQuarters.at(-1).dcKWh, 2.5);
+  assert.equal(r.deadline, f.input.sessionEnd);
+  assert.ok(Math.abs(r.planQuarters.reduce((sum, row) => sum + row.dcKWh, 0) - 10) < 1e-8);
+  const cheap = r.planQuarters.filter((row) => row.t < f.input.sessionStart);
+  assert.equal(cheap.length, 4);
+  assert.ok(cheap.every((row) => row.dcKWh < 0.042 && row.importKW < 5));
+  assert.deepEqual(r.phaseLimit.measuredPeakA, [16, 24, 16]);
+  assert.ok(Math.abs(r.phaseLimit.modelledPeakA[1] - 24.99) < 1e-9);
+  assert.ok(r.phaseLimit.modelledPeakA.every((a) => a <= 25));
+  assert.equal(r.scenario.importLimit.quarters, 0);
+  f.rows[6].phaseCurrent.grid = phase([4, 6, 25.01]);
+  assert.deepEqual(
+    (({ reason, phase, at, amps }) => ({ reason, phase, at, amps }))(f.compare(request)),
+    { reason: 'evdc-phase-over-limit', phase: 'L3', at: f.rows[6].t, amps: 25.01 },
+  );
+});
+
+test('inverter readings, old meter readings and missing grid coverage cannot validate a fuse limit', () => {
+  const f = sample();
+  setTariff(f, '13:00', '20:00');
+  const request = { ...f.input, optimise: true };
+  f.data.householdImportLimits = { mainFuseA: 25, importLimitKW: 17.3 };
+  const binding = 'b'.repeat(24);
+  const grid = { binding, ms: Q, peakA: [10, 2, 4], ampMs: [10 * Q, 2 * Q, 4 * Q] };
+  for (const row of f.rows) row.phaseCurrent = { inverter: grid };
+  assert.equal(f.compare(request).reason, 'evdc-phase-meter-required');
+  f.data.gridPhaseCurrent = { binding };
+  assert.equal(f.compare(request).phaseMissing.length, 8);
+  for (const row of f.rows) row.phaseCurrent.grid = grid;
+  f.rows[4].phaseCurrent.grid = { ...grid, ms: Q - 1, ampMs: [0, 0, 0] };
+  f.rows[5].phaseCurrent.grid = { ...grid, binding: 'c'.repeat(24) };
+  const missing = f.compare(request);
+  assert.equal(missing.reason, 'evdc-phase-coverage-required');
+  assert.deepEqual(missing.phaseMissing, [f.rows[4].t, f.rows[5].t]);
+  assert.equal(f.compare().status, 'indicative');
+});

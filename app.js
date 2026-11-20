@@ -45,6 +45,8 @@ module.exports = class SigenergyApp extends Homey.App {
     const previousTibber = this.homey.settings.get('sourceConfig')?.tibber;
     this.homey.settings.set('sourceConfig', previousTibber ? { tibber: previousTibber } : {});
     this.homey.settings.set('backupStatus', null);
+    this.homey.settings.set('gridPhaseCurrent', null);
+    this.homey.settings.set('inverterPhaseCurrent', null);
     this.configurePrices();
     this.dataDiagnostics = new DataDiagnostics(this.homey.settings);
     this.dataDiagnostics.record('app', 'app-started');

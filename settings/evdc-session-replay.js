@@ -13,6 +13,11 @@
     'invalid-history': 'Historiken kunde inte läsas.',
     'evdc-import-limit-required':
       'Spara en importgräns eller trefas huvudsäkring under Hushåll först.',
+    'evdc-phase-meter-required':
+      'Huvudsäkringen kräver en SDM630-nätmätare. Konfigurera den i Sigenergy-enhetens avancerade inställningar.',
+    'evdc-phase-coverage-required':
+      'Huvudsäkringen kan bedömas när nätmätaren har sparat hela kvartar för alla tre faser.',
+    'evdc-phase-over-limit': 'Uppmätt eller beräknad fasström överskrider huvudsäkringens gräns.',
     'evdc-prices-required': 'En billigaste profil kräver komplett pris- och tariffunderlag.',
     'evdc-original-in-tariff':
       'Det uppmätta passet överlappar tariffens effekttimmar. Det här läget jämför pass som ryms utanför dem.',
@@ -82,6 +87,7 @@
           for (const [key, label] of [
             ['missing', 'Saknad nätmätning'],
             ['overlaps', 'Saknad DC-mätning eller annan DC-aktivitet'],
+            ['phaseMissing', 'Saknad eller ofullständig strömmätning vid nätanslutningen'],
           ]) {
             if (result[key]?.length)
               paragraph(
@@ -92,6 +98,8 @@
             paragraph('Kontrollera ' + priceDetails(result.priceGaps) + '.');
           if (Number.isFinite(result.missingKWh))
             paragraph('Energi som inte ryms: ' + fmt(result.missingKWh) + ' kWh.');
+          if (result.phase && Number.isFinite(result.amps))
+            paragraph(result.phase + ' hade en uppmätt topp på ' + fmt(result.amps) + ' A.');
           if (Number.isFinite(result.at)) paragraph('Berörd kvart börjar ' + time(result.at) + '.');
           return;
         }
@@ -220,10 +228,21 @@
                   fmt(r.limits.nominalFuseKW) +
                   ' kW vid balanserad last, 400 V och effektfaktor 1.',
               );
-            paragraph(
-              'Importgränsen kontrolleras mot hela hushållets kvartmedel. Momentana toppar och belastning per fas bedöms inte.',
-            );
+            paragraph('Importgränsen kontrolleras mot hela hushållets kvartmedel.');
           }
+          if (r.phaseLimit) {
+            const { fuseA, measuredPeakA, modelledPeakA, voltageFloor, powerFactorFloor } =
+              r.phaseLimit;
+            paragraph('Fasgräns ' + fuseA + ' A. Uppmätt topp → beräknad topp per fas.');
+            measuredPeakA.forEach((amps, i) => metric('L' + (i + 1), amps, modelledPeakA[i], 'A'));
+            paragraph(
+              'Modellen lägger hela laddökningen på en fas åt gången och räknar med minst ' +
+                voltageFloor +
+                ' V och effektfaktor ' +
+                fmt(powerFactorFloor) +
+                '. Toppar mellan mätningar kan saknas.',
+            );
+          } else paragraph('Denna beräkning använder enbart total nätimport.');
           if (r.priceGaps.length) {
             paragraph('Energikostnad saknas. Kontrollera ' + priceDetails(r.priceGaps) + '.');
           } else metric('Uppskattad rörlig energikostnad', a.energyCostSek, b.energyCostSek, 'kr');

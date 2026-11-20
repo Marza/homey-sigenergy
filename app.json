@@ -394,6 +394,48 @@
           "max": 246
         },
         {
+          "id": "phaseInverterUnitId",
+          "type": "number",
+          "label": {
+            "en": "Inverter ID for phase current (0 = use configured EVDC inverter)",
+            "sv": "Växelriktar-ID för fasström (0 = använd konfigurerad EVDC-växelriktare)"
+          },
+          "value": 0,
+          "min": 0,
+          "max": 246
+        },
+        {
+          "id": "phaseMeterHost",
+          "type": "text",
+          "label": {
+            "en": "SDM630 grid meter host or IP (empty = off)",
+            "sv": "Adress till SDM630-nätmätare (tomt = av)"
+          },
+          "value": ""
+        },
+        {
+          "id": "phaseMeterPort",
+          "type": "number",
+          "label": {
+            "en": "SDM630 grid meter Modbus TCP port",
+            "sv": "Modbus TCP-port för SDM630-nätmätare"
+          },
+          "value": 502,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "id": "phaseMeterUnitId",
+          "type": "number",
+          "label": {
+            "en": "SDM630 grid meter Modbus unit ID",
+            "sv": "Modbus-ID för SDM630-nätmätare"
+          },
+          "value": 1,
+          "min": 1,
+          "max": 246
+        },
+        {
           "id": "evacEnabled",
           "type": "checkbox",
           "label": {
