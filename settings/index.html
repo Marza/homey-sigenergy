@@ -14,6 +14,7 @@
     <script src="solar-preview.js"></script>
     <script src="tibber-history-prices.js"></script>
     <script src="economic-replay.js"></script>
+    <script src="household-settings.js"></script>
     <script src="evdc-session-replay.js"></script>
     <script src="economic-readiness.js"></script>
     <script src="data-diagnostics.js"></script>
@@ -370,6 +371,7 @@
         <label for="settingsCategory" class="hy-nostyle">Område</label
         ><select id="settingsCategory" class="hy-nostyle">
           <option value="connections">Anslutningar</option>
+          <option value="household">Hushåll</option>
           <option value="costs">Elavtal</option>
           <option value="tariff">Effektavgift</option>
           <option value="car">Elbil</option>
@@ -389,6 +391,13 @@
             class="hy-nostyle"
           >
             <span>Anslutningar</span><small>SigEnergy, Nibe och Tibber</small></button
+          ><button
+            type="button"
+            data-settings-category="household"
+            aria-controls="settings-household"
+            class="hy-nostyle"
+          >
+            <span>Hushåll</span><small>Huvudsäkring och importgräns</small></button
           ><button
             type="button"
             data-settings-category="costs"
@@ -591,6 +600,45 @@
                 </div>
               </div>
             </details>
+          </section>
+          <section
+            id="settings-household"
+            class="settings-page"
+            aria-labelledby="settings-heading-household"
+            hidden
+          >
+            <header class="page-heading">
+              <p class="eyebrow">Inställningar</p>
+              <h3 id="settings-heading-household" tabindex="-1">Hushåll</h3>
+              <p>Gränsen gäller hushållets totala nätimport, inklusive laddare och husbatteri.</p>
+            </header>
+            <fieldset>
+              <legend>Hela hushållets importgräns</legend>
+              <label class="hy-nostyle">
+                Importgräns (kW, valfritt)
+                <input inputmode="decimal" class="hy-nostyle" id="household-import-limit" />
+              </label>
+              <label class="hy-nostyle">
+                Huvudsäkring per fas (A, trefas, valfritt)
+                <input
+                  type="number"
+                  class="hy-nostyle"
+                  id="household-main-fuse"
+                  min="1"
+                  max="1000"
+                  step="1"
+                />
+              </label>
+              <p>
+                Ange ett eller båda värdena. Om båda är ifyllda används den lägre gränsen i
+                beräkningen. Huvudsäkringen ger ett ungefärligt jämförelsevärde vid balanserad
+                trefaslast.
+              </p>
+              <button type="button" class="hy-nostyle" id="household-save-limits">
+                Spara hushållets gränser
+              </button>
+              <p id="household-limits-status" role="status" aria-live="polite"></p>
+            </fieldset>
           </section>
           <section
             id="settings-costs"
@@ -2105,32 +2153,12 @@
                   Hitta senaste DC-pass
                 </button>
                 <p id="evdc-replay-session"></p>
-                <fieldset>
-                  <legend>Hela hushållets importgräns</legend>
-                  <label class="hy-nostyle">
-                    Importgräns (kW, valfritt)
-                    <input inputmode="decimal" class="hy-nostyle" id="evdc-replay-limit" />
-                  </label>
-                  <label class="hy-nostyle">
-                    Huvudsäkring per fas (A, trefas, valfritt)
-                    <input
-                      type="number"
-                      class="hy-nostyle"
-                      id="evdc-replay-fuse"
-                      min="1"
-                      max="1000"
-                      step="1"
-                    />
-                  </label>
-                  <p>
-                    Gränsen jämförs med den totala nätimporten. Vid två värden används det lägre av
-                    importgränsen och den beräknade trefasgränsen.
-                  </p>
-                  <button type="button" class="hy-nostyle" id="evdc-replay-save-limits">
-                    Spara hushållets gränser
+                <p>
+                  Jämförelsen använder hushållets sparade importgräns.
+                  <button type="button" class="hy-nostyle" data-settings-link="household">
+                    Öppna hushållsinställningarna
                   </button>
-                  <p id="evdc-replay-limits-status" role="status" aria-live="polite"></p>
-                </fieldset>
+                </p>
                 <fieldset id="evdc-replay-options" hidden>
                   <legend>Alternativ start</legend>
                   <label class="hy-nostyle">
@@ -3445,7 +3473,7 @@
         bindEconomicHistory(Homey);
         TibberHistoryPricesSettings.bind(Homey);
         EconomicReplaySettings.bind(Homey);
-        EvdcSessionReplay.bind(Homey);
+        HouseholdSettings.bind(Homey, EvdcSessionReplay.bind(Homey));
         EconomicReadinessSettings.bind(Homey);
         DataDiagnosticsSettings.bind(Homey);
         SolarPreview.bind(Homey);

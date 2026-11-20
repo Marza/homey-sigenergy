@@ -17,6 +17,8 @@ function verifySettings(directory) {
   assert.equal(typeof require(path.resolve(folder, 'data-diagnostics.js')).bind, 'function');
   assert.match(html, /<script src="evdc-session-replay.js"/);
   assert.ok(fs.statSync(path.join(folder, 'evdc-session-replay.js')).isFile());
+  assert.match(html, /<script src="household-settings.js"/);
+  assert.ok(fs.statSync(path.join(folder, 'household-settings.js')).isFile());
   assert.doesNotMatch(html, /(?:src|href)="https?:/, 'Settings assets must be local');
 }
 if (require.main === module) verifySettings(process.argv[2] || '.homeybuild');

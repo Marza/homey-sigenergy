@@ -11,6 +11,7 @@ const hostCss = fs.readFileSync(
 );
 const categories = [
   'connections',
+  'household',
   'costs',
   'tariff',
   'car',

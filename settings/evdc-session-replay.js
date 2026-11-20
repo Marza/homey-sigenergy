@@ -11,7 +11,7 @@
       'Ange tidigare start i steg om 15 minuter och en verkningsgrad på 50–100 %.',
     'evdc-window-blocked': 'Jämförelsen kan inte beräknas för vald starttid.',
     'invalid-history': 'Historiken kunde inte läsas.',
-    'invalid-household-import-limits': 'Kontrollera och spara hushållets importgränser på nytt.',
+    'invalid-household-import-limits': 'Kontrollera importgränserna under Inställningar → Hushåll.',
   };
   const date = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Europe/Stockholm',
@@ -90,69 +90,16 @@
         el('options').hidden = false;
       });
     };
-    const limitsKey = 'householdImportLimits';
-    let limitsReady = false,
-      limitsDirty = false,
-      savingLimits = false;
-    Homey.get(limitsKey, (error, value) => {
-      if (error) {
-        el('limits-status').textContent = 'Sparade importgränser kunde inte läsas.';
-        return;
-      }
-      if (!limitsDirty) {
-        el('limit').value = value?.importLimitKW ?? '';
-        el('fuse').value = value?.mainFuseA ?? '';
-      }
-      limitsReady = true;
-    });
-    el('save-limits').onclick = () => {
-      if (savingLimits) return;
-      const limit = el('limit').value.trim().replace(',', '.');
-      const fuse = el('fuse').value.trim();
-      const importLimitKW = limit ? Number(limit) : null;
-      const mainFuseA = fuse ? Number(fuse) : null;
-      if (
-        (limit &&
-          (!Number.isFinite(importLimitKW) || importLimitKW <= 0 || importLimitKW > 1000)) ||
-        (fuse && !el('fuse').checkValidity())
-      ) {
-        el('limits-status').textContent =
-          'Ange en positiv importgräns och huvudsäkring i hela ampere.';
-        return;
-      }
-      savingLimits = true;
-      el('limit').disabled = el('fuse').disabled = true;
-      Homey.set(limitsKey, { importLimitKW, mainFuseA }, (error) => {
-        savingLimits = false;
-        el('limit').disabled = el('fuse').disabled = false;
-        if (!error) {
-          limitsReady = true;
-          limitsDirty = false;
-        }
-        el('limits-status').textContent = error
-          ? 'Importgränserna kunde inte sparas.'
-          : 'Hushållets importgränser sparades.';
-      });
+    const invalidate = () => {
+      version++;
+      clear();
+      el('status').textContent = '';
     };
-    for (const field of ['minutes', 'efficiency', 'limit', 'fuse']) {
-      el(field).oninput = () => {
-        version++;
-        clear();
-        el('status').textContent = '';
-        if (field === 'limit' || field === 'fuse') {
-          limitsDirty = true;
-          el('limits-status').textContent = 'Spara ändringarna för att använda dem i jämförelsen.';
-        }
-      };
-    }
+    el('minutes').oninput = el('efficiency').oninput = invalidate;
     el('run').onclick = () => {
       if (!session) return;
       const minutes = el('minutes'),
         efficiency = el('efficiency');
-      if (!limitsReady || limitsDirty || savingLimits) {
-        el('status').textContent = 'Läs in eller spara hushållets importgränser först.';
-        return;
-      }
       if (
         !minutes.value ||
         !efficiency.value ||
@@ -278,6 +225,7 @@
         },
       );
     };
+    return invalidate;
   }
   root.EvdcSessionReplay = { bind };
 })(globalThis);
