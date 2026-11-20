@@ -18,10 +18,10 @@ module.exports = [
       'coverage/**',
       'dist/**',
       'settings/source-status.js',
-      'settings/simulator.js',
+
       'settings/cost-model.js',
       'widgets/*/public/widget-layout.js',
-      'settings/charging-planner.js',
+
       'widgets/energy-overview/public/source-status.js',
       'settings/price-coverage.js',
       'settings/tariff-config.js',
@@ -38,9 +38,9 @@ module.exports = [
     files: [
       'lib/source-status.js',
       'settings/tibber-history-prices.js',
-      'settings/economic-replay.js',
-      'settings/economic-readiness.js',
-      'settings/evdc-session-replay.js',
+      'settings/contract-versions.js',
+      'settings/household-forecast.js',
+
       'settings/household-settings.js',
       'settings/data-diagnostics.js',
       'settings/settings-assistant.js',
@@ -63,14 +63,13 @@ module.exports = [
         SettingsNavigation: 'readonly',
         SettingsAssistant: 'readonly',
         SourceStatus: 'readonly',
-        Simulator: 'readonly',
+
         CostModel: 'readonly',
-        ChargingPlanner: 'readonly',
-        SolarPreview: 'readonly',
+
         TibberHistoryPricesSettings: 'readonly',
-        EconomicReplaySettings: 'readonly',
-        EconomicReadinessSettings: 'readonly',
-        EvdcSessionReplay: 'readonly',
+        ContractVersions: 'readonly',
+        HouseholdForecastView: 'readonly',
+
         HouseholdSettings: 'readonly',
         DataDiagnosticsSettings: 'readonly',
         WidgetLayout: 'readonly',

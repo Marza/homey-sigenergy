@@ -17,11 +17,6 @@
   "category": "energy",
   "permissions": [],
   "api": {
-    "previewEconomics": {
-      "method": "POST",
-      "path": "/economics/preview",
-      "public": false
-    },
     "exportHistory": {
       "method": "GET",
       "path": "/history/export",
@@ -37,24 +32,9 @@
       "path": "/history/import",
       "public": false
     },
-    "previewCharging": {
-      "method": "POST",
-      "path": "/charging/preview",
-      "public": false
-    },
     "getEnergyCounters": {
       "method": "GET",
       "path": "/energy/counters",
-      "public": false
-    },
-    "previewSolar": {
-      "method": "POST",
-      "path": "/solar/preview",
-      "public": false
-    },
-    "getOptimizationPreview": {
-      "method": "GET",
-      "path": "/optimization/preview",
       "public": false
     },
     "getEconomicHistory": {
@@ -102,29 +82,14 @@
       "path": "/economics/contracts/restore",
       "public": false
     },
-    "compareBatteryReplay": {
-      "method": "POST",
-      "path": "/economics/replay",
-      "public": false
-    },
-    "compareSolarEvReplay": {
-      "method": "POST",
-      "path": "/economics/solar-ev-replay",
-      "public": false
-    },
-    "compareEvdcSessionReplay": {
-      "method": "POST",
-      "path": "/economics/evdc-session-replay",
-      "public": false
-    },
-    "inspectEconomicReadiness": {
-      "method": "POST",
-      "path": "/economics/readiness",
-      "public": false
-    },
     "getDataDiagnostics": {
       "method": "POST",
       "path": "/diagnostics/data-gaps",
+      "public": false
+    },
+    "getHouseholdForecast": {
+      "method": "GET",
+      "path": "/forecast/household",
       "public": false
     }
   },

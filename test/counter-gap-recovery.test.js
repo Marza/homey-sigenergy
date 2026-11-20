@@ -212,47 +212,6 @@ test('negative/positive power crossings and independent partial counter channels
   assert.deepEqual(r.accept({ values: {} }, binding, T + 100000), []);
 });
 
-test('repaired energy participates in readiness and indicative replay with explicit provenance; Tibber hours cannot replace battery quarters', () => {
-  const { fixture, input } = require('./fixtures/readiness.cjs');
-  const { checkReadiness } = require('../lib/pricing/comparison-readiness');
-  const { compareReplay } = require('../lib/pricing/replay-comparison');
-  const f = fixture();
-  const s = f.rows[0];
-  s.coverageMs = 780000;
-  s.directionalCoverageMs = 780000;
-  s.essCoverageMs = 780000;
-  s.fieldCoverageMs.pvW = 780000;
-  s.gridWh = 100;
-  s.importWh = 100;
-  assert.equal(checkReadiness(f.homey, { hours: 4, mode: 'battery' }, f.now).dataComplete, false);
-  const meta = (correctionWh) => ({
-    from: s.t + 60000,
-    to: s.t + 180000,
-    coverageMs: 120000,
-    correctionWh,
-    maxCollectionSkewMs: 2000,
-  });
-  s.counterRecovery = {
-    grid: meta({ gridWh: 150, importWh: 150, exportWh: 0 }),
-    battery: meta({ essWh: 0 }),
-    solar: meta({ pvWh: 0 }),
-  };
-  f.homey.app.history.getEnergySlots = () => f.rows.map(effectiveSlot);
-  const readiness = checkReadiness(f.homey, { hours: 4, mode: 'battery' }, f.now);
-  assert.equal(readiness.dataComplete, true);
-  assert.equal(readiness.counterRecoveredQuarters, 1);
-  const comparison = compareReplay(f.homey, input(), f.now);
-  assert.equal(comparison.counterRecoveredQuarters, 1);
-  assert.equal(comparison.financiallyComparable, false);
-  assert.equal(comparison.controlApplied, false);
-  delete s.counterRecovery.battery;
-  assert.equal(
-    checkReadiness(f.homey, { hours: 4, mode: 'battery' }, f.now).checks.batteryCoverageQuarters
-      .missingQuarters,
-    1,
-  );
-});
-
 test('a nominal endpoint at a quarter boundary cannot attribute next-quarter counter collection to the previous quarter', () => {
   const r = new CounterGapRecovery();
   r.accept(counters(780), binding, T + 780000);

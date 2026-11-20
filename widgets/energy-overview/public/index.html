@@ -137,21 +137,10 @@
           <summary>Visa toppar hittills</summary>
           <small class="peak-list" id="meterPeaks">Inga giltiga timtoppar ännu.</small>
         </details>
-        <small
-          >Månadsbeloppet är preliminärt och kan ändras när fler timmar rapporteras.
-          Batteribesparing beräknas separat från lokal historik.</small
-        >
+        <small>Månadsbeloppet är preliminärt och kan ändras när fler timmar rapporteras.</small>
       </section>
       <section class="recommend">
-        <b>Rekommenderade inställningar</b>
-        <div class="grid">
-          <div class="tile">Effekttak<strong id="cap">–</strong></div>
-          <div class="tile">Batterireserv<strong id="reserve">–</strong></div>
-        </div>
-        <small id="recommendState">Beräknas från historik</small>
-      </section>
-      <section class="recommend">
-        <b>Sigenergy – lokal beräkning och simulering</b>
+        <b>Sigenergy – lokal effektavgift</b>
         <div class="grid">
           <div class="tile">
             <span id="demandPeakLabel">Medel av timtoppar</span><strong id="demandKw">–</strong>
@@ -166,11 +155,6 @@
           <summary>Visa lokala toppar hittills</summary>
           <small class="peak-list" id="demandPeaks">Inga giltiga timtoppar ännu.</small>
         </details>
-        <div class="grid">
-          <div class="tile">Simulerad effektavgift<strong id="simDemand">–</strong></div>
-          <div class="tile">Möjlig effektbesparing<strong id="simSaving">–</strong></div>
-        </div>
-        <small id="savingState">Historisk simulering, inte garanterad besparing.</small>
       </section>
       <footer>
         Inlärningsläge · Ingen styrning · <span id="state" role="status">Väntar på mätdata</span>
@@ -236,54 +220,18 @@
             );
             set('state', 'Historik (inte realtid)');
           });
-          get('optimizationRecommendation', (error, r) => {
-            const fresh = r && SourceStatus.isFresh(r.updatedAt, 35 * 60 * 1000);
-            const valid =
-              !error &&
-              fresh &&
-              r.status === 'illustrative' &&
-              Number.isFinite(r.capKW) &&
-              Number.isFinite(r.reservePercent);
-            set(
-              'cap',
-              valid
-                ? r.capKW.toLocaleString('sv-SE', {
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  }) + ' kW'
-                : '–',
-            );
-            set('reserve', valid ? r.reservePercent.toLocaleString('sv-SE') + ' %' : '–');
-            set(
-              'recommendState',
-              valid
-                ? 'Preliminär simulering · Ingen automatisk styrning · Ej verifierad tariff'
-                : !fresh
-                  ? 'Ingen aktuell rekommendation'
-                  : r?.reason || 'Otillräcklig historik',
-            );
-          });
           const coverageText = (coverage) =>
             coverage
               ? ` · ${coverage.completeHours}/${coverage.expectedHours} mättimmar · ${coverage.missingHours} saknade · ${coverage.pendingHours} återstående`
               : ' · Månadstäckning okänd';
           get('demandTariff', (tariffError, tariff) => {
             const clear = (message) => {
-              for (const id of [
-                'demandKw',
-                'demandSek',
-                'simDemand',
-                'simSaving',
-                'meterKw',
-                'meterSek',
-              ])
-                set(id, '–');
+              for (const id of ['demandKw', 'demandSek', 'meterKw', 'meterSek']) set(id, '–');
               set('demandState', message);
               set('meterState', message);
               set('monthlySource', 'Inget giltigt månadsunderlag');
               set('meterPeaks', 'Inga giltiga timtoppar för aktuell tariff/månad.');
               set('demandPeaks', 'Inga giltiga timtoppar för aktuell tariff/månad.');
-              set('savingState', message + ' · Ingen garanterad besparing');
             };
             set('demandPeakLabel', TariffConfig.peakLabel(tariffError ? null : tariff));
             set('meterPeakLabel', TariffConfig.peakLabel(tariffError ? null : tariff));
@@ -505,31 +453,6 @@
                           coverageText(r?.coverage),
               );
             });
-            get('tariffOptimization', (error, r) => {
-              const valid =
-                !error &&
-                TariffConfig.matchesResult(r?.baseline, tariff) &&
-                r.status === 'provisional' &&
-                Number.isFinite(r.best?.simulatedDemandSek) &&
-                Number.isFinite(r.best?.demandSavingSek);
-              set(
-                'simDemand',
-                valid ? Math.round(r.best.simulatedDemandSek).toLocaleString('sv-SE') + ' kr' : '–',
-              );
-              set(
-                'simSaving',
-                valid ? Math.round(r.best.demandSavingSek).toLocaleString('sv-SE') + ' kr' : '–',
-              );
-              set(
-                'savingState',
-                valid
-                  ? 'Historiskt scenario för observerade timmar · Endast effektavgift · Ej verifierad tariff' +
-                      coverageText(r.baseline?.coverage) +
-                      ' · ' +
-                      (r.backupAdvisory?.reason || '')
-                  : 'Inväntar tillräckliga beräkningar för sparad tariff och aktuell månad · Ingen garanterad besparing',
-              );
-            });
           });
           const temp = values.nibeStatus?.readings?.outdoorC;
           set(
@@ -559,12 +482,8 @@
               'soc',
               'batteryPower',
               'outdoor',
-              'cap',
-              'reserve',
               'demandKw',
               'demandSek',
-              'simDemand',
-              'simSaving',
               'meterKw',
               'meterSek',
             ])
@@ -573,9 +492,7 @@
               'updated',
               'state',
               'outdoorState',
-              'recommendState',
               'demandState',
-              'savingState',
               'meterState',
               'monthlySource',
               'meterPeaks',

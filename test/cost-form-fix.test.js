@@ -5,7 +5,6 @@ const test = require('node:test'),
   path = require('node:path'),
   vm = require('node:vm');
 const model = require('../lib/pricing/cost-model');
-const { compareEconomicScenarios } = require('../lib/pricing/economic-comparison');
 const legacy = () => ({
   schema: 1,
   currency: 'SEK',
@@ -223,40 +222,4 @@ test('raw spot gets VAT once, billed totals stay inclusive and signed export nev
     { otherImportExVatSekPerKWh: undefined },
   ])
     assert.throws(() => model.validateCostContract({ ...contract(), ...patch }));
-});
-test('economic request version and price basis prevent raw spot being misread as VAT-inclusive input', () => {
-  const t = Date.parse('2026-06-10T10:00Z');
-  const series = {
-    slots: [{ t, gridWh: 1000, importWh: 1000, exportWh: 0, coverageMs: 900000 }],
-    dischargeKWh: 0,
-    demandChargeSek: 0,
-    initialStoredKWh: 5,
-    finalStoredKWh: 5,
-  };
-  const input = {
-    schema: 2,
-    currency: 'SEK',
-    importSource: 'Synthetic raw spot',
-    exportSource: 'Synthetic payout',
-    importIncludesEnergyTax: false,
-    importPriceBasis: 'spot-ex-vat',
-    prices: [{ t, end: t + 900000, importPriceSekPerKWh: 1, exportSekPerKWh: 0.4 }],
-    baseline: series,
-    scenario: series,
-  };
-  const r = compareEconomicScenarios(input, contract());
-  assert.equal(r.status, 'provisional');
-  assert.ok(Math.abs(r.baseline.importCostSek - 1.825) < 1e-9);
-  assert.equal(r.provenance.exportVatApplication, 'as-supplied-no-added-vat');
-  assert.equal(compareEconomicScenarios({ ...input, schema: 1 }, contract()).status, 'unavailable');
-  assert.equal(
-    compareEconomicScenarios({ ...input, importPriceBasis: 'total-incl-vat' }, contract()).status,
-    'unavailable',
-  );
-  const old = {
-    ...input,
-    schema: 1,
-    prices: [{ t, end: t + 900000, importInclVatSekPerKWh: 1.25, exportSekPerKWh: 0.4 }],
-  };
-  assert.equal(compareEconomicScenarios(old, legacy()).status, 'provisional');
 });

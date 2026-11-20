@@ -99,7 +99,7 @@ test('snapshot excludes credentials, addresses, unknown fields and all but the l
   assert.equal(r.values.historyState.slots[0].t, now);
   assert.equal(r.values.nibeStatus.readings.outdoorC, 3);
   assert.equal(r.values.demandEstimate.estimatedSek, 300);
-  assert.equal(r.values.tariffOptimization.best.demandSavingSek, 50);
+  assert.equal(r.values.tariffOptimization, undefined);
   assert.ok(!JSON.stringify(r).includes(secret));
   assert.ok(!JSON.stringify(r).includes('tibberToken'));
 });

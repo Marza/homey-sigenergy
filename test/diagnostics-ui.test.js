@@ -190,18 +190,6 @@ for (const [file, grid, outdoor] of [
     assert.equal(v.text(outdoor), '–');
   });
 }
-test('widget rejects future recommendations', () => {
-  const v = view('widgets/energy-overview/public/index.html');
-  v.values.optimizationRecommendation = {
-    status: 'illustrative',
-    capKW: 4,
-    reservePercent: 20,
-    updatedAt: new Date(Date.now() + 600000).toISOString(),
-  };
-  v.refresh();
-  assert.equal(v.text('cap'), '–');
-  assert.equal(v.text('reserve'), '–');
-});
 
 test('settings exposes partial battery errors and omits failed limits from temperature context', () => {
   const v = view('settings/index.html');

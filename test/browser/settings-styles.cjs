@@ -5,21 +5,10 @@ const http = require('node:http');
 const path = require('node:path');
 const { chromium } = require('playwright');
 const root = path.resolve(process.env.SETTINGS_UI_ROOT || path.join(__dirname, '../..'));
-const { DEFAULTS } = require(path.join(root, 'lib/charging/planner'));
 const hostCss = fs.readFileSync(
   process.env.SETTINGS_HOST_CSS || path.join(__dirname, '../fixtures/settings-host-reset.css'),
 );
-const categories = [
-  'connections',
-  'household',
-  'costs',
-  'tariff',
-  'car',
-  'battery',
-  'solar',
-  'economics',
-  'data',
-];
+const categories = ['connections', 'household', 'costs', 'tariff', 'economics', 'data'];
 function contrast(a, b) {
   function luminance(color) {
     const rgb = color
@@ -39,7 +28,6 @@ const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/javascript');
     // The host CSS arrives after the app CSS, before onHomeyReady, like the SDK.
     const initial = {
-      chargingConfig: structuredClone(DEFAULTS),
       costContract: {
         schema: 2,
         currency: 'SEK',
@@ -64,27 +52,26 @@ const server = http.createServer((req, res) => {
         distinctDays: true,
         rateSekPerKw: 40,
       },
-      optimizerConfig: {
-        minCapKW: 2,
-        maxCapKW: 4,
-        capStepKW: 1,
-        reserveMinPercent: 10,
-        reserveMaxPercent: 30,
-        reserveStepPercent: 10,
-        backupReservePercent: 10,
-        batteryCapacityKWh: 10,
-        initialSocPercent: 50,
-        maxChargeKW: 3,
-        maxDischargeKW: 3,
-        roundTripEfficiency: 0.9,
-        batteryWearSekPerKWh: 0,
-      },
-      autoBatteryValues: false,
     };
+    const { HouseholdForecast } = require('../../lib/energy/household-forecast');
+    const map = new Map(),
+      q = 900000,
+      start = Date.parse('2026-10-18T12:00Z');
+    const rows = Array.from({ length: 96 * 18 }, (_, i) => ({
+      t: start + i * q,
+      householdCoverageMs: q,
+      householdWh: 250,
+    }));
+    const model = new HouseholdForecast(
+      { get: (k) => map.get(k), set: (k, v) => map.set(k, v) },
+      { getSlots: () => rows },
+    );
+    model.refresh(start + q * 96 * 14);
+    const forecast = model.report(start + q * 96 * 15 + q);
     res.end(`window.syntheticSettings=${JSON.stringify(initial)};window.syntheticWrites=[];window.syntheticApiWrites=[];window.Homey={
       get:(key,cb)=>setTimeout(()=>new URLSearchParams(location.search).has('readFail')&&['demandTariff','chargingConfig'].includes(key)?cb(Error('Synthetic read failure')):cb(null,structuredClone(window.syntheticSettings[key]??null)),20),
       set:(key,value,cb)=>{window.syntheticWrites.push(key);window.syntheticSettings[key]=structuredClone(value);setTimeout(()=>cb(null),20);},
-      api:(method,url,body,cb)=>{if(method!=='GET')window.syntheticApiWrites.push(url);cb(Error('Synthetic unavailable data'));},
+      api:(method,url,body,cb)=>{if(method!=='GET')window.syntheticApiWrites.push(url);if(url==='/forecast/household')cb(null,${JSON.stringify(forecast)});else cb(Error('Synthetic unavailable data'));},
       ready:()=>window.appReady=true
     };document.addEventListener('DOMContentLoaded',()=>{
       const link=document.createElement('link');link.rel='stylesheet';link.href='/host.css';
@@ -135,6 +122,11 @@ const server = http.createServer((req, res) => {
       await page.goto(`http://127.0.0.1:${server.address().port}/`);
       await page.waitForFunction(() => window.appReady);
       assert.equal(await page.locator('link').last().getAttribute('href'), '/host.css');
+      await page.locator('#tab-forecast').click();
+      await page.waitForSelector('#forecast-chart svg');
+      assert.equal(await page.locator('#forecast-total').innerText(), '24 kWh');
+      assert.equal(await page.locator('#forecast-chart table tr').count(), 97);
+      assert.equal(await page.locator('#forecast-comparison svg path').count(), 2);
       await page.locator('#tab-settings').click();
       for (const category of categories) {
         if (width < 768) await page.locator('#settingsCategory').selectOption(category);
@@ -143,9 +135,6 @@ const server = http.createServer((req, res) => {
           for (const detail of details) detail.open = true;
         });
         if (category === 'economics') {
-          await page
-            .locator('#evdc-replay-options')
-            .evaluate((fieldset) => (fieldset.hidden = false));
           await page.locator('#costVersionBackup').evaluate((detail) => (detail.open = false));
           assert.equal(await page.locator('#econ-refresh').isVisible(), true);
           await page.locator('#econ-refresh').click();
@@ -233,7 +222,7 @@ const server = http.createServer((req, res) => {
       assert.deepEqual(await page.evaluate(() => window.syntheticWrites), []);
       assert.deepEqual(await page.evaluate(() => window.syntheticApiWrites), []);
       await page.locator('#setupGuide > summary').click();
-      assert.equal(await page.locator('#setupGuide [data-settings-link]').count(), 8);
+      assert.equal(await page.locator('#setupGuide [data-settings-link]').count(), 5);
       await page.locator('#setupGuide [data-settings-link="tariff"]').click();
       assert.equal(await page.locator('#setupGuide').evaluate((e) => e.open), false);
       assert.equal(await page.locator('#settings-tariff').isVisible(), true);
@@ -263,49 +252,6 @@ const server = http.createServer((req, res) => {
       assert.equal(await page.evaluate(() => window.syntheticWrites.length), count);
       await page.locator('[data-weekday-preset="all"]').click();
       assert.equal(await page.locator('#tariffWeekdays').inputValue(), '1,2,3,4,5,6,0');
-      await category('car');
-      assert.equal(await page.locator('#mon-time').isDisabled(), true);
-      await page.locator('#mon-enabled').check();
-      await page.locator('#mon-time').fill('07:35');
-      await page.locator('#mon-soc').fill('150');
-      await page.locator('#copyWeekdayTargets').click();
-      assert.match(
-        await page.locator('#scheduleHelperMessage').innerText(),
-        /giltig tid och laddnivå/,
-      );
-      assert.equal(await page.locator('#tue-enabled').isChecked(), false);
-      await page.locator('#mon-soc').fill('72');
-      await page.locator('#copyWeekdayTargets').click();
-      for (const day of ['tue', 'wed', 'thu', 'fri']) {
-        assert.equal(await page.locator('#' + day + '-enabled').isChecked(), true);
-        assert.equal(await page.locator('#' + day + '-time').inputValue(), '07:35');
-        assert.equal(await page.locator('#' + day + '-soc').inputValue(), '72');
-      }
-      assert.equal(await page.locator('#sat-enabled').isChecked(), false);
-      assert.equal(
-        await page.evaluate(() => window.syntheticSettings.chargingConfig.dailyTargets.tue.enabled),
-        false,
-      );
-      await page.locator('#save').click();
-      await page.waitForFunction(() =>
-        document.querySelector('#message').textContent.includes('sparat lokalt'),
-      );
-      assert.equal(
-        await page.evaluate(() => window.syntheticSettings.chargingConfig.dailyTargets.tue.soc),
-        72,
-      );
-      assert.equal(
-        await page.evaluate(() => window.syntheticSettings.chargingConfig.timezone),
-        'Europe/Stockholm',
-      );
-      await page.locator('#sat-enabled').check();
-      await page.locator('#sat-time').fill('09:10');
-      await page.locator('#sat-soc').fill('61');
-      await page.locator('#sat-enabled').uncheck();
-      await page.locator('#copyWeekendTarget').click();
-      assert.equal(await page.locator('#sun-enabled').isChecked(), false);
-      assert.equal(await page.locator('#sun-time').isDisabled(), true);
-      assert.equal(await page.locator('#sun-time').inputValue(), '09:10');
       await category('costs');
       await page.locator('#costOtherImport').fill('0,037125');
       assert.match(await page.locator('#unit-preview-costOtherImport').innerText(), /3,7125 öre/);
@@ -325,7 +271,7 @@ const server = http.createServer((req, res) => {
         }),
       );
       assert.equal(await page.locator('#econ-from').inputValue(), '');
-      await category('solar');
+      await category('household');
       await category('costs');
       assert.equal(await page.locator('#costOtherImport').inputValue(), '0,037125');
       await page.locator('#saveCostContract').click();
@@ -337,20 +283,7 @@ const server = http.createServer((req, res) => {
         0.037125,
       );
       assert.equal(await page.evaluate(() => window.syntheticSettings.costContract.vatRate), 0.2);
-      await category('battery');
-      const missing = page.locator('#maxDischargeKW');
-      await missing.fill('');
-      await missing.evaluate((e) => (e.closest('details').open = false));
-      const beforeInvalid = await page.evaluate(() => window.syntheticWrites.length);
-      await page.locator('#saveOptimizer').click();
-      assert.equal(await missing.evaluate((e) => e.closest('details').open), true);
-      assert.equal(await missing.evaluate((e) => document.activeElement === e), true);
-      assert.equal(await page.evaluate(() => window.syntheticWrites.length), beforeInvalid);
-      await category('economics');
-      await page.locator('[data-econ-hours="168"]').click();
-      assert.equal(await page.locator('#econ-hours').inputValue(), '168');
       assert.equal(await page.locator('#econ-date-confirm').isChecked(), false);
-      assert.equal(await page.locator('#econ-ev-absent-confirm').isChecked(), false);
       await category('data');
       await page.locator('[data-settings-detail]').click();
       assert.equal(await page.locator('#settings-economics').isVisible(), true);
@@ -371,8 +304,6 @@ const server = http.createServer((req, res) => {
     await page.waitForFunction(() =>
       document.querySelector('#tariffMessage').textContent.includes('kunde inte läsas'),
     );
-    assert.equal(await page.locator('#copyWeekdayTargets').isDisabled(), true);
-    assert.equal(await page.locator('#copyWeekendTarget').isDisabled(), true);
     for (const day of [0, 1, 2, 3, 4, 5, 6])
       assert.equal(await page.locator('#tariffDay' + day).isDisabled(), true);
     assert.deepEqual(await page.evaluate(() => window.syntheticWrites), []);

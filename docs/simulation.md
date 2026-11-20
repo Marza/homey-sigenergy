@@ -1,4 +1,6 @@
-# Advisory simulation models
+# Advisory simulation models (archived)
+
+This document describes the retired simulation in releases through v0.17.44. For the current feature, see the [household forecast](../README.md#household-forecast).
 
 The settings page requests the runtime simulation from authenticated GET `/optimization/preview`. Homey evaluates it with the same calculation history and simulator as scheduled recommendations. The generated browser module still handles form validation. `advanced-simulator.js` is a compatibility entry point into that engine.
 

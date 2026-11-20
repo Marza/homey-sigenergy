@@ -5,7 +5,7 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
   function bind(document) {
-    const idle = { refreshWeekdays() {}, refreshSchedule() {}, refreshUnits() {}, reveal() {} };
+    const idle = { refreshWeekdays() {}, refreshUnits() {}, reveal() {} };
     if (!document.querySelectorAll('.settings-page').length) return idle;
     const el = (id) => document.getElementById(id);
     const emit = (input) => {
@@ -47,48 +47,6 @@
             (Number(day.dataset.tariffWeekday) >= 1 && Number(day.dataset.tariffWeekday) <= 5);
         writeDays();
       });
-    const scheduleDays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    function refreshSchedule() {
-      const ready = !el('save').disabled && scheduleDays.every((day) => el(day + '-enabled'));
-      el('copyWeekdayTargets').disabled = !ready;
-      el('copyWeekendTarget').disabled = !ready;
-      if (!ready) return;
-      for (const day of scheduleDays) {
-        const active = el(day + '-enabled').checked;
-        el(day + '-time').disabled = !active;
-        el(day + '-soc').disabled = !active;
-      }
-    }
-    el('days').addEventListener('change', refreshSchedule);
-    function copyTargets(source, targets) {
-      const time = el(source + '-time'),
-        soc = el(source + '-soc');
-      if (
-        !/^([01]\d|2[0-3]):[0-5]\d$/.test(time.value) ||
-        !soc.value.trim() ||
-        !Number.isFinite(Number(soc.value)) ||
-        Number(soc.value) < 0 ||
-        Number(soc.value) > 100
-      ) {
-        el('scheduleHelperMessage').textContent =
-          'Fyll i en giltig tid och laddnivå på källdagen innan du kopierar.';
-        reveal(el(source + '-enabled'));
-        return;
-      }
-      for (const day of targets) {
-        el(day + '-enabled').checked = el(source + '-enabled').checked;
-        el(day + '-time').value = time.value;
-        el(day + '-soc').value = soc.value;
-        for (const suffix of ['enabled', 'time', 'soc']) emit(el(day + '-' + suffix));
-      }
-      refreshSchedule();
-      el('scheduleHelperMessage').textContent =
-        'Tid, laddmål och aktivt/inaktivt val har kopierats i formuläret. Spara schema för att använda ändringen.';
-    }
-    el('copyWeekdayTargets').addEventListener('click', () =>
-      copyTargets('mon', ['tue', 'wed', 'thu', 'fri']),
-    );
-    el('copyWeekendTarget').addEventListener('click', () => copyTargets('sat', ['sun']));
     el('costSetToday').addEventListener('click', () => {
       const now = new Date();
       el('costCheckedOn').value = [
@@ -126,12 +84,7 @@
       for (const output of document.querySelectorAll('[data-unit-preview-for]'))
         refreshUnit(output);
     }
-    for (const button of document.querySelectorAll('[data-econ-hours]'))
-      button.addEventListener('click', () => {
-        el('econ-hours').value = button.dataset.econHours;
-        emit(el('econ-hours'));
-      });
-    for (const id of ['saveCostContract', 'saveTariff', 'save', 'saveOptimizer'])
+    for (const id of ['saveCostContract', 'saveTariff'])
       el(id).addEventListener(
         'click',
         () => {
@@ -143,7 +96,7 @@
         },
         true,
       );
-    return { refreshWeekdays, refreshSchedule, refreshUnits, reveal };
+    return { refreshWeekdays, refreshUnits, reveal };
   }
   return { bind };
 });

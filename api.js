@@ -1,34 +1,19 @@
 'use strict';
 // Manifest routes are authenticated by Homey; none are public.
-const { compareEconomicScenarios } = require('./lib/pricing/economic-comparison');
 const { exportBackup, previewBackup, restoreBackup } = require('./lib/history-backup');
 const {
   timelineStatus,
   publishContract,
   restoreTimeline,
 } = require('./lib/pricing/contract-timeline');
-const { checkReadiness } = require('./lib/pricing/comparison-readiness');
-const { compareEvdcSession } = require('./lib/pricing/evdc-session-replay');
-const { compareSolarEv } = require('./lib/pricing/solar-ev-comparison');
-const { compareReplay } = require('./lib/pricing/replay-comparison');
 const { getEnergyHistory } = require('./lib/pricing/energy-history');
-const { previewSolar } = require('./lib/charging/solar-preview');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
-  async getOptimizationPreview({ homey }) {
-    return homey.app.getOptimizationPreview();
+  async getHouseholdForecast({ homey }) {
+    return homey.app.forecast.report();
   },
   async getDataDiagnostics({ homey, body }) {
     return homey.app.dataDiagnostics.report(homey, body);
-  },
-  async inspectEconomicReadiness({ homey, body }) {
-    return checkReadiness(homey, body);
-  },
-  async compareEvdcSessionReplay({ homey, body }) {
-    return compareEvdcSession(homey, body);
-  },
-  async compareSolarEvReplay({ homey, body }) {
-    return compareSolarEv(homey, body);
   },
   async getContractTimeline({ homey }) {
     return timelineStatus(homey);
@@ -38,9 +23,6 @@ module.exports = {
   },
   async restoreCostContracts({ homey, body }) {
     return restoreTimeline(homey, body);
-  },
-  async compareBatteryReplay({ homey, body }) {
-    return compareReplay(homey, body);
   },
   async getTibberHistoryPriceStatus({ homey }) {
     return homey.app.tibberHistoryPrices.status();
@@ -60,17 +42,8 @@ module.exports = {
   async getEconomicHistory({ homey }) {
     return getEnergyHistory(homey);
   },
-  async previewSolar({ homey, body }) {
-    return previewSolar(homey, body);
-  },
   async getEnergyCounters({ homey }) {
     return getCounterDiagnostics(homey);
-  },
-  async previewEconomics({ homey, body }) {
-    return compareEconomicScenarios(body, homey.settings.get('costContract'));
-  },
-  async previewCharging({ homey, body }) {
-    return homey.app.getChargingPreview(body);
   },
   async exportHistory({ homey }) {
     return exportBackup(homey);
