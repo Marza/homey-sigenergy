@@ -11,6 +11,7 @@ const hostCss = fs.readFileSync(
 );
 const categories = [
   'connections',
+  'household',
   'costs',
   'tariff',
   'car',
@@ -142,6 +143,9 @@ const server = http.createServer((req, res) => {
           for (const detail of details) detail.open = true;
         });
         if (category === 'economics') {
+          await page
+            .locator('#evdc-replay-options')
+            .evaluate((fieldset) => (fieldset.hidden = false));
           await page.locator('#costVersionBackup').evaluate((detail) => (detail.open = false));
           assert.equal(await page.locator('#econ-refresh').isVisible(), true);
           await page.locator('#econ-refresh').click();

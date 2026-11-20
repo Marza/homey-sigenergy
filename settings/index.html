@@ -14,6 +14,8 @@
     <script src="solar-preview.js"></script>
     <script src="tibber-history-prices.js"></script>
     <script src="economic-replay.js"></script>
+    <script src="household-settings.js"></script>
+    <script src="evdc-session-replay.js"></script>
     <script src="economic-readiness.js"></script>
     <script src="data-diagnostics.js"></script>
     <link rel="stylesheet" href="styles.css" />
@@ -369,6 +371,7 @@
         <label for="settingsCategory" class="hy-nostyle">Område</label
         ><select id="settingsCategory" class="hy-nostyle">
           <option value="connections">Anslutningar</option>
+          <option value="household">Hushåll</option>
           <option value="costs">Elavtal</option>
           <option value="tariff">Effektavgift</option>
           <option value="car">Elbil</option>
@@ -388,6 +391,13 @@
             class="hy-nostyle"
           >
             <span>Anslutningar</span><small>SigEnergy, Nibe och Tibber</small></button
+          ><button
+            type="button"
+            data-settings-category="household"
+            aria-controls="settings-household"
+            class="hy-nostyle"
+          >
+            <span>Hushåll</span><small>Huvudsäkring och importgräns</small></button
           ><button
             type="button"
             data-settings-category="costs"
@@ -590,6 +600,45 @@
                 </div>
               </div>
             </details>
+          </section>
+          <section
+            id="settings-household"
+            class="settings-page"
+            aria-labelledby="settings-heading-household"
+            hidden
+          >
+            <header class="page-heading">
+              <p class="eyebrow">Inställningar</p>
+              <h3 id="settings-heading-household" tabindex="-1">Hushåll</h3>
+              <p>Gränsen gäller hushållets totala nätimport, inklusive laddare och husbatteri.</p>
+            </header>
+            <fieldset>
+              <legend>Hela hushållets importgräns</legend>
+              <label class="hy-nostyle">
+                Importgräns (kW, valfritt)
+                <input inputmode="decimal" class="hy-nostyle" id="household-import-limit" />
+              </label>
+              <label class="hy-nostyle">
+                Huvudsäkring per fas (A, trefas, valfritt)
+                <input
+                  type="number"
+                  class="hy-nostyle"
+                  id="household-main-fuse"
+                  min="1"
+                  max="1000"
+                  step="1"
+                />
+              </label>
+              <p>
+                Ange ett eller båda värdena. Om båda är ifyllda används den lägre gränsen i
+                beräkningen. Huvudsäkringen ger ett ungefärligt jämförelsevärde vid balanserad
+                trefaslast.
+              </p>
+              <button type="button" class="hy-nostyle" id="household-save-limits">
+                Spara hushållets gränser
+              </button>
+              <p id="household-limits-status" role="status" aria-live="polite"></p>
+            </fieldset>
           </section>
           <section
             id="settings-costs"
@@ -2093,6 +2142,69 @@
                 </section>
               </div>
             </details>
+            <details class="settings-details">
+              <summary>4. Flytta ett uppmätt DC-laddpass</summary>
+              <div class="details-body">
+                <p>
+                  Jämför senaste avslutade DC-pass med en tidigare start. Samma laddenergi fördelas
+                  över den längre tiden och sluttiden förblir densamma.
+                </p>
+                <button type="button" class="hy-nostyle" id="evdc-replay-find">
+                  Hitta senaste DC-pass
+                </button>
+                <p id="evdc-replay-session"></p>
+                <p>
+                  Jämförelsen använder hushållets sparade importgräns.
+                  <button type="button" class="hy-nostyle" data-settings-link="household">
+                    Öppna hushållsinställningarna
+                  </button>
+                </p>
+                <fieldset id="evdc-replay-options" hidden>
+                  <legend>Alternativ start</legend>
+                  <label class="hy-nostyle">
+                    Minuter tidigare eller sökutrymme (steg om 15 minuter)
+                    <input
+                      type="number"
+                      class="hy-nostyle"
+                      id="evdc-replay-minutes"
+                      min="0"
+                      max="1440"
+                      step="15"
+                      value="60"
+                    />
+                  </label>
+                  <label class="hy-nostyle">
+                    Antagen verkningsgrad från anläggningen till DC-uttaget (%)
+                    <input
+                      type="number"
+                      class="hy-nostyle"
+                      id="evdc-replay-efficiency"
+                      min="50"
+                      max="100"
+                      step="any"
+                      value="100"
+                    />
+                  </label>
+                  <p>
+                    100 % använder uppmätt DC-energi som motsvarande last. Lägre värden räknar med
+                    ytterligare förluster. Hus, sol, AC-laddning och husbatteri följer sina
+                    observerade flöden.
+                  </p>
+                  <button type="button" class="hy-nostyle" id="evdc-replay-run">
+                    Jämför med tidigare start
+                  </button>
+                  <button type="button" class="hy-nostyle" id="evdc-replay-optimise">
+                    Hitta billigaste profilen under importgränsen
+                  </button>
+                  <p>
+                    Sökningen behåller energin i sista laddkvarten och använder högst den uppmätta
+                    toppeffekten för DC. Den lägger bara laddning utanför tider med effektavgift.
+                  </p>
+                </fieldset>
+                <p id="evdc-replay-status" role="status" aria-live="polite"></p>
+                <div id="evdc-replay-results"></div>
+              </div>
+            </details>
           </section>
           <section
             id="settings-data"
@@ -3368,6 +3480,7 @@
         bindEconomicHistory(Homey);
         TibberHistoryPricesSettings.bind(Homey);
         EconomicReplaySettings.bind(Homey);
+        HouseholdSettings.bind(Homey, EvdcSessionReplay.bind(Homey));
         EconomicReadinessSettings.bind(Homey);
         DataDiagnosticsSettings.bind(Homey);
         SolarPreview.bind(Homey);
