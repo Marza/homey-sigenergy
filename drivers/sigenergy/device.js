@@ -248,8 +248,23 @@ module.exports = class SigenergyDevice extends Homey.Device {
         (!this.lastEnergyProbeAt || Date.now() - this.lastEnergyProbeAt >= 60000)
       ) {
         this.lastEnergyProbeAt = Date.now();
+        let flowMeters, meterReadAt;
+        if (this.householdEnabled) {
+          try {
+            flowMeters = await reader.flowMeterSnapshot();
+          } catch {
+            /* Older firmware may only support individual counters. */
+          }
+          if (!current()) return;
+          meterReadAt = Date.now();
+          this.homey.app.history?.observeFlowMeters?.(flowMeters, meterReadAt, sourceKey(settings));
+        }
         try {
-          const raw = await reader.energyCounters(PROFILE, settings.energySolarSource || 'self');
+          const raw = await reader.energyCounters(
+            PROFILE,
+            settings.energySolarSource || 'self',
+            flowMeters,
+          );
           if (!current()) return;
           const result = advance(this.getStoreValue('energyCounterState'), {
             values: raw.values,
@@ -295,7 +310,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
           this.energyMeters = { readAt: Date.now(), values: {}, errors: {} };
           this.error('Optional Energy counter read or persistence failed');
         }
-        if (current() && this.householdEnabled) await this.pollHouseholdEnergy(reader, current);
+        if (current() && this.householdEnabled)
+          await this.pollHouseholdEnergy(reader, current, flowMeters, meterReadAt);
       }
       if (current()) {
         await this.setAvailable();
@@ -335,13 +351,21 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.homey.settings.set('householdCounterStatus', null);
     this.homey.settings.set('householdCounterError', 'Kunde inte läsa husets energiräknare.');
   }
-  async pollHouseholdEnergy(reader, current) {
+  async pollHouseholdEnergy(reader, current, meters, meterReadAt) {
     try {
-      const raw = await reader.householdEnergyCounter();
+      const raw = meters ? String(meters.house) : await reader.householdEnergyCounter();
       if (!current()) return;
-      const at = Date.now();
+      const at = meters ? meterReadAt : Date.now();
       const averageKW = this.homey.app.history?.observeHouseholdCounter?.(raw, at) ?? null;
+      let powerW = null;
+      try {
+        powerW = await reader.householdPower();
+      } catch {
+        /* Optional general-load register. */
+      }
+      if (!current()) return;
       this.homey.settings.set('householdCounterStatus', {
+        powerW,
         totalKWh: Number(raw) / 100,
         averageKW,
         readAt: new Date(at).toISOString(),

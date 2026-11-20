@@ -6,6 +6,12 @@
     <title>Energiflöden</title>
     <link rel="stylesheet" href="history-widget.css" />
     <style>
+      #flow-method {
+        display: block;
+        width: 100%;
+        padding: 4px 8px;
+        margin: 3px 0;
+      }
       .flow-headings,
       .flow-board {
         display: grid;
@@ -115,6 +121,12 @@
       </div>
       <p id="history-status" role="status"></p>
       <figure id="history-results" hidden>
+        <label for="flow-method" class="sub">Underlag för diagrammet</label>
+        <select id="flow-method">
+          <option value="meters">Räknare · beräknade flöden</option>
+          <option value="history">Kvartshistorik · totalsummor</option>
+        </select>
+        <p class="sub" id="flow-status" role="status"></p>
         <div class="flow-headings">
           <h2 id="into-title">Tillfört</h2>
           <h2 id="out-title">Använt / export</h2>
@@ -129,11 +141,12 @@
             <summary>Mättäckning och andelar</summary>
             <p id="flow-coverage"></p>
             <ul id="flow-details"></ul>
-            <p>
+            <ul id="flow-links"></ul>
+            <p id="history-explanation">
               Andelen gäller uppmätt energi på respektive sida. Banden möts i anläggningen. Hur
               mycket varje källa levererade till varje last är okänt.
             </p>
-            <p>Batteri och DC delas efter kvartens netto. Hus är förbrukningen utan billaddning.</p>
+            <p>Hus är förbrukningen utan billaddning.</p>
           </details>
         </figcaption>
       </figure>
@@ -150,6 +163,7 @@
               ['battery', 'Batteri'],
               ['dc', 'EVDC'],
               ['grid', 'Nät'],
+              ['generator', 'Generator'],
             ],
           },
           {
@@ -164,6 +178,12 @@
             ],
           },
         ];
+        const method = document.getElementById('flow-method');
+        let preference, lastReport, meterReport;
+        method.onchange = () => {
+          preference = method.value;
+          render(lastReport);
+        };
         const canvas = document.getElementById('flow-diagram');
         const redraw = canvasPainter(canvas, (ctx, width, height, palette) => {
           const bounds = canvas.getBoundingClientRect();
@@ -179,6 +199,44 @@
           // One thickness scale on both sides. The common bus represents an unknown mix.
           const scale = Math.min(...groups.flat().map(({ rect, amount }) => rect.height / amount));
           if (!Number.isFinite(scale)) return;
+          if (meterReport) {
+            const edges = groups.map((nodes) =>
+              Object.fromEntries(
+                nodes.map((node) => [
+                  node.key,
+                  {
+                    ...node,
+                    top: node.rect.top - bounds.top + (node.rect.height - node.amount * scale) / 2,
+                  },
+                ]),
+              ),
+            );
+            for (const { from, to, kWh } of meterReport.links) {
+              const left = edges[0][from],
+                right = edges[1][to];
+              const x = left.rect.right - bounds.left,
+                end = right.rect.left - bounds.left,
+                mid = (x + end) / 2;
+              const a = left.top,
+                b = right.top,
+                band = kWh * scale;
+              const gradient = ctx.createLinearGradient(x, 0, end, 0);
+              gradient.addColorStop(0, palette[from] || palette.muted);
+              gradient.addColorStop(1, palette[to]);
+              ctx.fillStyle = gradient;
+              ctx.globalAlpha = 0.76;
+              ctx.beginPath();
+              ctx.moveTo(x, a);
+              ctx.bezierCurveTo(mid, a, mid, b, end, b);
+              ctx.lineTo(end, b + band);
+              ctx.bezierCurveTo(mid, b + band, mid, a + band, x, a + band);
+              ctx.closePath();
+              ctx.fill();
+              left.top += band;
+              right.top += band;
+            }
+            return;
+          }
           for (const [index, nodes] of groups.entries()) {
             const depth = nodes.reduce((sum, node) => sum + node.amount * scale, 0);
             let top = (height - depth) / 2;
@@ -205,25 +263,42 @@
             }
           }
         });
-        mount(Homey, (report) => {
+        function render(report) {
+          lastReport = report;
+          const historical = Object.values(report.totals).some((total) => total.quarters > 0);
+          if (!historical && !report.meters) return false;
+          method.options[0].disabled = !report.meters;
+          method.options[1].disabled = !historical;
+          method.value =
+            report.meters && (preference !== 'history' || !historical) ? 'meters' : 'history';
+          meterReport = method.value === 'meters' ? report.meters : null;
+          const totals = meterReport?.totals ?? report.totals;
+          document.getElementById('history-explanation').hidden = !!meterReport;
+          document.getElementById('flow-status').textContent = meterReport
+            ? 'Beräknad fördelning · ' +
+              value((100 * meterReport.ms) / meterReport.expectedMs) +
+              ' % mättäckning'
+            : 'Kvartssummor. Batteri och DC visas netto per kvart.' +
+              (report.meters ? '' : ' Perioden saknar sammanhängande flödesräknare.');
+
           const {
-            totals,
             estimatedQuarters,
             range: { expectedQuarters },
           } = report;
-          if (!Object.values(totals).some((total) => total.quarters > 0)) return false;
+
           for (const { id, field, channels } of sides) {
             const list = document.getElementById('energy-' + id);
             list.replaceChildren();
-            const sum = channels.reduce((n, [key]) => n + (totals[key][field] ?? 0), 0);
+            const sum = channels.reduce((n, [key]) => n + (totals[key]?.[field] ?? 0), 0);
             for (const [key, label] of channels) {
+              if (key === 'generator' && !totals.generator?.inKWh) continue;
               const kwh = totals[key][field];
               const node = document.createElement('li');
               node.className = 'node';
               node.dataset.key = key;
               node.dataset.kwh = kwh ?? '';
               node.dataset.active = kwh > 0;
-              node.style.setProperty('--series', 'var(--' + key + ')');
+              node.style.setProperty('--series', 'var(--' + key + ', var(--muted))');
               node.style.flexGrow = sum > 0 ? (kwh ?? 0) / sum : 0;
               const name = document.createElement('span');
               name.className = 'node-name';
@@ -241,20 +316,60 @@
           }
           const details = document.getElementById('flow-details');
           details.replaceChildren();
-          for (const [key, label] of Object.entries(globalThis.HistoryWidget.labels)) {
-            const item = document.createElement('li');
-            item.textContent =
-              label + ': ' + totals[key].quarters + ' av ' + expectedQuarters + ' kvart';
-            details.append(item);
+          const links = document.getElementById('flow-links');
+          links.replaceChildren();
+          if (meterReport) {
+            const labels = { ...globalThis.HistoryWidget.labels, generator: 'Generator' };
+            const listItem = (text) => {
+              const li = document.createElement('li');
+              li.textContent = text;
+              links.append(li);
+            };
+            for (const { id, field, channels } of sides) {
+              for (const [key, label] of channels) {
+                if (key === 'generator' && !totals.generator.inKWh) continue;
+                const kw = (totals[key][field] * 3600000) / meterReport.ms;
+                const item = document.createElement('li');
+                item.textContent =
+                  label + ' ' + (id === 'into' ? 'in' : 'ut') + ': ' + value(kw) + ' kW i medel';
+                details.append(item);
+              }
+            }
+            for (const { from, to, kWh } of meterReport.links)
+              listItem(labels[from] + ' → ' + labels[to] + ': ' + value(kWh) + ' kWh');
+            const matched = meterReport.links.reduce((n, link) => n + link.kWh, 0);
+            for (const [field, label] of [
+              ['inKWh', 'Ofördelat från källor'],
+              ['outKWh', 'Användning med okänd källa'],
+            ]) {
+              listItem(
+                label +
+                  ': ' +
+                  value(
+                    Math.max(0, Object.values(totals).reduce((n, t) => n + t[field], 0) - matched),
+                  ) +
+                  ' kWh',
+              );
+            }
+            document.getElementById('flow-coverage').textContent =
+              'Räknarnas förändring per avläsning (cirka en minut). Samtidiga källor fördelas proportionellt. Skillnader i energibalansen och intervall med riktningsbyte lämnas ofördelade.';
+          } else {
+            for (const [key, label] of Object.entries(globalThis.HistoryWidget.labels)) {
+              const item = document.createElement('li');
+              item.textContent =
+                label + ': ' + totals[key].quarters + ' av ' + expectedQuarters + ' kvart';
+              details.append(item);
+            }
+            document.getElementById('flow-coverage').textContent =
+              expectedQuarters +
+              ' avslutade kvart' +
+              (estimatedQuarters ? ' · ' + estimatedQuarters + ' med uppskattad energi' : '') +
+              '. Streck betyder att mätning saknas.';
           }
-          document.getElementById('flow-coverage').textContent =
-            expectedQuarters +
-            ' avslutade kvart' +
-            (estimatedQuarters ? ' · ' + estimatedQuarters + ' med uppskattad energi' : '') +
-            '. Streck betyder att mätning saknas.';
           redraw();
           return true;
-        });
+        }
+        mount(Homey, render);
       }
     </script>
   </body>

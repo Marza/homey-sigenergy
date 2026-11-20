@@ -10,6 +10,8 @@ const widgets = {
   'energy-flow': require('../../widgets/energy-flow/api'),
   'power-history': require('../../widgets/power-history/api'),
 };
+const { METERS, meterInterval, addFlow, emptyFlow } = require('../../lib/energy/meter-flow');
+const base = Object.fromEntries(METERS.map((key) => [key, 0]));
 const day = '2026-06-18';
 const { start } = dayBounds(day);
 const now = start + 89 * Q;
@@ -27,6 +29,29 @@ for (const offset of [-96, 0]) {
     rows.push({
       t: start + (offset + i) * Q,
       schema: 2,
+      ...(offset === 0
+        ? {
+            meterFlow: addFlow(
+              emptyFlow(),
+              meterInterval(
+                base,
+                {
+                  ...base,
+                  thirdPartySolar: Math.round(solarW / 600),
+                  gridIn: Math.max(0, Math.round(gridW / 600)),
+                  gridOut: Math.max(0, -Math.round(gridW / 600)),
+                  house: Math.round(houseW / 600),
+                  dcIn: Math.round(dcW / 600),
+                  ac: Math.round(acW / 600),
+                  batteryIn: Math.max(0, Math.round(batteryW / 600)),
+                  batteryOut: Math.max(0, -Math.round(batteryW / 600)),
+                },
+                60000,
+              ),
+              15,
+            ),
+          }
+        : {}),
       coverageMs: Q,
       directionalCoverageMs: Q,
       essCoverageMs: Q,
@@ -129,6 +154,14 @@ async function run() {
             path: path.join(__dirname, '../../widgets', widget, `preview-${mode}.png`),
             animations: 'disabled',
           });
+        }
+        if (widget === 'energy-flow') {
+          assert.equal(await page.locator('#flow-method').inputValue(), 'meters');
+          await page.getByText('Mättäckning och andelar').click();
+          assert.match(await page.locator('#flow-links').innerText(), /Nät → DC-laddare/);
+          await page.locator('#flow-method').selectOption('history');
+          assert.match(await page.locator('#flow-status').innerText(), /Kvartssummor/);
+          await page.getByText('Mättäckning och andelar').click();
         }
         await page.locator('#history-back').click();
         await page.waitForFunction(

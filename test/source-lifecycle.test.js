@@ -76,6 +76,9 @@ function deviceFixture({
   phaseRead = async () => [0, 0, 0],
   energyRead = async () => ({ values: {} }),
   householdRead = async () => '123456',
+  flowRead = async () => {
+    throw Error('unsupported');
+  },
   batteryRead = async () => ({
     values: {},
     errors: { soh: 'Unsupported' },
@@ -99,6 +102,12 @@ function deviceFixture({
     }
     energyCounters(profile, solarSource) {
       return energyRead(profile, solarSource);
+    }
+    flowMeterSnapshot() {
+      return flowRead();
+    }
+    householdPower() {
+      return 1234;
     }
     householdEnergyCounter() {
       return householdRead();
@@ -297,6 +306,29 @@ test('the device polls inverter and grid phase current on their separate Modbus 
   ]);
   await device.onUninit();
   assert.ok(readers.every((reader) => reader.closed));
+});
+
+test('a complete meter block supplies the history and household diagnostic from the same read', async () => {
+  const meters = { house: 43 };
+  const { device, settings } = deviceFixture({
+    flowRead: () => meters,
+    householdRead: () => {
+      throw Error('unexpected separate read');
+    },
+  });
+  const base = device.getSettings();
+  device.getSettings = () => ({ ...base, energyMetersProfile: 'sigenergy-v29-statistics' });
+  device.getStoreValue = () => undefined;
+  device.setStoreValue = async () => {};
+  const received = [];
+  device.homey.app.history.observeFlowMeters = (...args) => received.push(args);
+  await device.onInit();
+  await tick();
+  assert.equal(received.length, 1);
+  assert.equal(received[0][0], meters);
+  assert.equal(settings.get('householdCounterStatus').totalKWh, 0.43);
+  assert.equal(settings.get('householdCounterStatus').powerW, 1234);
+  await device.onUninit();
 });
 
 test('the V2.9 profile reads household energy without invalidating site data on failure', async () => {
