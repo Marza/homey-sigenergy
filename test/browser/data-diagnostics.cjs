@@ -20,6 +20,17 @@ function reset() {
     totalKWh: 123.45,
     averageKW: 0,
   };
+  const at = Date.now();
+  f.data.gridPhaseCurrent = { state: 'ok', at, amps: [23.5, 5, 0], maxAgeMs: 30000 };
+  f.data.inverterPhaseCurrent = { state: 'ok', at: at - 60000, amps: [2, 3, 4], maxAgeMs: 30000 };
+  f.rows[6].phaseCurrent = {
+    grid: {
+      binding: 'a'.repeat(24),
+      ms: 900000,
+      ampMs: [8100000, 4500000, 0],
+      peakA: [23.5, 5, 0],
+    },
+  };
   f.rows[0].coverageMs = 0;
   f.rows[0].directionalCoverageMs = 0;
   f.rows[0].gridWh = 0;
@@ -147,6 +158,8 @@ const server = http.createServer((req, res) => {
         await page.locator('#diagnosticRows').textContent(),
         /Medel sedan förra avläsningen 0 kW/,
       );
+      await page.locator('#gridPhaseStatus').getByText('L1 23,5 A · L2 5 A · L3 0 A').waitFor();
+      await page.locator('#inverterPhaseStatus').getByText('Mätvärdena är inaktuella.').waitFor();
       await page.locator('#tab-settings').click();
       if (width < 768) await page.locator('#settingsCategory').selectOption('data');
       else await page.locator('[data-settings-category="data"]').click();
@@ -174,6 +187,11 @@ const server = http.createServer((req, res) => {
       assert.match(text, /AC-laddare \(EVAC\)/);
       assert.match(text, /Husets förbrukning utan billaddning/);
       assert.match(text, /Energi under täckt tid: 1,25 kWh/);
+      assert.match(text, /Sparad fasström vid nätanslutningen/);
+      assert.match(text, /Hela mätkvartar 1/);
+      assert.match(text, /L1 · Medel 9 A · Topp 23,5 A/);
+      assert.match(text, /Sparad fasström vid växelriktaren/);
+      assert.match(text, /Fasström saknas för vald period/);
       assert.equal(await page.locator('.coverage-bar').count(), 6);
       const bars = await page.locator('.coverage-bar').evaluateAll((bs) =>
         bs.map((b) => ({

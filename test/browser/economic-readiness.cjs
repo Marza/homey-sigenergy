@@ -242,11 +242,22 @@ const server = http.createServer((req, res) => {
       await page.locator('#evdc-replay-minutes').fill('30');
       assert.equal(await page.locator('#evdc-replay-results').innerText(), '');
       await page.locator('#evdc-replay-optimise').click();
+      await page.getByText(/Huvudsäkringen kräver en SDM630-nätmätare/).waitFor();
+      const binding = 'a'.repeat(24);
+      f.data.gridPhaseCurrent = { binding };
+      for (const [i, row] of f.rows.entries()) {
+        const peakA = i >= 8 && i < 12 ? [15, 14, 13] : [2, 4, 5];
+        row.phaseCurrent = {
+          grid: { binding, ms: 900000, ampMs: peakA.map((a) => a * 900000), peakA },
+        };
+      }
+      await page.locator('#evdc-replay-optimise').click();
       await page.getByText(/Total kostnadsskillnad/).waitFor();
       assert.match(
         await page.locator('#evdc-replay-results').innerText(),
         /Ändring av effektavgift 0,00 kr/,
       );
+      assert.match(await page.locator('#evdc-replay-results').innerText(), /Fasgräns 16 A/);
       await page.getByText('Visa den billigaste laddprofilen').click();
       assert.match(
         await page.locator('#evdc-replay-results details ul').innerText(),

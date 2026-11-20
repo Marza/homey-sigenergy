@@ -275,6 +275,35 @@
             source === 'household' ? 'kvartar' : 'råa kvart',
             report.quality.channels[source],
           );
+        if (report.phaseCurrent) {
+          const formatA = (n) => n.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' A';
+          for (const [source, title] of [
+            ['grid', 'Sparad fasström vid nätanslutningen'],
+            ['inverter', 'Sparad fasström vid växelriktaren'],
+          ]) {
+            const box = section(title);
+            const { coveredMs, fullQuarters, phases } = report.phaseCurrent[source];
+            if (!phases) {
+              paragraph(box, 'Fasström saknas för vald period.');
+              continue;
+            }
+            paragraph(
+              box,
+              'Täckt tid ' +
+                duration(coveredMs) +
+                ' (' +
+                percent(coveredMs, report.quality.totalMs) +
+                '). Hela mätkvartar ' +
+                fullQuarters +
+                '.',
+            );
+            for (const row of phases)
+              paragraph(
+                box,
+                row.phase + ' · Medel ' + formatA(row.meanA) + ' · Topp ' + formatA(row.peakA),
+              );
+          }
+        }
         showRanges('Köppriser från Tibber', report.prices.consumption, 'hela timmar');
         showRanges('Säljpriser från Tibber', report.prices.production, 'hela timmar');
         const hourly = report.quality.hourlyGrid;

@@ -1,0 +1,150 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { HistoryStore, SLOT_MS } = require('../lib/history');
+const { bounded, MAX_STATE_BYTES } = require('../lib/history-format');
+const { historySummary } = require('../lib/energy/phase-current');
+const { SigenergyReader } = require('../lib/modbus');
+const { phaseReaders, closePhaseReaders, pollPhaseCurrent } = require('../lib/energy/phase-reader');
+
+const binding = 'a'.repeat(24);
+const boundary = Date.parse('2026-10-01T10:00:00Z');
+
+test('read the documented inverter and SDM630 register blocks and reject invalid phase data', async () => {
+  const reader = new SigenergyReader({ host: 'example.invalid' });
+  reader.read = async (...args) => {
+    assert.deepEqual(args, [31017, 6, 1000]);
+    return [0, 150, 65535, 65311, 0, 0];
+  };
+  assert.deepEqual(await reader.phaseCurrents('inverter'), [1.5, 2.25, 0]);
+
+  reader.read = async (...args) => {
+    assert.deepEqual(args, [6, 6, 1000]);
+    return [0x41c4, 0, 0x4148, 0, 0x3f00, 0];
+  };
+  assert.deepEqual(await reader.phaseCurrents('grid'), [24.5, 12.5, 0.5]);
+  reader.read = async () => [0x7fc0, 0, 0, 0, 0, 0];
+  await assert.rejects(reader.phaseCurrents('grid'), /Invalid phase/);
+  reader.read = async () => [0, -1];
+  await assert.rejects(reader.phaseCurrents('inverter'), /Invalid phase/);
+});
+
+test('persist phase averages and peaks separately across quarter boundaries, gaps and source changes', () => {
+  const data = new Map();
+  const settings = { get: (key) => data.get(key), set: (key, value) => data.set(key, value) };
+  const history = new HistoryStore(settings, () => boundary + 2 * SLOT_MS);
+  const append = (amps, offset, meter = binding) =>
+    history.observePhaseCurrent('grid', meter, amps, boundary + offset);
+  append([0, 10, 20], -5000);
+  append([10, 20, 24], 5000);
+  history.flush();
+  append([20, 22, 16], 15000);
+  append(null, 25000);
+  append([1, 1, 1], 35000);
+  append([2, 2, 2], 96000);
+  append([3, 3, 3], 106000, 'b'.repeat(24));
+  append([4, 4, 4], 116000, 'b'.repeat(24));
+  history.observePhaseCurrent('inverter', binding, [2, 3, 4], boundary + 5000);
+  history.observePhaseCurrent('inverter', binding, [2, 3, 4], boundary + 15000);
+  history.flush();
+
+  const [prev, next] = history.getSlots();
+  assert.deepEqual(prev.phaseCurrent.grid, {
+    binding,
+    ms: 5000,
+    ampMs: [12500, 62500, 105000],
+    peakA: [10, 20, 24],
+  });
+  assert.deepEqual(next.phaseCurrent.grid, {
+    binding,
+    ms: 15000,
+    ampMs: [187500, 297500, 315000],
+    peakA: [20, 22, 24],
+  });
+  assert.equal(next.phaseCurrent.inverter.ms, 10000);
+  assert.equal(next.gridWh, undefined);
+  const summary = historySummary(history.getSlots(), boundary - SLOT_MS, boundary + SLOT_MS);
+  assert.deepEqual(summary.grid.phases[0], { phase: 'L1', meanA: 10, peakA: 20 });
+  assert.equal(summary.grid.coveredMs, 20000);
+  assert.equal(summary.grid.fullQuarters, 0);
+  const backup = history.export();
+  assert.equal(backup.schema, 11);
+  assert.equal(history.previewImport(backup).conflictingSlots, 0);
+  assert.throws(
+    () => history.previewImport({ ...backup, schema: 10 }),
+    /requires export version 11/,
+  );
+  backup.slots[0].phaseCurrent.grid.ms = SLOT_MS + 1;
+  assert.throws(() => history.previewImport(backup), /Invalid phase current quarter/);
+});
+
+test('configure phase readers separately and discard reads from an old connection', async () => {
+  const readers = phaseReaders(
+    {
+      host: 'inverter.invalid',
+      evdcEnabled: true,
+      evdcUnitId: 2,
+      addressOffset: -1,
+      phaseMeterHost: 'meter.invalid',
+      phaseMeterPort: 1502,
+      phaseMeterUnitId: 8,
+    },
+    10,
+  );
+  assert.equal(readers.inverter.reader.unitId, 2);
+  assert.equal(readers.inverter.reader.addressOffset, -1);
+  assert.equal(readers.grid.reader.unitId, 8);
+  assert.equal(readers.grid.reader.port, 1502);
+  assert.equal(readers.grid.reader.addressOffset, 0);
+  assert.equal(
+    phaseReaders({ host: 'inverter.invalid', phaseInverterUnitId: 4 }, 10).inverter.reader.unitId,
+    4,
+  );
+  assert.equal(
+    phaseReaders({ phaseMeterHost: 'meter.invalid', phaseMeterPort: 0 }, 10).grid.reader,
+    null,
+  );
+  const observations = [];
+  const data = new Map();
+  const homey = {
+    app: { history: { observePhaseCurrent: (...args) => observations.push(args) } },
+    settings: { set: (key, value) => data.set(key, value) },
+  };
+  const entry = readers.grid;
+  entry.reader.phaseCurrents = async () => [4, 8, 23];
+  await pollPhaseCurrent(homey, 'grid', entry, () => true);
+  assert.deepEqual(data.get('gridPhaseCurrent').amps, [4, 8, 23]);
+  assert.deepEqual(observations[0].slice(0, 3), ['grid', entry.binding, [4, 8, 23]]);
+  entry.reader.phaseCurrents = async () => {
+    throw Error('timeout');
+  };
+  await pollPhaseCurrent(homey, 'grid', entry, () => true);
+  assert.equal(data.get('gridPhaseCurrent').state, 'read-error');
+  assert.equal(observations[1][2], null);
+
+  let resolve;
+  let current = true;
+  entry.reader.phaseCurrents = () =>
+    new Promise((done) => {
+      resolve = done;
+    });
+  const pending = pollPhaseCurrent(homey, 'grid', entry, () => current);
+  current = false;
+  closePhaseReaders(readers, homey);
+  resolve([5, 8, 23]);
+  await pending;
+  assert.equal(data.get('gridPhaseCurrent').state, 'read-error');
+  assert.equal(observations.length, 4);
+});
+
+test('trim the oldest phase observations first when the history reaches its size limit', () => {
+  const phaseCurrent = { grid: { binding, ms: SLOT_MS, ampMs: [0, 0, 0], peakA: [0, 0, 0] } };
+  const slots = [0, SLOT_MS].map((t) => ({ t, gridWh: 100, phaseCurrent }));
+  const state = { slots, other: 'a'.repeat(MAX_STATE_BYTES - 270) };
+  const trimmed = bounded(state);
+  assert.deepEqual(trimmed.slots[0], { t: 0, gridWh: 100 });
+  assert.equal(trimmed.slots[1], slots[1]);
+  assert.equal(slots[0].phaseCurrent, phaseCurrent);
+  assert.ok(Buffer.byteLength(JSON.stringify(trimmed)) <= MAX_STATE_BYTES);
+});

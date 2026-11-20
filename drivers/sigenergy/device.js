@@ -5,6 +5,12 @@ const { readFailureReason } = require('../../lib/data-diagnostics');
 const { readEvdc, readEvac, validateUnitId } = require('../../lib/charging/modbus-telemetry');
 const { PROFILE, sourceKey, solarSourceKey, advance } = require('../../lib/energy/meters');
 const { IslandController } = require('../../lib/backup/island-controller');
+const {
+  phaseReaders,
+  closePhaseReaders,
+  publishPhaseCurrent,
+  pollPhaseCurrent,
+} = require('../../lib/energy/phase-reader');
 const CHARGERS = {
   evdc: {
     read: readEvdc,
@@ -39,6 +45,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();
     for (const charger of Object.values(this.chargers || {})) charger.reader?.close();
+    closePhaseReaders(this.phaseReaders, this.homey);
     this.generation = (this.generation || 0) + 1;
     this.activeSettings = { ...settings };
     this.energySnapshot = null;
@@ -54,6 +61,9 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
+    this.phaseReaders = phaseReaders(settings, seconds);
+    for (const [source, entry] of Object.entries(this.phaseReaders))
+      publishPhaseCurrent(this.homey, source, entry, entry.state);
     this.island = new IslandController({ maxGapMs: Math.max(30000, seconds * 3000) });
     this.homey.settings.set('backupStatus', null);
     const since = new Date().toISOString();
@@ -120,13 +130,16 @@ module.exports = class SigenergyDevice extends Homey.Device {
         this.publishChargerCapabilities(capabilities, {}),
       ),
     );
+    const generation = this.generation;
+    const current = () => !this.stopped && generation === this.generation;
     const tick = () => {
       this.poll().catch((error) => this.error(error));
       for (const key of Object.keys(CHARGERS))
         this.pollCharger(key).catch((error) => this.error(error));
+      for (const [source, entry] of Object.entries(this.phaseReaders))
+        pollPhaseCurrent(this.homey, source, entry, current).catch((error) => this.error(error));
     };
     this.timer = this.homey.setInterval(tick, seconds * 1000);
-    const generation = this.generation;
     cleared
       .then(() => {
         if (!this.stopped && generation === this.generation) tick();
@@ -421,5 +434,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
     if (this.timer) this.homey.clearInterval(this.timer);
     if (this.reader) this.reader.close();
     for (const charger of Object.values(this.chargers || {})) charger.reader?.close();
+    closePhaseReaders(this.phaseReaders, this.homey);
+    this.homey.settings.set('gridPhaseCurrent', null);
+    this.homey.settings.set('inverterPhaseCurrent', null);
   }
 };

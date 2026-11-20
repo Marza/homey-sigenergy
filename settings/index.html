@@ -267,6 +267,15 @@
         aktiveras.
       </p>
       <div id="diagnosticRows" aria-live="polite">Väntar på mätdata…</div>
+      <h3>Fasström</h3>
+      <h4>Nätanslutning (hela hushållet)</h4>
+      <p id="gridPhaseStatus" aria-live="polite">Väntar på mätdata…</p>
+      <h4>Sigenergy-växelriktare</h4>
+      <p id="inverterPhaseStatus" aria-live="polite">Väntar på mätdata…</p>
+      <p class="sub">
+        Ställ in mätarnas Modbus-adresser i Sigenergy-enhetens avancerade inställningar. För
+        kontroll av huvudsäkringen används en SDM630 vid nätanslutningen.
+      </p>
       <h3>Temperatur och batterigränser</h3>
       <p id="temperatureStatus">Väntar på mätdata…</p>
       <p class="sub">
@@ -630,9 +639,8 @@
                 />
               </label>
               <p>
-                Ange ett eller båda värdena. Om båda är ifyllda används den lägre gränsen i
-                beräkningen. Huvudsäkringen ger ett ungefärligt jämförelsevärde vid balanserad
-                trefaslast.
+                Importgränsen kontrolleras mot hushållets kvartmedel. Angiven huvudsäkring gör att
+                DC-optimeringen också kräver komplett fasströmshistorik från nätanslutningen.
               </p>
               <button type="button" class="hy-nostyle" id="household-save-limits">
                 Spara hushållets gränser
@@ -2574,6 +2582,42 @@
       let diagnosticsRequest = 0;
       function refreshDiagnostics(Homey) {
         const request = ++diagnosticsRequest;
+        for (const [id, key] of [
+          ['gridPhaseStatus', 'gridPhaseCurrent'],
+          ['inverterPhaseStatus', 'inverterPhaseCurrent'],
+        ]) {
+          Homey.get(key, (error, reading) => {
+            if (request !== diagnosticsRequest) return;
+            const elapsed = Date.now() - reading?.at;
+            const states = {
+              waiting: 'Väntar på avläsning.',
+              'invalid-settings': 'Kontrollera Modbus-inställningarna.',
+              'read-error': 'Modbus-avläsningen misslyckades.',
+              ok: 'Mätvärdena är inaktuella.',
+            };
+            const live =
+              !error &&
+              reading?.state === 'ok' &&
+              elapsed >= 0 &&
+              elapsed <= reading.maxAgeMs &&
+              reading.amps?.length === 3 &&
+              reading.amps.every((amps) => Number.isFinite(amps) && amps >= 0);
+            document.getElementById(id).textContent = live
+              ? reading.amps
+                  .map(
+                    (amps, i) =>
+                      'L' +
+                      (i + 1) +
+                      ' ' +
+                      amps.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) +
+                      ' A',
+                  )
+                  .join(' · ')
+              : error
+                ? 'Status kunde inte läsas.'
+                : states[reading?.state] || 'Ingen fasström konfigurerad.';
+          });
+        }
         SourceStatus.readSources(Homey, (sources, values) => {
           if (request !== diagnosticsRequest) return;
           const el = document.getElementById('diagnosticRows');
