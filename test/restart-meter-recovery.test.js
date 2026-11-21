@@ -20,6 +20,7 @@ function scenario({
   imported = false,
   reset = false,
   idle = false,
+  maxGapMs,
 } = {}) {
   let time = T + start;
   const values = new Map();
@@ -31,7 +32,7 @@ function scenario({
   let store = create();
   const sample = (offset, counts) => {
     time = T + start + offset;
-    store.append(powers, time);
+    store.append(powers, time, undefined, maxGapMs);
     const v = String(counts);
     const read = (values, b, channel) =>
       store.observeCounters({ durationMs: 20, values }, b, channel);
@@ -44,14 +45,14 @@ function scenario({
         ['gridIn', 'ac', 'house', 'batteryIn', 'dcIn', 'selfSolar'].includes(k) ? counts : 40,
       ]),
     );
-    store.observeFlowMeters(meters, time, binding.key);
-    store.observeHouseholdCounter(v, time);
+    store.observeFlowMeters(meters, time, binding.key, maxGapMs);
+    store.observeHouseholdCounter(v, time, undefined, maxGapMs);
   };
   store.setHouseholdSource(binding.key);
   sample(0, 100);
   if (beforeMs) {
     time += beforeMs;
-    store.append(powers, time);
+    store.append(powers, time, undefined, maxGapMs);
   }
   store.flush();
   if (interrupted) {
@@ -141,4 +142,41 @@ test('idle meter deltas across a restart repair coverage with zero energy', () =
     'solar',
   ]);
   assert.equal(row.householdRecoveredMs, Q);
+});
+
+test('a silent polling delay spanning 10 and 50 seconds assigns the measured delta by missing duration', () => {
+  const { rows, store } = scenario({
+    start: Q - 10000,
+    elapsed: 60000,
+    beforeMs: 0,
+    interrupted: false,
+    maxGapMs: 15000,
+  });
+  const effective = store.getEnergySlots();
+  for (const [index, ms] of [10000, 50000].entries()) {
+    const row = rows[index];
+    for (const channel of channels.slice(0, 5)) {
+      assert.equal(row.counterRecovery[channel].coverageMs, ms);
+      assert.deepEqual(row.counterRecovery[channel].parts[0].allocation.missingMs, [10000, 50000]);
+    }
+    assert.equal(row.coverageMs, 0);
+    for (const key of ['gridWh', 'essWh', 'pvWh', 'evWh', 'evacWh', 'householdWh'])
+      assert.equal(effective[index][key], ms / 1000, key);
+    assert.equal(row.householdRecoveredMs, ms);
+    assert.equal(row.meterFlow.recoveredMs, ms);
+    assert.ok(row.meterFlow.links.every((wh) => wh === 0));
+  }
+});
+test('normal jitter up to 15 seconds at a ten-second poll retains sampled power coverage', () => {
+  const { rows } = scenario({
+    start: 0,
+    elapsed: 15000,
+    beforeMs: 0,
+    interrupted: false,
+    maxGapMs: 15000,
+  });
+  assert.equal(rows[0].coverageMs, 15000);
+  assert.equal(rows[0].counterRecovery, undefined);
+  assert.equal(rows[0].householdRecoveredMs, undefined);
+  assert.equal(rows[0].meterFlow.recoveredMs, undefined);
 });

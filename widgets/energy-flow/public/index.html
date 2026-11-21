@@ -355,7 +355,7 @@
               );
             }
             document.getElementById('flow-coverage').textContent =
-              'Räknarnas förändring per avläsning (cirka en minut). Samtidiga källor fördelas proportionellt. Skillnader i energibalansen och intervall med riktningsbyte lämnas ofördelade.';
+              'Flödena bygger på skillnaden mellan två räknaravläsningar. Samtidiga källor fördelas proportionellt. Skillnader i energibalansen och intervall med riktningsbyte lämnas ofördelade.';
           } else {
             for (const [key, label] of Object.entries(globalThis.HistoryWidget.labels)) {
               const item = document.createElement('li');

@@ -57,11 +57,12 @@ module.exports = class SigenergyDevice extends Homey.Device {
       reason,
     );
     this.pollFailure = null;
-    this.lastEnergyProbeAt = null;
-    this.retryHousehold = false;
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
+    // Allow scheduling jitter while identifying a missed poll in the energy history.
+    this.powerGapMs = Math.min(60000, seconds * 1500);
+    this.meterGapMs = Math.min(90000, seconds * 1500);
     this.phaseReaders = phaseReaders(settings, seconds);
     for (const [source, entry] of Object.entries(this.phaseReaders))
       publishPhaseCurrent(this.homey, source, entry, entry.state);
@@ -85,7 +86,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
         settings.energyMetersProfile === PROFILE &&
         Number(settings.unitId ?? 247) === 247,
       since,
-      maxAgeMs: Math.max(180000, seconds * 3000),
+      maxAgeMs: Math.max(30000, seconds * 3000),
     };
     this.householdEnabled = sources.household.enabled;
     this.homey.app?.history?.setHouseholdSource?.(
@@ -247,6 +248,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
         },
         undefined,
         data.gridMode === 0 ? 'invalid-sample' : 'off-grid',
+        this.powerGapMs,
       );
       await Promise.all([
         this.setCapabilityValue('measure_battery', data.soc),
@@ -256,11 +258,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
         this.setCapabilityValue('measure_ess_capacity', data.capacityKWh),
       ]);
       if (!current()) return;
-      if (
-        settings.energyMetersProfile === PROFILE &&
-        (!this.lastEnergyProbeAt || Date.now() - this.lastEnergyProbeAt >= 60000)
-      ) {
-        this.lastEnergyProbeAt = Date.now();
+      if (settings.energyMetersProfile === PROFILE) {
         let flowMeters, meterReadAt;
         if (this.householdEnabled) {
           try {
@@ -274,6 +272,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
             flowMeters,
             meterReadAt,
             sourceKey(settings) + ':' + Number(settings.energyCounterEpoch || 0),
+            this.meterGapMs,
           );
         }
         try {
@@ -328,14 +327,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
           this.energyMeters = { readAt: Date.now(), values: {}, errors: {} };
           this.error('Optional Energy counter read or persistence failed');
         }
-        if (current() && this.householdEnabled) {
-          const success = await this.pollHouseholdEnergy(reader, current, flowMeters, meterReadAt);
-          if (current()) this.retryHousehold = !success;
-        }
-      } else if (this.householdEnabled && this.retryHousehold && current()) {
-        // One targeted retry on the next healthy plant poll. Keep the normal block-read cadence.
-        this.retryHousehold = false;
-        await this.pollHouseholdEnergy(reader, current);
+        if (current() && this.householdEnabled)
+          await this.pollHouseholdEnergy(reader, current, flowMeters, meterReadAt);
       }
       if (current()) {
         await this.setAvailable();
@@ -382,7 +375,9 @@ module.exports = class SigenergyDevice extends Homey.Device {
       const raw = meters ? String(meters.house) : await reader.householdEnergyCounter();
       if (!current()) return;
       const at = meters ? meterReadAt : Date.now();
-      const averageKW = this.homey.app.history?.observeHouseholdCounter?.(raw, at) ?? null;
+      const averageKW =
+        this.homey.app.history?.observeHouseholdCounter?.(raw, at, undefined, this.meterGapMs) ??
+        null;
       let powerW = null;
       try {
         powerW = await reader.householdPower();
@@ -397,7 +392,6 @@ module.exports = class SigenergyDevice extends Homey.Device {
         readAt: new Date(at).toISOString(),
       });
       this.homey.settings.set('householdCounterError', null);
-      return true;
     } catch (error) {
       if (current()) this.noteHouseholdFailure(readFailureReason(error));
     }
@@ -422,6 +416,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
         chargerValues(profile.history, values),
         powerReadAt,
         powerFailure ? readFailureReason(powerFailure) : 'invalid-sample',
+        this.powerGapMs,
       );
       const dc = key === 'evdc';
       const totals = dc

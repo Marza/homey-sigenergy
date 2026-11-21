@@ -4,7 +4,7 @@ Recovery runs automatically with the existing opt-in **Sigenergy V2.9 energy-cou
 
 ## Small Sigenergy gaps
 
-The existing once-per-minute cumulative-energy probe can supply separate grid import/export, battery charge/discharge and the selected own/third-party/combined solar channel. The collector saves the latest trusted endpoint and the subsequent power intervals in the same local snapshot as energy. AC uses total consumption. DC uses signed energy from the charge and discharge totals.
+The shared plant counter block read on each poll (every 10 seconds by default) can supply separate grid import/export, battery charge/discharge and the selected own/third-party/combined solar channel. The collector saves the latest trusted endpoint and the subsequent power intervals in the same local snapshot as energy. AC uses total consumption. DC uses signed energy from the charge and discharge totals.
 
 A counter pair can estimate missing energy only when:
 
@@ -23,7 +23,7 @@ After a restart the first power interval through the outage has unknown power. A
 
 ### Allocation across one quarter boundary
 
-A counter delta does not reveal which side of a boundary consumed the energy. For an eligible interval, recovery subtracts all already integrated directional energy first, then distributes only the remaining energy **in proportion to each quarter's missing duration**. This assumes equal average power during the missing portions. Fully observed portions receive no added energy. The final share is calculated as a remainder, so the shares conserve the original residual without per-quarter rounding. For example, a 90 Wh residual with 30 and 60 seconds missing is allocated as 30 and 60 Wh. This is an estimate, not a recovered measurement of the actual quarter profile.
+A counter delta does not reveal which side of a boundary consumed the energy. For an eligible interval, recovery subtracts all already integrated directional energy first, then distributes only the remaining energy **in proportion to each quarter's missing duration**. This assumes equal average power during the missing portions. Fully observed portions receive no added energy. The final share is calculated as a remainder, so the shares conserve the original residual without per-quarter rounding. For example, a 60 Wh residual with 10 seconds missing before a quarter boundary and 50 seconds after it is allocated as 10 Wh and 50 Wh. This is an estimate, not a recovered measurement of the actual quarter profile.
 
 Cross-quarter recovery requires an ordered, gap-free and non-overlapping interval ledger. Negative missing import/export, negative missing solar production, or an implausible residual are not spread across quarters; quantization or disagreement with the sampled share leaves the gap unknown. Charge and discharge counters remain independently nondecreasing; their residuals must both be nonnegative before net battery energy is allocated. Combined solar retains the component-reset checks.
 

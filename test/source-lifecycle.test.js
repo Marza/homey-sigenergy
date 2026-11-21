@@ -309,10 +309,19 @@ test('the device polls grid current without opening an inverter phase reader', a
   assert.ok(readers.every((reader) => reader.closed));
 });
 
-test('a complete meter block supplies the history and household diagnostic from the same read', async () => {
+test('each ten-second tick shares one plant meter block and skips overlapping reads', async () => {
   const meters = { house: 43 };
+  let reads = 0,
+    finish;
   const { device, settings } = deviceFixture({
-    flowRead: () => meters,
+    flowRead: () => {
+      reads++;
+      return reads === 2
+        ? new Promise((resolve) => {
+            finish = () => resolve(meters);
+          })
+        : meters;
+    },
     householdRead: () => {
       throw Error('unexpected separate read');
     },
@@ -321,12 +330,25 @@ test('a complete meter block supplies the history and household diagnostic from 
   device.getSettings = () => ({ ...base, energyMetersProfile: 'sigenergy-v29-statistics' });
   device.getStoreValue = () => undefined;
   device.setStoreValue = async () => {};
+  let pollTick;
+  device.homey.setInterval = (fn, period) => {
+    assert.equal(period, 10000);
+    pollTick = fn;
+    return 1;
+  };
   const received = [];
   device.homey.app.history.observeFlowMeters = (...args) => received.push(args);
   await device.onInit();
   await tick();
-  assert.equal(received.length, 1);
-  assert.equal(received[0][0], meters);
+  pollTick();
+  await tick();
+  pollTick();
+  await tick();
+  assert.equal(reads, 2);
+  finish();
+  await tick();
+  assert.equal(received.length, 2);
+  assert.ok(received.every(([block, , , maxGapMs]) => block === meters && maxGapMs === 15000));
   assert.equal(settings.get('householdCounterStatus').totalKWh, 0.43);
   assert.equal(settings.get('householdCounterStatus').powerW, 1234);
   await device.onUninit();
@@ -355,7 +377,6 @@ test('the V2.9 profile reads household energy without invalidating site data on 
   assert.equal(settings.get('householdCounterStatus').averageKW, 0);
   assert.equal(diagnostics(settings).household.status, 'ok');
   failure = true;
-  device.lastEnergyProbeAt = null;
   await device.poll();
   assert.equal(settings.get('householdCounterStatus'), null);
   assert.equal(diagnostics(settings).household.status, 'error');
@@ -367,9 +388,8 @@ test('the V2.9 profile reads household energy without invalidating site data on 
   await device.poll();
   assert.equal(seen.length, failedCount + 1, 'retry the household counter on the next plant poll');
   await device.poll();
-  assert.equal(seen.length, failedCount + 1, 'persistent errors wait for the next scheduled probe');
+  assert.equal(seen.length, failedCount + 2, 'each healthy poll retries the counter once');
   failure = false;
-  device.lastEnergyProbeAt = null;
   await device.poll();
   assert.equal(settings.get('householdCounterStatus').totalKWh, 1234.56);
   await device.onUninit();
@@ -525,17 +545,14 @@ test('optional counter probing commits high-water marks before publish and never
   assert.equal(stored.channels.solar.raw, '1000');
   raw = '1050';
   failWrite = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(Object.keys(device.getEnergySnapshot().meters.values).length, 0);
   assert.equal(stored.channels.solar.raw, '1000');
   assert.equal(device.available, true);
   failWrite = false;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(device.getEnergySnapshot().meters.values.solar, 10.5);
   failRead = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(device.getEnergySnapshot().gridW, 2000);
   assert.equal(Object.keys(device.getEnergySnapshot().meters.values).length, 0);
@@ -777,7 +794,6 @@ test('gap recovery reuses the optional counter probe after persistence and canno
   assert.ok(observed[0].raw.durationMs >= 10);
   assert.equal(device.getEnergySnapshot().meters.values.imported, 20);
   resetCounters = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(observed.length, 2);
   assert.deepEqual(
@@ -787,14 +803,12 @@ test('gap recovery reuses the optional counter probe after persistence and canno
   );
   resetCounters = false;
   failStore = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(observed.length, 2);
   failStore = false;
   device.homey.app.history.observeCounters = () => {
     throw Error('synthetic');
   };
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(device.getEnergySnapshot().meters.values.imported, 20);
   await device.onUninit();
