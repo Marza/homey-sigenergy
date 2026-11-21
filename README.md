@@ -97,6 +97,8 @@ To collect EVDC data, enter the inverter ID in the Sigenergy device’s advanced
 
 Check **Diagnostik** during idle and active charging and compare the power, SoC and session energy against mySigen. Power is integrated into quarter-hour DC energy with its own measured coverage. A missing reading breaks the EVDC interval even when the other plant data is available. The session and total counters are displayed as current readings. The lifetime charge and discharge counters can recover eligible missing energy between two readings.
 
+The plant reads signed grid power and grid mode together (30005–30009), and own PV and battery power together (30035–30038). Third-party solar uses its separate register on each poll when selected. Battery SoC and capacity are sampled once per minute at the default cadence. Every five minutes, three blocks supply the nine optional battery diagnostics. A device that rejects a block with an illegal address or value falls back to individual registers for that block until the reader restarts.
+
 The app saves local meter checkpoints together with the energy history. Matching grid, selected solar, battery, enabled AC and DC charger, and household meters can bridge up to **15 minutes between trusted readings**, including an app restart. Five-minute and quarter estimates use the time missing in each interval. **Data och backup** shows observed, estimated and unknown time separately. A meter reset, changed source or longer outage starts a new interval. [Energy-gap recovery](docs/gap-recovery.md).
 
 ### Phase current and the main fuse
