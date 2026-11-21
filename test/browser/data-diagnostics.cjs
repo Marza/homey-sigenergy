@@ -112,12 +112,14 @@ const server = http.createServer((req, res) => {
             profile: 'gateway',
             frequencyUnit: 7,
             bins:
-              metric === 'volts' && phase === 1
-                ? []
-                : [
-                    { t, min: 49.97, mean: 50, max: 50.03, count: 3 },
-                    { t: t + 600000, min: 50, mean: 50, max: 50, count: 1 },
-                  ],
+              metric === 'inverterVolts'
+                ? [{ t, min: 219 + phase, mean: 225 + phase, max: 230 + phase, count: 3 }]
+                : metric === 'volts' && phase === 1
+                  ? []
+                  : [
+                      { t, min: 49.97, mean: 50, max: 50.03, count: 3 },
+                      { t: t + 600000, min: 50, mean: 50, max: 50, count: 1 },
+                    ],
           }),
         );
         return;
@@ -191,6 +193,17 @@ const server = http.createServer((req, res) => {
       assert.ok(await page.locator('#gridDayPhase').isDisabled());
       assert.equal(await page.locator('#gridDayChart svg path').count(), 3);
       assert.equal(await page.locator('#gridDayTable tbody tr').count(), 2);
+      await page.locator('#gridDayMetric').selectOption('inverterVolts');
+      await page.locator('#gridDayPhase').selectOption('2');
+      await page
+        .locator('#gridDaySource')
+        .getByText(/Fas mot nolla vid växelriktaren.*7/)
+        .waitFor();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('#gridDayTable tbody tr td:nth-child(3)')?.textContent === '227',
+      );
+      assert.equal(await page.locator('#gridDayChart svg path').count(), 3);
       await page.locator('#gridDayMetric').selectOption('volts');
       await page.locator('#gridDayPhase').selectOption('1');
       await page

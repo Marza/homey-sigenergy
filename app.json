@@ -411,8 +411,8 @@
           "id": "gridFrequencyUnitId",
           "type": "number",
           "label": {
-            "en": "Grid frequency inverter unit ID (0 = use enabled EVDC inverter)",
-            "sv": "Växelriktar-ID för nätfrekvens (0 = använd aktiverad EVDC:s ID)"
+            "en": "Grid frequency and voltage inverter unit ID (0 = use enabled EVDC inverter)",
+            "sv": "Växelriktar-ID för nätfrekvens och spänning (0 = använd aktiverad EVDC:s ID)"
           },
           "value": 0,
           "min": 0,
