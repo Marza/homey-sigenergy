@@ -1,14 +1,7 @@
 'use strict';
 
 globalThis.GridDayView = (() => {
-  const units = {
-    amps: 'A',
-    volts: 'V',
-    inverterVolts: 'V',
-    activeKW: 'kW',
-    reactiveKvar: 'kvar',
-    frequencyHz: 'Hz',
-  };
+  const units = { amps: 'A', volts: 'V', activeKW: 'kW', reactiveKvar: 'kvar', frequencyHz: 'Hz' };
   const lines = [
     { key: 'min', title: 'Min', color: '#007a71', dash: '3 3' },
     { key: 'mean', title: 'Medel', color: '#4267bf', dash: '' },
@@ -142,19 +135,15 @@ globalThis.GridDayView = (() => {
           get('Source').textContent =
             err || !result
               ? ''
-              : metric.value === 'inverterVolts'
+              : hz
                 ? result.frequencyUnit
-                  ? 'Fas mot nolla vid växelriktaren · Modbus-ID ' + result.frequencyUnit
-                  : 'Välj Gateway och ange växelriktarens Modbus-ID för att läsa fasspänningen.'
-                : hz
-                  ? result.frequencyUnit
-                    ? 'Gemensam nätfrekvens via växelriktaren · Modbus-ID ' + result.frequencyUnit
-                    : 'För nätfrekvens behövs Gateway som mätkälla och växelriktarens Modbus-ID.'
-                  : result.profile === 'gateway'
-                    ? 'Mätkälla: Sigenergy Gateway, nätsidan.'
-                    : result.profile === 'sdm630'
-                      ? 'Mätkälla: SDM630 vid nätanslutningen (ström).'
-                      : 'Ingen aktiv mätkälla.';
+                  ? 'Gemensam nätfrekvens via växelriktaren · Modbus-ID ' + result.frequencyUnit
+                  : 'För nätfrekvens behövs Gateway som mätkälla och växelriktarens Modbus-ID.'
+                : result.profile === 'gateway'
+                  ? 'Mätkälla: Sigenergy Gateway, nätsidan.'
+                  : result.profile === 'sdm630'
+                    ? 'Mätkälla: SDM630 vid nätanslutningen (ström).'
+                    : 'Ingen aktiv mätkälla.';
           const bins = result?.bins;
           if (err || !Array.isArray(bins) || !bins.length) {
             get('Status').textContent = err

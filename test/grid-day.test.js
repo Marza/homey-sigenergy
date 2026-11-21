@@ -67,9 +67,9 @@ test('the Gateway frequency uses only the selected inverter on-grid, and its fai
   const { grid } = phaseReaders(config);
   assert.equal(grid.profile, 'gateway');
   assert.equal(grid.reader.unitId, 247);
-  assert.equal(grid.inverterReader.unitId, 3);
-  assert.equal(phaseReaders({ ...config, gridFrequencyUnitId: 7 }).grid.inverterReader.unitId, 7);
-  assert.equal(phaseReaders({ host: config.host }).grid.inverterReader, null);
+  assert.equal(grid.frequencyReader.unitId, 3);
+  assert.equal(phaseReaders({ ...config, gridFrequencyUnitId: 7 }).grid.frequencyReader.unitId, 7);
+  assert.equal(phaseReaders({ host: config.host }).grid.frequencyReader, null);
   const seen = [],
     currents = [];
   const homey = {
@@ -83,15 +83,13 @@ test('the Gateway frequency uses only the selected inverter on-grid, and its fai
     fail = false,
     count = 0;
   grid.reader.gatewayPhases = async () => ({ onGrid, amps: [0, 2, 3], volts: [230, 231, 232] });
-  grid.inverterReader.inverterGridReadings = async () => {
+  grid.frequencyReader.gridFrequency = async () => {
     count++;
     if (fail) throw Error('unavailable');
-    return { frequencyHz: 50.02, inverterVolts: [231.62, 231.23, 226.45] };
+    return 50.02;
   };
   await pollPhaseCurrent(homey, 'grid', grid, () => true);
   assert.equal(seen[0].frequencyHz, 50.02);
-  assert.deepEqual(seen[0].inverterVolts, [231.62, 231.23, 226.45]);
-  assert.deepEqual(seen[0].volts, [230, 231, 232]);
   fail = true;
   await pollPhaseCurrent(homey, 'grid', grid, () => true);
   assert.equal(seen[1].frequencyHz, null);
@@ -100,7 +98,6 @@ test('the Gateway frequency uses only the selected inverter on-grid, and its fai
   await pollPhaseCurrent(homey, 'grid', grid, () => true);
   assert.equal(count, 2);
   assert.equal(seen[2].frequencyHz, undefined);
-  assert.equal(seen[2].inverterVolts, undefined);
 });
 
 test('unsupported voltage or power blocks leave current-only firmware usable', async () => {
@@ -128,63 +125,4 @@ test('the V2.9 temperature word and reserved words cannot masquerade as gateway 
   const data = await r.gatewayPhases();
   assert.deepEqual(data.volts, [null, null, null]);
   assert.deepEqual(data.amps, [6.13, 5.84, 4.2]);
-});
-
-test('inverter phases use their documented words, preserve genuine zero and keep frequency on older firmware', async () => {
-  const reader = new SigenergyReader({ host: 'example.invalid', unitId: 1 });
-  const words = [5001, 0, 2, 0, 0, 0, 0, 0, 0, 0, 23162, 0, 23123, 0, 22645];
-  reader.read = async (...args) => {
-    assert.deepEqual(args, [31002, 15, 1000]);
-    return words;
-  };
-  assert.deepEqual(await reader.inverterGridReadings(), {
-    frequencyHz: 50.01,
-    inverterVolts: [231.62, 231.23, 226.45],
-  });
-  words[0] = 65535;
-  words[9] = 65535;
-  words[10] = 65535;
-  words[12] = 0;
-  assert.deepEqual(await reader.inverterGridReadings(), {
-    frequencyHz: null,
-    inverterVolts: [null, 0, 226.45],
-  });
-  words[2] = 0;
-  words[9] = 0;
-  words[10] = 23000;
-  assert.deepEqual((await reader.inverterGridReadings()).inverterVolts, [230, null, null]);
-  reader.read = async (_addr, count) => {
-    if (count === 15) throw Error('unsupported');
-    return [4998];
-  };
-  assert.deepEqual(await reader.inverterGridReadings(), {
-    frequencyHz: 49.98,
-    inverterVolts: null,
-  });
-});
-
-test('24-hour voltage charts use only observed values from the requested phase, source and inverter', () => {
-  const settings = new Map(),
-    now = T + 86400000;
-  let store = new GridDay(settings, () => now);
-  for (const [offset, unit, l2] of [
-    [0, 1, 280],
-    [10000, 1, 220],
-    [20000, 1, 230],
-    [30000, 1, null],
-    [40000, 3, 260],
-  ]) {
-    store.append(
-      'site',
-      { volts: [200, 201, 202], inverterVolts: [233, l2, 216], frequencyUnit: unit },
-      T + offset,
-    );
-  }
-  store.flush();
-  store = new GridDay(settings, () => now);
-  assert.deepEqual(store.report('site', 'inverterVolts', 1, 1).bins, [
-    { t: T, min: 220, mean: 225, max: 230, count: 2 },
-  ]);
-  assert.equal(store.report('site', 'inverterVolts', 2, 1).bins[0].mean, 216);
-  assert.equal(store.report('site', 'volts', 1).bins[0].mean, 201);
 });
