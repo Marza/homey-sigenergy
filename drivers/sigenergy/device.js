@@ -58,6 +58,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     );
     this.pollFailure = null;
     this.lastEnergyProbeAt = null;
+    this.retryHousehold = false;
     this.lastBatteryProbeAt = null;
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
@@ -87,6 +88,11 @@ module.exports = class SigenergyDevice extends Homey.Device {
       maxAgeMs: Math.max(180000, seconds * 3000),
     };
     this.householdEnabled = sources.household.enabled;
+    this.homey.app?.history?.setHouseholdSource?.(
+      this.householdEnabled
+        ? sourceKey(settings) + ':' + Number(settings.energyCounterEpoch || 0)
+        : null,
+    );
     for (const [key, profile] of Object.entries(CHARGERS)) {
       const dedicatedHost = key === 'evac' ? String(settings.evacHost || '').trim() : '';
       const host = dedicatedHost || String(settings.host || '').trim();
@@ -310,8 +316,14 @@ module.exports = class SigenergyDevice extends Homey.Device {
           this.energyMeters = { readAt: Date.now(), values: {}, errors: {} };
           this.error('Optional Energy counter read or persistence failed');
         }
-        if (current() && this.householdEnabled)
-          await this.pollHouseholdEnergy(reader, current, flowMeters, meterReadAt);
+        if (current() && this.householdEnabled) {
+          const success = await this.pollHouseholdEnergy(reader, current, flowMeters, meterReadAt);
+          if (current()) this.retryHousehold = !success;
+        }
+      } else if (this.householdEnabled && this.retryHousehold && current()) {
+        // One targeted retry on the next healthy plant poll. Keep the normal block-read cadence.
+        this.retryHousehold = false;
+        await this.pollHouseholdEnergy(reader, current);
       }
       if (current()) {
         await this.setAvailable();
@@ -373,6 +385,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
         readAt: new Date(at).toISOString(),
       });
       this.homey.settings.set('householdCounterError', null);
+      return true;
     } catch (error) {
       if (current()) this.noteHouseholdFailure(readFailureReason(error));
     }
@@ -443,6 +456,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.startReader(newSettings);
   }
   async onDeleted() {
+    this.homey.app?.history?.setHouseholdSource?.(null);
     await this.onUninit();
   }
   async onUninit() {
