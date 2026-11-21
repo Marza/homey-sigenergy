@@ -106,7 +106,7 @@ test('write failures preserve both measurements and recovery for retry; version 
   f.fail(false);
   f.history.flush();
   const file = f.history.export();
-  assert.equal(file.schema, 8);
+  assert.equal(file.schema, 16);
   const g = fixture();
   g.at(T + 120000);
   g.history.import(file);
@@ -143,7 +143,7 @@ test('no bridge across restart, source changes, imports, off-grid intervals or l
       f.history.append({ gridW: null, essW: null, pvW: null }, T + 1000, 'connection-changed');
     if (scenario === 'off-grid')
       f.history.append({ gridW: null, essW: null, pvW: null }, T + 1000, 'off-grid');
-    if (scenario === 'long') time = 360;
+    if (scenario === 'long') time = 960;
     sample(f, time);
     const raw = counters(time),
       b = { ...binding };

@@ -53,7 +53,7 @@ test('minute allocation preserves direction, losses and meter granularity', () =
   assert.ok(reverse.links.every((n) => n === 0));
   for (const changes of [{ gridIn: 99 }, { ac: null }, { dcOut: 10000 }])
     assert.equal(meterInterval(base, { ...base, ...changes }, 60000), null);
-  assert.equal(meterInterval(base, base, 90001), null);
+  assert.equal(meterInterval(base, base, 900001), null);
 });
 test('split intervals across midnight, merge once, round trip and never bridge gaps, resets or source changes', () => {
   const midnight = Date.parse('2026-10-01T22:00:00Z');
@@ -76,15 +76,16 @@ test('split intervals across midnight, merge once, round trip and never bridge g
   read(110000, 18);
   read(120000, 18, 'other');
   read(260000, 24, 'other');
+  store.flush();
   const report = getEnergyFlow(
     { app: { history: store } },
     { date: 'today', period: 'day' },
     midnight + 600000,
   );
   assert.deepEqual(report.meters.links, [{ from: 'solar', to: 'house', kWh: 0.1 }]);
-  assert.equal(report.meters.ms, 90000);
+  assert.equal(report.meters.ms, 230000);
   const backup = store.export();
-  assert.equal(backup.schema, 12);
+  assert.equal(backup.schema, 16);
   assert.equal(store.previewImport(backup).conflictingSlots, 0);
   assert.throws(() => store.previewImport({ ...backup, schema: 11 }), /version 12/);
   const restarted = new HistoryStore(settings, () => midnight + 600000);

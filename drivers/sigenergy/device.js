@@ -107,7 +107,14 @@ module.exports = class SigenergyDevice extends Homey.Device {
               addressOffset: dedicatedHost ? 0 : settings.addressOffset,
             })
           : null;
-      this.chargers[key] = { reader, polling: false };
+      this.chargers[key] = {
+        reader,
+        polling: false,
+        binding:
+          sourceKey({ ...settings, host, port: dedicatedHost ? 502 : settings.port, unitId }) +
+          ':' +
+          Number(settings.energyCounterEpoch || 0),
+      };
       sources[key] = {
         configured: !!host,
         enabled,
@@ -263,7 +270,11 @@ module.exports = class SigenergyDevice extends Homey.Device {
           }
           if (!current()) return;
           meterReadAt = Date.now();
-          this.homey.app.history?.observeFlowMeters?.(flowMeters, meterReadAt, sourceKey(settings));
+          this.homey.app.history?.observeFlowMeters?.(
+            flowMeters,
+            meterReadAt,
+            sourceKey(settings) + ':' + Number(settings.energyCounterEpoch || 0),
+          );
         }
         try {
           const raw = await reader.energyCounters(
@@ -272,6 +283,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
             flowMeters,
           );
           if (!current()) return;
+          const counterReadAt = flowMeters ? meterReadAt : Date.now();
           const result = advance(this.getStoreValue('energyCounterState'), {
             values: raw.values,
             key: sourceKey(settings),
@@ -294,7 +306,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
                     ([key]) => Number.isFinite(result.values?.[key]) && !result.errors?.[key],
                   ),
                 ),
-                durationMs: Math.max(raw.durationMs ?? Infinity, Date.now() - pollStartedAt),
+                durationMs: Math.max(raw.durationMs ?? Infinity, counterReadAt - pollStartedAt),
               },
               {
                 key: sourceKey(settings) + ':' + Number(settings.energyCounterEpoch || 0),
@@ -397,6 +409,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     charger.polling = true;
     const current = () => !this.stopped && this.chargers[key] === charger;
     const profile = CHARGERS[key];
+    const started = Date.now();
     try {
       const { values, errors, powerReadAt, powerFailure } = await profile.read({
         read: (...args) => {
@@ -410,6 +423,22 @@ module.exports = class SigenergyDevice extends Homey.Device {
         powerReadAt,
         powerFailure ? readFailureReason(powerFailure) : 'invalid-sample',
       );
+      const dc = key === 'evdc';
+      const totals = dc
+        ? { dcIn: values.totalChargedKWh, dcOut: values.totalDischargedKWh }
+        : { ac: values.totalConsumedKWh };
+      if (Object.values(totals).every(Number.isFinite)) {
+        this.homey.app.history?.observeCounters?.(
+          {
+            durationMs: Date.now() - started,
+            values: Object.fromEntries(
+              Object.entries(totals).map(([name, kWh]) => [name, String(Math.round(kWh * 100))]),
+            ),
+          },
+          { key: charger.binding },
+          dc ? 'ev' : 'evac',
+        );
+      }
       this.homey.settings.set(key === 'evdc' ? 'lastEvdc' : 'lastEvac', {
         ...values,
         errors,

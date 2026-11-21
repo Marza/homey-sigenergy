@@ -285,16 +285,11 @@
           );
         if (report.phaseCurrent) {
           const formatA = (n) => n.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' A';
-          for (const [source, title] of [
-            ['grid', 'Sparad fasström vid nätanslutningen'],
-            ['inverter', 'Sparad fasström vid växelriktaren'],
-          ]) {
-            const box = section(title);
-            const { coveredMs, fullQuarters, phases } = report.phaseCurrent[source];
-            if (!phases) {
-              paragraph(box, 'Fasström saknas för vald period.');
-              continue;
-            }
+          const box = section('Sparad fasström vid nätanslutningen');
+          const { coveredMs, fullQuarters, phases } = report.phaseCurrent.grid;
+          if (!phases) {
+            paragraph(box, 'Fasström saknas för vald period.');
+          } else {
             paragraph(
               box,
               'Täckt tid ' +

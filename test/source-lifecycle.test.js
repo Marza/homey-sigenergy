@@ -211,7 +211,7 @@ test('EVDC uses its own inverter address and marks failed power reads as gaps', 
   await tick();
   assert.deepEqual(
     readers.map((reader) => reader.config.unitId),
-    [247, 7, 7],
+    [247, 7],
   );
   assert.equal(capabilities.get('measure_ev_power'), 7200);
   assert.equal(capabilities.get('measure_ev_soc'), null);
@@ -226,8 +226,8 @@ test('EVDC uses its own inverter address and marks failed power reads as gaps', 
 
   await device.onSettings({ newSettings: { ...device.getSettings(), evdcUnitId: 247 } });
   await tick();
-  assert.equal(readers.length, 4);
-  assert.ok(readers.slice(0, 3).every((reader) => reader.closed));
+  assert.equal(readers.length, 3);
+  assert.ok(readers.slice(0, 2).every((reader) => reader.closed));
   assert.match(settings.get('evdcError'), /Modbus-ID/);
   await device.onUninit();
 });
@@ -251,11 +251,15 @@ test('EVAC uses its own endpoint, publishes cumulative energy and records separa
     evacHost: '192.0.2.20',
     evacUnitId: 9,
   });
+  const counters = [];
+  device.homey.app.history.observeCounters = (raw, binding, channel) =>
+    counters.push({ raw, binding, channel });
   await device.onInit();
   await tick();
+  assert.deepEqual({ ...counters.find((c) => c.channel === 'evac').raw.values }, { ac: '12345' });
   assert.deepEqual(
     readers.map((reader) => reader.config.unitId),
-    [247, 7, 7, 9],
+    [247, 7, 9],
   );
   assert.ok(samples.some(([sample]) => sample.evacW === 11000 && sample.evW === undefined));
   assert.equal(capabilities.get('measure_evac_power'), 11000);
@@ -273,7 +277,7 @@ test('EVAC uses its own endpoint, publishes cumulative energy and records separa
   assert.equal(readers.at(-1).closed, true);
 });
 
-test('the device polls inverter and grid phase current on their separate Modbus endpoints', async () => {
+test('the device polls grid current without opening an inverter phase reader', async () => {
   const { device, settings, readers } = deviceFixture({
     phaseRead: async (reader, source) => {
       const { host, port, unitId } = reader.config;
@@ -298,12 +302,9 @@ test('the device polls inverter and grid phase current on their separate Modbus 
     observed.push([source, amps]);
   await device.onInit();
   await tick();
-  assert.deepEqual(settings.get('inverterPhaseCurrent').amps, [8, 7, 6]);
+  assert.ok(!settings.get('inverterPhaseCurrent'));
   assert.deepEqual(settings.get('gridPhaseCurrent').amps, [11, 24, 9]);
-  assert.deepEqual(observed, [
-    ['grid', [11, 24, 9]],
-    ['inverter', [8, 7, 6]],
-  ]);
+  assert.deepEqual(observed, [['grid', [11, 24, 9]]]);
   await device.onUninit();
   assert.ok(readers.every((reader) => reader.closed));
 });
