@@ -15,6 +15,14 @@ const base = Object.fromEntries(METERS.map((key) => [key, 0]));
 const day = '2026-06-18';
 const { start } = dayBounds(day);
 const now = start + 89 * Q;
+const powerNow = start + 64 * Q;
+const forecast = {
+  at: powerNow - 1000,
+  start: powerNow,
+  wh: Array.from({ length: 96 }, (_, i) =>
+    i === 7 ? null : i === 8 ? 0 : Math.round(650 + 300 * Math.sin(i / 3)),
+  ),
+};
 const rows = [];
 for (const offset of [-96, 0]) {
   for (let i = 0; i < 89; i++) {
@@ -87,10 +95,20 @@ const server = http.createServer((req, res) => {
   if (!Object.hasOwn(widgets, widget)) return res.writeHead(404).end();
   if (rest[0] === 'api') {
     const [date, period] = rest.slice(1);
-    const homey = { app: { history: { getEnergySlots: () => rows } } };
+    const homey = {
+      settings: { get: () => ({ issues: [forecast] }) },
+      app: { history: { getEnergySlots: () => rows } },
+    };
     return res
       .writeHead(fail ? 500 : 200, { 'Content-Type': 'application/json' })
-      .end(JSON.stringify(widgets[widget].getHistory({ homey, params: { date, period } }, now)));
+      .end(
+        JSON.stringify(
+          widgets[widget].getHistory(
+            { homey, params: { date, period } },
+            widget === 'power-history' ? powerNow : now,
+          ),
+        ),
+      );
   }
   const filename = rest[0] || 'index.html';
   if (!/^[a-z.-]+$/.test(filename)) return res.writeHead(404).end();
@@ -142,7 +160,7 @@ async function run() {
         await content.waitFor({ state: 'visible' });
         await page.waitForFunction(() => window.widgetReady && window.lastHeight > 100);
         assert.equal(await page.locator('#history-date').inputValue(), day);
-        assert.equal(await page.locator('#history-next').isDisabled(), true);
+        assert.equal(await page.locator('#history-next').isDisabled(), widget === 'energy-flow');
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert.equal(
           await page.locator('canvas').evaluate((canvas) => getComputedStyle(canvas).touchAction),
@@ -156,7 +174,7 @@ async function run() {
             .getImageData(0, 0, canvas.width, canvas.height)
             .data.some((value) => value > 0);
         });
-        if (process.env.WRITE_HISTORY_WIDGET_PREVIEWS === '1' && width === 400) {
+        if (['1', widget].includes(process.env.WRITE_HISTORY_WIDGET_PREVIEWS) && width === 400) {
           await page.addStyleTag({
             content: mode === 'dark' ? 'html{background:#161e27}' : 'html{background:#fff}',
           });
@@ -167,7 +185,32 @@ async function run() {
         }
         if (widget === 'power-history') {
           const slider = page.locator('#chart-quarter');
-          assert.equal(await slider.getAttribute('max'), String(89 * 3 - 1));
+          assert.equal(await slider.getAttribute('max'), String(64 * 3 + 32 - 1));
+          await slider.fill(String(64 * 3));
+          const readings = page.locator('#chart-readings');
+          assert.match(await readings.innerText(), /Husprognos \(15 min\) −2,6 kW/);
+          assert.doesNotMatch(await readings.innerText(), /Nät/);
+          assert.match(await page.locator('#chart-time').innerText(), /16:00.*16:15/);
+          await slider.fill(String(64 * 3 + 7));
+          assert.match(await readings.innerText(), /Husprognos \(15 min\) –/);
+          await slider.fill(String(64 * 3 + 8));
+          assert.match(await readings.innerText(), /Husprognos \(15 min\) 0 kW/);
+          const toggle = page.getByRole('button', { name: 'Husprognos (15 min)' });
+          await toggle.click();
+          assert.equal(await toggle.getAttribute('aria-pressed'), 'false');
+          assert.doesNotMatch(await readings.innerText(), /Husprognos/);
+          await toggle.click();
+          await page.locator('#history-next').click();
+          await page.waitForFunction(
+            () => document.querySelector('#history-date').value === '2026-06-19',
+          );
+          assert.equal(await page.locator('#history-next').isDisabled(), true);
+          assert.match(await readings.innerText(), /Husprognos/);
+          assert.equal(await page.locator('#chart-coverage').innerText(), '');
+          await page.locator('#history-back').click();
+          await page.waitForFunction(
+            () => document.querySelector('#history-date').value === '2026-06-18',
+          );
           await slider.fill('1');
           assert.match(await page.locator('#chart-time').innerText(), /00:05.*00:10/);
           assert.match(await page.locator('#chart-coverage').innerText(), /5-minutersmedel/);

@@ -104,3 +104,50 @@ test('dates follow local calendar weeks, months and both Stockholm clock changes
   assert.equal(bad.status, 'unavailable');
   assert.equal(bad.range.date, '2026-11-20');
 });
+
+test('power widget clips the issued household forecast to future quarters and Stockholm dates', () => {
+  const { start, end } = dayBounds('2026-10-25');
+  const now = end - 2.5 * Q;
+  const first = end - 2 * Q;
+  const wh = Array(96).fill(500);
+  wh[1] = null;
+  wh[2] = 0;
+  const homey = history([row(start)]);
+  homey.settings = {
+    get: (key) => {
+      assert.equal(key, 'householdForecastV1');
+      return { issues: [{ at: now - 1, start: first, wh }] };
+    },
+  };
+  const report = (date, at = now) => power.getHistory({ homey, params: { date } }, at);
+  const today = report('today');
+  assert.equal(today.range.end - today.range.start, 100 * Q);
+  assert.deepEqual(today.forecast, [
+    { t: first, kw: -2 },
+    { t: end - Q, kw: null },
+  ]);
+  assert.ok(today.points.every((p) => p.t + p.durationMs <= now));
+  const tomorrow = report(today.range.next);
+  assert.equal(tomorrow.range.expectedQuarters, 0);
+  assert.equal(tomorrow.range.next, null);
+  assert.deepEqual(tomorrow.points, []);
+  assert.equal(tomorrow.forecast.length, 94);
+  assert.deepEqual(tomorrow.forecast[0], { t: end, kw: 0 });
+  assert.equal(report('2026-10-27').status, 'invalid-period');
+  assert.deepEqual(report('2026-10-24').forecast, []);
+  assert.deepEqual(report('today', now - Q).forecast, []);
+  assert.deepEqual(report('today', first + 1).forecast, [{ t: end - Q, kw: null }]);
+  for (const settings of [
+    undefined,
+    { get: () => ({ issues: [{}] }) },
+    {
+      get() {
+        throw Error('unavailable');
+      },
+    },
+  ]) {
+    homey.settings = settings;
+    assert.deepEqual(report('today').forecast, []);
+    assert.deepEqual(report('today').points, today.points);
+  }
+});

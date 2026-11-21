@@ -26,6 +26,10 @@
         color: var(--muted);
         text-decoration: line-through;
       }
+      .forecast-mark {
+        width: 14px;
+        border-top: 2px dashed var(--house);
+      }
       .plot {
         height: clamp(200px, 60vw, 260px);
         background: var(--panel);
@@ -84,7 +88,7 @@
       </div>
       <p id="history-status" role="status"></p>
       <figure id="history-results" hidden>
-        <div class="legend" id="chart-legend" role="group" aria-label="Mätserier"></div>
+        <div class="legend" id="chart-legend" role="group" aria-label="Diagramserier"></div>
         <canvas id="power-chart" class="plot" aria-hidden="true"></canvas>
         <div class="inspector">
           <label for="chart-quarter" class="time" id="chart-time"></label>
@@ -99,6 +103,7 @@
         </div>
         <figcaption class="sub chart-summary">
           <p id="chart-coverage"></p>
+          <p id="forecast-status"></p>
           <p>Över noll är energi in. Under noll är export, laddning eller förbrukning.</p>
         </figcaption>
       </figure>
@@ -113,12 +118,13 @@
         const slider = document.getElementById('chart-quarter');
         const hidden = new Set();
         const keys = Object.keys(labels);
-        let range, points, selectedTime, toTime;
+        let range, points, forecast, selectedTime, toTime, asOf;
+        const forecastLabel = 'Husprognos (15 min)';
         const tracked = () => keys.filter((key) => !hidden.has(key));
         const hasValues = (point) => keys.some((key) => Number.isFinite(point.kw[key]));
         const marker = (key) => {
           const dot = document.createElement('i');
-          dot.className = 'dot';
+          dot.className = key === 'forecast' ? 'forecast-mark' : 'dot';
           dot.style.setProperty('--series', 'var(--' + key + ')');
           return dot;
         };
@@ -135,6 +141,8 @@
           const readings = points
             .flatMap((row) => tracked().map((key) => row.kw[key]))
             .filter(Number.isFinite);
+          if (!hidden.has('forecast'))
+            readings.push(...forecast.filter((p) => Number.isFinite(p.kw)).map((p) => p.kw));
           const low = Math.min(0, ...readings),
             high = Math.max(1, ...readings);
           const magnitude = 10 ** Math.floor(Math.log10((high - low) / 4));
@@ -186,6 +194,29 @@
             }
             ctx.stroke();
           }
+          if (!hidden.has('forecast')) {
+            ctx.beginPath();
+            ctx.setLineDash([5, 3]);
+            ctx.strokeStyle = palette.house;
+            ctx.lineWidth = 2;
+            let lastEnd;
+            for (const p of forecast) {
+              if (!Number.isFinite(p.kw)) continue;
+              if (lastEnd === p.t) ctx.lineTo(x(p.t), y(p.kw));
+              else ctx.moveTo(x(p.t), y(p.kw));
+              lastEnd = p.t + QUARTER;
+              ctx.lineTo(x(lastEnd), y(p.kw));
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          if (forecast.length && asOf > range.start && asOf < range.end) {
+            const pos = x(asOf);
+            ctx.fillStyle = palette.muted;
+            ctx.textAlign = pos > right - 18 ? 'right' : 'left';
+            ctx.fillText('Nu', pos, top);
+            ctx.fillRect(pos, top + 8, 1, bottom - top - 8);
+          }
           if (selectedTime !== undefined) {
             const view = x(selectedTime + points[Number(slider.value)].durationMs / 2);
             ctx.beginPath();
@@ -210,21 +241,28 @@
             timeLabel + (point.estimated ? ' · uppskattad energi ingår' : '');
           slider.setAttribute('aria-valuetext', timeLabel);
           readings.replaceChildren();
-          for (const key of tracked()) {
+          for (const key of point.isForecast
+            ? hidden.has('forecast')
+              ? []
+              : ['forecast']
+            : tracked()) {
             const item = document.createElement('span');
             item.className = 'measure';
             const amount = value(point.kw[key]);
-            item.append(marker(key), `${labels[key]} ${amount}${amount === '–' ? '' : ' kW'}`);
+            item.append(
+              marker(key),
+              `${key === 'forecast' ? forecastLabel : labels[key]} ${amount}${amount === '–' ? '' : ' kW'}`,
+            );
             readings.appendChild(item);
           }
           redraw();
         }
 
-        for (const key of keys) {
+        for (const key of [...keys, 'forecast']) {
           const button = document.createElement('button');
           button.type = 'button';
           button.setAttribute('aria-pressed', 'true');
-          button.append(marker(key), labels[key]);
+          button.append(marker(key), key === 'forecast' ? forecastLabel : labels[key]);
           button.onclick = () => {
             if (hidden.has(key)) hidden.delete(key);
             else hidden.add(key);
@@ -237,30 +275,56 @@
         canvas.onclick = (event) => {
           if (!toTime || !points?.length) return;
           const clickedTime = toTime(event.offsetX);
-          const index = points.findIndex((p) => clickedTime < p.t + p.durationMs);
-          slider.value = index < 0 ? points.length - 1 : index;
+          const index = points.findIndex(
+            (p) => clickedTime >= p.t && clickedTime < p.t + p.durationMs,
+          );
+          if (index < 0) return;
+          slider.value = index;
           inspect();
         };
         mount(Homey, (report) => {
           const previousTime = range?.date === report.range.date ? selectedTime : undefined;
           range = report.range;
-          points = report.points;
-          const available = points.filter(hasValues).length;
-          if (available === 0) return false;
+          const measured = report.points;
+          forecast = report.forecast ?? [];
+          asOf = report.asOf;
+          points = measured.concat(
+            forecast.map((p) => ({
+              t: p.t,
+              durationMs: QUARTER,
+              kw: { forecast: p.kw },
+              isForecast: true,
+            })),
+          );
+          const available = measured.filter(hasValues).length;
+          const predicted = forecast.filter((p) => Number.isFinite(p.kw)).length;
+          if (!available && !predicted) return false;
           slider.max = points.length - 1;
           const previousIndex = points.findIndex((point) => point.t === previousTime);
-          slider.value = previousIndex >= 0 ? previousIndex : points.findLastIndex(hasValues);
-          const estimated = points.filter((point) => point.estimated).length;
-          const intervals = new Set(points.filter(hasValues).map((p) => p.durationMs));
+          slider.value =
+            previousIndex >= 0
+              ? previousIndex
+              : available
+                ? measured.findLastIndex(hasValues)
+                : points.findIndex((p) => Number.isFinite(p.kw.forecast));
+          const estimated = measured.filter((point) => point.estimated).length;
+          const intervals = new Set(measured.filter(hasValues).map((p) => p.durationMs));
           const resolution =
             intervals.size > 1
               ? '5- och 15-minutersmedel'
               : intervals.has(QUARTER)
                 ? '15-minutersmedel'
                 : '5-minutersmedel';
-          document.getElementById('chart-coverage').textContent =
-            `${resolution} · ${available} av ${points.length} intervall med minst en serie` +
-            (estimated ? ` · ${estimated} med uppskattad energi.` : '.');
+          document.getElementById('chart-coverage').textContent = !measured.length
+            ? ''
+            : `${resolution} · ${available} av ${measured.length} intervall med minst en serie` +
+              (estimated ? ` · ${estimated} med uppskattad energi.` : '.');
+          document.getElementById('forecast-status').textContent =
+            range.date < range.today
+              ? ''
+              : predicted
+                ? 'Streckat visar hushållets förväntade medeleffekt per kvart, utan billaddning.'
+                : 'Husprognos saknas för återstoden av dygnet.';
           inspect();
           return true;
         });
