@@ -1,4 +1,6 @@
-# Coupled solar, home-battery and EV replay
+# Coupled solar, home-battery and EV replay (archived)
+
+This document describes the retired simulation in releases through v0.17.44. For the current feature, see the [household forecast](../README.md#household-forecast).
 
 The optional **Jämför solfördelning** mode in the economic comparison section replays a historical solar/load window with one explicitly hypothetical EV charging task. It compares home-first and EV-first solar priorities using the dated terms, hourly trade prices and demand calculation already used by the balanced battery comparison. It issues no commands and makes no forecast or automatic economic ranking.
 

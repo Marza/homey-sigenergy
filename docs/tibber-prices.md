@@ -21,9 +21,3 @@ The app fetches on startup and checks refresh eligibility every five minutes. It
 Failed network/API/validation requests keep the previous cache. Known verified intervals remain usable until their ends, even when the last refresh failed; the fetch error and interval coverage are reported separately. Expiry depends on interval ends rather than treating every price as stale after an arbitrary fetch age. Invalid/future cache timestamps are rejected. Diagnostics display fetch age, last attempt, available range, missing periods and tomorrow's covered/expected hours.
 
 Changing credentials or selected home invalidates pending requests and the old configuration's cached prices. A private credential fingerprint binds a random cache revision to the configuration across app restarts; neither the fingerprint nor credentials are returned by diagnostics or history export. Unchanged configuration can keep using a verified cache during an offline restart. Error messages omit upstream response/cause text that could echo credentials.
-
-## Charging plans and limits
-
-Plans allocate energy only in explicit, finite-priced intervals. Null/string/non-finite prices are not zero. Each deadline includes coverage and exact gaps; unmet energy remains explicit. A feasible plan with incomplete pricing is marked `partial-prices`, since missing prices prevent a complete economic comparison. An already met target can need no charging regardless of price gaps. Cached prices do not prove that a vehicle is connected or enforce a charging schedule.
-
-The price input is Tibber's reported consumption `total`, not verified all-in billing cost or export remuneration. Taxes/grid fees, production payouts, wear and tariff ranking remain separate work in issue #10. All results remain advisory, and no device writes were introduced. HTTP behavior is tested with controlled responses; live failures, Dashboard behavior and every subscription/currency have not been physically validated.

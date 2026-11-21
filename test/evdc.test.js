@@ -42,6 +42,24 @@ test('decode V2.9 signed watts, SoC and separate session and total kWh', async (
   const reverse = await readEvdc(reader({ 31502: [0xffff, 0xf63c] }));
   assert.equal(reverse.values.powerW, -2500);
 });
+test('fast EVDC poll skips the SoC register and still reads session and lifetime energy', async () => {
+  const addresses = [];
+  const fixture = reader({ 31505: [0, 1350] });
+  const data = await readEvdc(
+    {
+      read(...args) {
+        addresses.push(args[0]);
+        return fixture.read(...args);
+      },
+    },
+    false,
+  );
+  assert.deepEqual(addresses, [31502, 31505, 31513]);
+  assert.equal(data.values.soc, undefined);
+  assert.equal(data.values.sessionKWh, 13.5);
+  assert.equal(data.values.totalChargedKWh, 655.58);
+});
+
 test('invalid SoC and missing optional registers preserve a measured zero power', async () => {
   const row = await readEvdc(
     reader({ 31502: [0, 0], 31504: [0xffff, 0, 10], 31513: Error('unsupported') }),

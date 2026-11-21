@@ -1,4 +1,6 @@
-# Dated cost terms and balanced battery comparison
+# Dated cost terms and balanced battery comparison (archived)
+
+This document describes the retired simulation in releases through v0.17.44. For the current feature, see the [household forecast](../README.md#household-forecast).
 
 This read-only feature connects dated cost/tariff snapshots, a conservative battery replay and an indicative economic comparison. It uses the existing Tibber GraphQL connection and collected history. It does not enable control, replace the legacy demand-only recommendations or establish a calibrated household model.
 

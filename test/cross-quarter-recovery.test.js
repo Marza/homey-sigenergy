@@ -199,10 +199,10 @@ test('failed writes retry both sides once, and a missing/overlapping/full target
     assert.deepEqual([...map], saved, mode);
   }
 });
-test('backup version 8 preserves allocation evidence, rejects metadata tampering and supports old version 7', () => {
+test('backup preserves allocation evidence, rejects metadata tampering and supports old version 7', () => {
   const f = collect(fixture()),
     file = f.history.export();
-  assert.equal(file.schema, 8);
+  assert.equal(file.schema, 16);
   const g = fixture();
   g.at(1800);
   g.history.import(file);
@@ -227,6 +227,7 @@ test('backup version 8 preserves allocation evidence, rejects metadata tampering
   }
   const old = structuredClone(file);
   old.schema = 7;
+  for (const row of old.slots) delete row.fiveMinute;
   for (const r of old.slots) delete r.counterRecovery;
   assert.doesNotThrow(() => parseExport(old, T + 1800000));
   // A retained/imported single quarter keeps its own explicit share, never the whole counter delta.
@@ -266,7 +267,7 @@ test('no counter bridge across restarts, imports, source changes, off-grid, long
         scenario === 'connection' ? 'connection-changed' : 'off-grid',
       );
     }
-    const s = scenario === 'long' ? 1200 : 960;
+    const s = scenario === 'long' ? 1800 : 960;
     f.at(s);
     f.history.append(power);
     const c = raw(s),
@@ -507,19 +508,12 @@ test('partition evidence cannot bypass export versioning and malformed pending b
 
 test('complete cross-quarter estimates retain provenance in readiness and hourly aggregation without enabling control', () => {
   const { fixture: ready } = require('./fixtures/readiness.cjs');
-  const { checkReadiness } = require('../lib/pricing/comparison-readiness');
   const { hourlyEnergy } = require('../lib/pricing/hourly-energy');
   const f = collect(fixture()),
     context = ready({ hours: 4, now: T + 4 * 3600000 });
   const rawRows = f.history.getSlots().slice(0, 2);
   context.rows.splice(0, 2, ...rawRows);
   context.homey.app.history.getEnergySlots = () => context.rows.map(effectiveSlot);
-  const readiness = checkReadiness(context.homey, { hours: 4, mode: 'battery' }, context.now);
-  assert.equal(readiness.dataComplete, true);
-  assert.equal(readiness.counterRecoveredQuarters, 2);
-  assert.equal(readiness.modelValidated, false);
-  assert.equal(readiness.controlApplied, false);
-  assert.equal(readiness.financiallyComparable, false);
   const energy = energyHistory(context.rows.map(effectiveSlot), context.now);
   const hourly = hourlyEnergy(energy, null, false, context.now);
   assert.equal(hourly.counterRecoveredHours, 1);

@@ -8,19 +8,12 @@ function verifyEnergy(directory) {
     'function',
   );
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'app.json')));
-  assert.deepEqual(manifest.api.previewSolar, {
-    method: 'POST',
-    path: '/solar/preview',
+  const settingsHtml = fs.readFileSync(path.join(directory, 'settings/index.html'), 'utf8');
+  assert.deepEqual(manifest.api.getHouseholdForecast, {
+    method: 'GET',
+    path: '/forecast/household',
     public: false,
   });
-  assert.equal(
-    typeof require(path.resolve(directory, 'lib/charging/solar-preview')).previewSolar,
-    'function',
-  );
-  assert.equal(typeof require(path.resolve(directory, 'settings/solar-preview')).bind, 'function');
-  const settingsHtml = fs.readFileSync(path.join(directory, 'settings/index.html'), 'utf8');
-  assert.ok(settingsHtml.includes('src="solar-preview.js"'));
-  assert.ok(settingsHtml.includes('SolarPreview.bind(Homey)'));
   assert.deepEqual(manifest.api.getEconomicHistory, {
     method: 'GET',
     path: '/economics/energy-history',
@@ -47,27 +40,10 @@ function verifyEnergy(directory) {
   );
   assert.ok(fs.existsSync(path.join(directory, 'settings/tibber-history-prices.js')));
   assert.ok(settingsHtml.includes('TibberHistoryPricesSettings.bind(Homey)'));
-  for (const name of [
-    'getContractTimeline',
-    'publishCostContract',
-    'restoreCostContracts',
-    'compareBatteryReplay',
-    'compareSolarEvReplay',
-  ]) {
+  for (const name of ['getContractTimeline', 'publishCostContract', 'restoreCostContracts']) {
     assert.equal(manifest.api[name].public, false);
     assert.equal(typeof require(path.resolve(directory, 'api'))[name], 'function');
   }
-  assert.equal(
-    typeof require(path.resolve(directory, 'lib/optimization/balanced-replay')).replayBattery,
-    'function',
-  );
-  assert.ok(fs.existsSync(path.join(directory, 'settings/economic-replay.js')));
-  assert.ok(settingsHtml.includes('EconomicReplaySettings.bind(Homey)'));
-  assert.equal(
-    typeof require(path.resolve(directory, 'lib/optimization/coupled-solar-replay')).replaySolarEv,
-    'function',
-  );
-  assert.ok(settingsHtml.includes('econ-solar-enabled'));
   const meters = require(path.resolve(directory, 'lib/energy/meters'));
   const reporting = require(path.resolve(directory, 'lib/energy/reporting'));
   assert.equal(typeof reporting.createDevice, 'function');

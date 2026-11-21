@@ -17,11 +17,6 @@
   "category": "energy",
   "permissions": [],
   "api": {
-    "previewEconomics": {
-      "method": "POST",
-      "path": "/economics/preview",
-      "public": false
-    },
     "exportHistory": {
       "method": "GET",
       "path": "/history/export",
@@ -37,19 +32,9 @@
       "path": "/history/import",
       "public": false
     },
-    "previewCharging": {
-      "method": "POST",
-      "path": "/charging/preview",
-      "public": false
-    },
     "getEnergyCounters": {
       "method": "GET",
       "path": "/energy/counters",
-      "public": false
-    },
-    "previewSolar": {
-      "method": "POST",
-      "path": "/solar/preview",
       "public": false
     },
     "getEconomicHistory": {
@@ -97,29 +82,19 @@
       "path": "/economics/contracts/restore",
       "public": false
     },
-    "compareBatteryReplay": {
-      "method": "POST",
-      "path": "/economics/replay",
-      "public": false
-    },
-    "compareSolarEvReplay": {
-      "method": "POST",
-      "path": "/economics/solar-ev-replay",
-      "public": false
-    },
-    "compareEvdcSessionReplay": {
-      "method": "POST",
-      "path": "/economics/evdc-session-replay",
-      "public": false
-    },
-    "inspectEconomicReadiness": {
-      "method": "POST",
-      "path": "/economics/readiness",
-      "public": false
-    },
     "getDataDiagnostics": {
       "method": "POST",
       "path": "/diagnostics/data-gaps",
+      "public": false
+    },
+    "getHouseholdForecast": {
+      "method": "GET",
+      "path": "/forecast/household",
+      "public": false
+    },
+    "getGridDay": {
+      "method": "POST",
+      "path": "/diagnostics/grid-day",
       "public": false
     }
   },
@@ -394,40 +369,54 @@
           "max": 246
         },
         {
-          "id": "phaseInverterUnitId",
-          "type": "number",
-          "label": {
-            "en": "Inverter ID for phase current (0 = use configured EVDC inverter)",
-            "sv": "Växelriktar-ID för fasström (0 = använd konfigurerad EVDC-växelriktare)"
-          },
-          "value": 0,
-          "min": 0,
-          "max": 246
-        },
-        {
           "id": "phaseMeterSource",
           "type": "dropdown",
           "label": {
-            "en": "Grid phase current source",
-            "sv": "Källa för nätets fasström"
+            "en": "Grid phase measurement source",
+            "sv": "Mätkälla för nätfaser"
           },
-          "value": "sdm630",
+          "value": "auto",
           "values": [
             {
-              "id": "sdm630",
+              "id": "auto",
               "label": {
-                "en": "SDM630 (off when address is empty)",
-                "sv": "SDM630 (av om adressen är tom)"
+                "en": "Automatic (configured SDM630 or Gateway)",
+                "sv": "Automatiskt (inställd SDM630 eller Gateway)"
               }
             },
             {
               "id": "gateway",
               "label": {
-                "en": "Sigenergy Gateway (requires compatible firmware)",
-                "sv": "Sigenergy Gateway (kräver kompatibel firmware)"
+                "en": "Sigenergy Gateway",
+                "sv": "Sigenergy Gateway"
+              }
+            },
+            {
+              "id": "sdm630",
+              "label": {
+                "en": "SDM630",
+                "sv": "SDM630"
+              }
+            },
+            {
+              "id": "off",
+              "label": {
+                "en": "Off",
+                "sv": "Av"
               }
             }
           ]
+        },
+        {
+          "id": "gridFrequencyUnitId",
+          "type": "number",
+          "label": {
+            "en": "Grid frequency inverter unit ID (0 = use enabled EVDC inverter)",
+            "sv": "Växelriktar-ID för nätfrekvens (0 = använd aktiverad EVDC:s ID)"
+          },
+          "value": 0,
+          "min": 0,
+          "max": 246
         },
         {
           "id": "phaseMeterHost",
@@ -787,6 +776,26 @@
     ]
   },
   "widgets": {
+    "energy-flow": {
+      "id": "energy-flow",
+      "name": { "en": "Energy flows", "sv": "Energiflöden" },
+      "description": {
+        "en": "Energy entering and leaving the system",
+        "sv": "Tillförd och använd energi i kWh"
+      },
+      "settings": [],
+      "api": { "getHistory": { "method": "GET", "path": "/:date/:period" } }
+    },
+    "power-history": {
+      "id": "power-history",
+      "name": { "en": "Power history", "sv": "Effekthistorik" },
+      "description": {
+        "en": "Five-minute power history and household forecast",
+        "sv": "Effekt per fem minuter och hushållsprognos"
+      },
+      "settings": [],
+      "api": { "getHistory": { "method": "GET", "path": "/:date" } }
+    },
     "energy-overview": {
       "id": "energy-overview",
       "name": {

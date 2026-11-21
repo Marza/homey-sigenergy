@@ -1,7 +1,6 @@
 'use strict';
 const { TibberHistoryPrices } = require('../../lib/pricing/tibber-history-prices');
 const { timelineStatus, publishContract } = require('../../lib/pricing/contract-timeline');
-const { DEFAULTS } = require('../../lib/charging/planner');
 const H = 3600000,
   Q = 900000,
   END = Date.parse('2026-06-11T12:00Z');
@@ -12,7 +11,6 @@ function fixture({ hours = 4, now = END } = {}) {
     tibberToken: 'SECRET_FIXTURE_TOKEN',
     tibberHomeId: 'PRIVATE_FIXTURE_HOME',
     sourceConfig: { tibber: { revision: 'PRIVATE_FIXTURE_REVISION' } },
-    chargingConfig: structuredClone(DEFAULTS),
     costContract: {
       schema: 2,
       currency: 'SEK',
@@ -94,18 +92,4 @@ function fixture({ hours = 4, now = END } = {}) {
   );
   return { homey, data, rows, source, from, to, now, hours };
 }
-const input = (hours) => ({
-  hours: hours || 4,
-  capsKW: [2],
-  confirmModelAssumptions: true,
-  battery: {
-    capacityKWh: 10,
-    initialKWh: 5,
-    reserveKWh: 1,
-    maxChargeKW: 3,
-    maxDischargeKW: 3,
-    chargeEfficiency: 0.9,
-    dischargeEfficiency: 0.9,
-  },
-});
-module.exports = { fixture, input, H, Q, END };
+module.exports = { fixture, H, Q, END };

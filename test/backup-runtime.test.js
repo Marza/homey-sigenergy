@@ -8,7 +8,6 @@ const { createRequire } = require('node:module');
 const { EventEmitter } = require('node:events');
 const { backupAdvisory } = require('../lib/source-status');
 const { IslandController } = require('../lib/backup/island-controller');
-const { getOverview } = require('../widgets/energy-overview/api');
 const { heatPumpPolicy } = require('../lib/backup/heat-pump-policy');
 
 function healthy(now = Date.now()) {
@@ -93,7 +92,7 @@ test('restoration waits through startup, resets on communication gaps and clock 
   }
   assert.equal(c.communicationLost().controlApplied, false);
 });
-test('runtime clears saved advice at transitions, blocks both charging entry points and keeps qualified history', async () => {
+test('runtime clears backup status on startup and updates the Nibe advisory at grid transitions', async () => {
   const file = path.join(__dirname, '../app.js');
   const requireApp = createRequire(file),
     module = { exports: {} };
@@ -143,12 +142,7 @@ test('runtime clears saved advice at transitions, blocks both charging entry poi
   app.pollNibe = app.refreshPrices = async () => {};
   await app.onInit();
   assert.equal(settings.get('backupStatus'), null);
-  assert.equal(settings.get('optimizationRecommendation').status, 'backup-restricted');
-  assert.equal(app.getChargingPreview(null).slots.length, 0);
-  assert.equal(app.getPricePlan(20).status, 'backup-restricted');
   for (const [key, value] of Object.entries(healthy(now))) settings.set(key, value);
-  assert.equal(app.getPricePlan(20).status, 'no-prices');
-  assert.equal(settings.get('optimizationRecommendation').status, 'insufficient-data');
   settings.set('nibeStatus', { readAt: new Clock().toISOString(), readings: { outdoorC: 4 } });
   settings.set('backupStatus', {
     ...healthy(now).backupStatus,
@@ -156,31 +150,13 @@ test('runtime clears saved advice at transitions, blocks both charging entry poi
     soc: 20,
     suspendEconomicOptimization: true,
   });
-  assert.equal(settings.get('optimizationRecommendation').status, 'backup-restricted');
   assert.equal(settings.get('nibeStatus').policy.modeRequested, 'critical');
   assert.equal(settings.get('nibeStatus').policy.controlApplied, false);
   settings.set('backupStatus', { ...settings.get('backupStatus'), soc: 60 });
   assert.equal(settings.get('nibeStatus').policy.modeRequested, 'economy');
-  const history = app.getOptimizationPreview();
-  assert.equal(history.historicalOnly, true);
-  assert.equal(history.backupAdvisory.restricted, true);
-  assert.equal(app.getAdvancedOptimizationPreview().historicalOnly, true);
   for (const [key, value] of Object.entries(healthy(now))) settings.set(key, value);
   now += 31000;
   timers.find((t) => t.ms === 60000).fn();
-  assert.equal(settings.get('optimizationRecommendation').status, 'backup-restricted');
-  assert.equal(app.getPricePlan(20).status, 'backup-restricted');
   assert.equal(settings.get('nibeStatus').readAt, new Date(now - 31000).toISOString());
   await app.onUninit();
-});
-test('Dashboard suppresses an old saved recommendation using current source freshness', () => {
-  const now = Date.now(),
-    values = healthy(now);
-  values.optimizationRecommendation = { status: 'illustrative', capKW: 4, reservePercent: 30 };
-  const homey = { settings: { get: (key) => values[key] } };
-  assert.equal(getOverview({ homey }, now).values.optimizationRecommendation.capKW, 4);
-  const stale = getOverview({ homey }, now + 31000).values.optimizationRecommendation;
-  assert.equal(stale.status, 'backup-restricted');
-  assert.equal(stale.capKW, undefined);
-  assert.match(stale.reason, /pausade/);
 });

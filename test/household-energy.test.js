@@ -91,7 +91,7 @@ test('energy across a quarter boundary is preserved and its allocation is marked
   observe('200', 870);
   assert.equal(observe('212', 930), 7.2);
   const file = history.export();
-  assert.equal(file.schema, 10);
+  assert.equal(file.schema, 14);
   assert.deepEqual(
     file.slots.map((s) => [s.t, s.householdWh, s.householdCoverageMs, s.householdEstimatedMs]),
     [
@@ -121,4 +121,116 @@ test('resuming after restoring an open quarter cannot add overlapping household 
   const [quarter] = restored.history.export().slots;
   assert.equal(quarter.householdWh, 150);
   assert.equal(quarter.householdCoverageMs, SLOT_MS);
+});
+
+test('a bound household counter repairs a timeout within one quarter and qualifies for the forecast', () => {
+  const { history, observe, report } = setup();
+  history.setHouseholdSource('plant:epoch-1');
+  observe('1000', 0);
+  observe(null, 60, 'modbus-timeout');
+  observe(null, 120, 'modbus-timeout');
+  observe('1000', 180); // A valid zero covers the entire outage.
+  observe('1072', 900);
+  history.flush();
+  const row = history.getSlots()[0];
+  assert.equal(row.householdWh, 720);
+  assert.equal(row.householdCoverageMs, SLOT_MS);
+  assert.equal(row.householdRecoveredMs, SLOT_MS);
+  assert.equal(row.householdEstimatedMs, 0);
+  const d = report();
+  assert.equal(d.quality.channels.household.recoveredMs, SLOT_MS);
+  assert.equal(d.quality.channels.household.observedMs, SLOT_MS);
+  assert.ok(d.events.some((e) => e.reason === 'counter-gap-recovered' && e.source === 'household'));
+  const { HouseholdForecast } = require('../lib/energy/household-forecast');
+  const model = new HouseholdForecast(history.settings, history);
+  assert.equal(model.report(T + 86400000 - SLOT_MS).forecastKW[0], 2.88);
+});
+
+test('restart recovers a boundary delta once, with independent quarter and five-minute provenance', () => {
+  const { history, observe } = setup();
+  history.setHouseholdSource('meter:0');
+  observe('100', 600);
+  history.flush();
+  const restarted = new HistoryStore(history.settings, () => end);
+  restarted.append({}, T + 850000, 'reader-started');
+  restarted.setHouseholdSource('meter:0');
+  restarted.observeHouseholdCounter('160', T + 1200000);
+  restarted.flush();
+  restarted.observeHouseholdCounter('160', T + 1200000);
+  restarted.flush();
+  const file = restarted.export();
+  assert.equal(file.schema, 15);
+  assert.equal(JSON.stringify(file).includes('meter:0'), false);
+  assert.equal(file.householdCheckpoint, undefined);
+  const { point } = require('../lib/energy/five-minute');
+  for (const [i, row] of file.slots.entries()) {
+    assert.equal(row.householdWh, 300);
+    assert.equal(row.householdRecoveredMs, 300000);
+    assert.equal(row.householdEstimatedMs, 300000);
+    const p = point(row, i === 0 ? 2 : 0);
+    assert.equal(p.kw.house, -3.6);
+    assert.equal(p.estimated, true);
+  }
+  const restored = setup().history;
+  restored.import(file);
+  assert.deepEqual(restored.getSlots(), file.slots);
+  assert.throws(() => restored.import({ ...file, schema: 14 }), /version 15/);
+  const bad = structuredClone(file);
+  bad.slots[0].householdRecoveredMs++;
+  assert.throws(() => restored.import(bad), /recovery duration/);
+});
+
+test('atomic checkpoint survives a failed flush, an abrupt restart, and a later retry without double counting', () => {
+  const { history, observe } = setup();
+  history.setHouseholdSource('meter');
+  observe('1000', 0);
+  observe('1005', 60);
+  history.flush();
+  const settings = history.settings;
+  const write = settings.set;
+  observe('1010', 120);
+  settings.set = () => {
+    throw Error('storage unavailable');
+  };
+  assert.throws(() => history.flush(), /unavailable/);
+  assert.equal(settings.get('historyState').householdCheckpoint.value, 1005);
+  settings.set = write;
+  const restarted = new HistoryStore(settings, () => end);
+  restarted.setHouseholdSource('meter');
+  restarted.observeHouseholdCounter('1015', T + 180000);
+  settings.set = () => {
+    throw Error('retry');
+  };
+  assert.throws(() => restarted.flush(), /retry/);
+  settings.set = write;
+  restarted.flush();
+  restarted.flush();
+  const [r] = restarted.getSlots();
+  assert.equal(r.householdWh, 150);
+  assert.equal(r.householdCoverageMs, 180000);
+  assert.equal(r.householdRecoveredMs, 120000);
+  assert.equal(settings.get('historyState').householdCheckpoint.value, 1015);
+});
+
+test('changed source, reset, invalid counter, time reversal and long outages cannot bridge energy', () => {
+  const { history, observe } = setup();
+  history.setHouseholdSource('meter:1');
+  observe('10000', 0);
+  observe(null, 60, 'modbus-timeout');
+  assert.equal(observe('10020', 59), null);
+  assert.equal(observe('5', 120), null);
+  assert.equal(observe('10020', 180), null);
+  history.setHouseholdSource('meter:2');
+  assert.equal(observe('10030', 240), null);
+  assert.equal(observe('10040', 1141), null); // More than 15 minutes.
+  assert.equal(observe('broken', 1200), null);
+  assert.equal(observe('10041', 1260), null);
+  assert.equal(observe('10042', 1320), 0.6);
+  history.setHouseholdSource(null);
+  const restarted = new HistoryStore(history.settings, () => end);
+  restarted.setHouseholdSource('meter:2');
+  assert.equal(restarted.observeHouseholdCounter('10043', T + 1380000), null);
+  const row = restarted.export().slots[0];
+  assert.equal(row.householdWh, 10);
+  assert.equal(row.householdRecoveredMs, undefined);
 });

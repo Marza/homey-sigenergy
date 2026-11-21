@@ -1,4 +1,6 @@
-# Economic comparison data check
+# Economic comparison data check (archived)
+
+This document describes the retired simulation in releases through v0.17.44. For the current feature, see the [household forecast](../README.md#household-forecast).
 
 The **Kontrollera periodens underlag** button in economic comparison step 3
 inspects local data before running a scenario. Select the hours and battery-only

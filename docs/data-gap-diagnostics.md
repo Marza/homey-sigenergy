@@ -6,7 +6,7 @@ The view separates:
 
 - Missing or incomplete grid, battery and solar quarters. Grid and battery use the same coverage predicates as economic replay; solar requires a full independent power integral. Quarter windows end at the latest closed quarter.
 - Missing historical Tibber purchase and sale prices, checked independently for closed whole hours. The price section displays its own hour-aligned window, cache timestamp and earliest next attempt. A successful last response does not mean newer hours already have prices.
-- Registered observations: app lifecycle, reader/source changes, invalid samples, gaps exceeding the 60-second integration limit, off-grid exclusions, classified Modbus failures, polling loops longer than 60 seconds, failed/recovered history writes, imports, and price-fetch outcomes.
+- Registered observations: app lifecycle, reader/source changes, invalid samples, gaps exceeding the configured power integration limit, off-grid exclusions, classified Modbus failures, polling loops longer than 60 seconds, failed/recovered history writes, imports, and price-fetch outcomes.
 - History readability, serialized size, budget, revision, checkpoint time, buffered quarters and diagnostic-journal health. These are application-level observations, not a disk durability check or a cross-process transaction guarantee.
 
 A quarter can be present but ineligible because a short part of it lacks coverage. It is not necessarily a deleted record. Values across restarts, source changes, failed reads or long observation gaps are not invented. Main plant read failures invalidate grid, battery and solar continuity; independent EVDC samples cannot repair them.

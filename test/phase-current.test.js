@@ -11,14 +11,8 @@ const { phaseReaders, closePhaseReaders, pollPhaseCurrent } = require('../lib/en
 const binding = 'a'.repeat(24);
 const boundary = Date.parse('2026-10-01T10:00:00Z');
 
-test('read the documented inverter and SDM630 register blocks and reject invalid phase data', async () => {
+test('read the SDM630 register block and reject unsupported sources or invalid phase data', async () => {
   const reader = new SigenergyReader({ host: 'example.invalid' });
-  reader.read = async (...args) => {
-    assert.deepEqual(args, [31017, 6, 1000]);
-    return [0, 150, 65535, 65311, 0, 0];
-  };
-  assert.deepEqual(await reader.phaseCurrents('inverter'), [1.5, 2.25, 0]);
-
   reader.read = async (...args) => {
     assert.deepEqual(args, [6, 6, 1000]);
     return [0x41c4, 0, 0x4148, 0, 0x3f00, 0];
@@ -27,33 +21,44 @@ test('read the documented inverter and SDM630 register blocks and reject invalid
   reader.read = async () => [0x7fc0, 0, 0, 0, 0, 0];
   await assert.rejects(reader.phaseCurrents('grid'), /Invalid phase/);
   reader.read = async () => [0, -1];
-  await assert.rejects(reader.phaseCurrents('inverter'), /Invalid phase/);
+  await assert.rejects(reader.phaseCurrents('inverter'), /Unsupported/);
 });
 
-test('read Gateway current only from the connected plant grid sensor', async () => {
+test('read only connected gateway grid phases and measured inverter frequency', async () => {
   const reader = new SigenergyReader({ host: 'example.invalid', unitId: 247 });
   const calls = [];
-  reader.read = async (...args) => {
-    calls.push(args);
-    return args[0] === 30004 ? [1] : [0, 306, 0xffff, 0xff46, 0, 275];
+  const words = (n) => [n >>> 16, n & 65535];
+  reader.read = async (addr, count, timeout) => {
+    calls.push([addr, count, timeout]);
+    if (addr === 30004) return [1, 0, 0, 0, 0, 0];
+    return (
+      addr === 30286 ? [23379, 22963, 22583, 306, -196, 278] : [3, 4, -4, -644, -399, -586]
+    ).flatMap(words);
   };
-  assert.deepEqual(await reader.phaseCurrents('gateway'), [3.06, 1.86, 2.75]);
+  assert.deepEqual(await reader.gatewayPhases(), {
+    onGrid: true,
+    volts: [233.79, 229.63, 225.83],
+    amps: [3.06, 1.96, 2.78],
+    activeKW: [0.003, 0.004, -0.004],
+    reactiveKvar: [-0.644, -0.399, -0.586],
+  });
   assert.deepEqual(calls, [
-    [30004, 1, 1000],
-    [30292, 6, 1000],
+    [30004, 6, 1000],
+    [30286, 12, 1000],
+    [30052, 12, 1000],
   ]);
-  reader.read = async (address) => {
-    assert.equal(address, 30004);
-    return [0];
-  };
-  await assert.rejects(reader.phaseCurrents('gateway'), /not connected/);
-  reader.read = async (address) => {
-    if (address === 30004) return [1];
-    throw Error('Illegal data address');
-  };
-  await assert.rejects(reader.phaseCurrents('gateway'), /Illegal data address/);
+  reader.read = async () => [0];
+  await assert.rejects(reader.gatewayPhases(), /not connected/);
+  await assert.rejects(reader.gridFrequency(), /Inverter unit/);
   reader.unitId = 1;
-  await assert.rejects(reader.phaseCurrents('gateway'), /requires plant unit 247/);
+  await assert.rejects(reader.gatewayPhases(), /unit 247/);
+  reader.read = async (...args) => {
+    assert.deepEqual(args, [31002, 1, 1000]);
+    return [5002];
+  };
+  assert.equal(await reader.gridFrequency(), 50.02);
+  reader.read = async () => [65535];
+  assert.equal(await reader.gridFrequency(), null);
 });
 
 test('persist phase averages and peaks separately across quarter boundaries, gaps and source changes', () => {
@@ -88,7 +93,7 @@ test('persist phase averages and peaks separately across quarter boundaries, gap
     ampMs: [187500, 297500, 315000],
     peakA: [20, 22, 24],
   });
-  assert.equal(next.phaseCurrent.inverter.ms, 10000);
+  assert.equal(next.phaseCurrent.inverter, undefined);
   assert.equal(next.gridWh, undefined);
   const summary = historySummary(history.getSlots(), boundary - SLOT_MS, boundary + SLOT_MS);
   assert.deepEqual(summary.grid.phases[0], { phase: 'L1', meanA: 10, peakA: 20 });
@@ -96,6 +101,9 @@ test('persist phase averages and peaks separately across quarter boundaries, gap
   assert.equal(summary.grid.fullQuarters, 0);
   const backup = history.export();
   assert.equal(backup.schema, 11);
+  const legacy = structuredClone(backup);
+  legacy.slots[0].phaseCurrent.inverter = structuredClone(legacy.slots[0].phaseCurrent.grid);
+  assert.doesNotThrow(() => history.previewImport(legacy));
   assert.equal(history.previewImport(backup).conflictingSlots, 0);
   assert.throws(
     () => history.previewImport({ ...backup, schema: 10 }),
@@ -105,7 +113,7 @@ test('persist phase averages and peaks separately across quarter boundaries, gap
   assert.throws(() => history.previewImport(backup), /Invalid phase current quarter/);
 });
 
-test('configure phase readers separately and discard reads from an old connection', async () => {
+test('configure the grid phase reader and discard reads from an old connection', async () => {
   const readers = phaseReaders(
     {
       host: 'inverter.invalid',
@@ -118,14 +126,12 @@ test('configure phase readers separately and discard reads from an old connectio
     },
     10,
   );
-  assert.equal(readers.inverter.reader.unitId, 2);
-  assert.equal(readers.inverter.reader.addressOffset, -1);
   assert.equal(readers.grid.reader.unitId, 8);
   assert.equal(readers.grid.reader.port, 1502);
   assert.equal(readers.grid.reader.addressOffset, 0);
   assert.equal(
-    phaseReaders({ host: 'inverter.invalid', phaseInverterUnitId: 4 }, 10).inverter.reader.unitId,
-    4,
+    phaseReaders({ host: 'inverter.invalid', phaseInverterUnitId: 4 }, 10).inverter,
+    undefined,
   );
   assert.equal(
     phaseReaders({ phaseMeterHost: 'meter.invalid', phaseMeterPort: 0 }, 10).grid.reader,
@@ -161,7 +167,7 @@ test('configure phase readers separately and discard reads from an old connectio
   resolve([5, 8, 23]);
   await pending;
   assert.equal(data.get('gridPhaseCurrent').state, 'read-error');
-  assert.equal(observations.length, 4);
+  assert.equal(observations.length, 3);
 });
 
 test('selecting the Gateway uses the plant connection and creates a distinct history binding', () => {

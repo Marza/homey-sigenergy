@@ -18,8 +18,7 @@
     'modbus-read-error': 'Modbus-avläsningen misslyckades',
     'counter-recovery-failed':
       'Räknaråterhämtningen kunde inte genomföras; ordinarie avläsning fortsätter',
-    'counter-gap-recovered':
-      'Kort energilucka kompletterades från Sigenergys kWh-räknare (uppskattning)',
+    'counter-gap-recovered': 'Energilucka kompletterades från Sigenergys kWh-räknare',
     'plant-processing-error': 'Bearbetning eller publicering av anläggningsdata misslyckades',
     'off-grid': 'Nätenergin pausades eftersom nätläge inte var on-grid',
     'slow-poll': 'Ett avläsningsvarv tog mer än 60 sekunder',
@@ -207,6 +206,15 @@
                       }) + ' kWh';
                 paragraph(box, 'Energi under täckt tid: ' + kWh + '.');
               }
+              if (Number.isFinite(coverage.recoveredMs) && coverage.recoveredMs > 0)
+                paragraph(
+                  box,
+                  'Av den täckta tiden har ' +
+                    (coverage.recoveredMs / 60000).toLocaleString('sv-SE', {
+                      maximumFractionDigits: 1,
+                    }) +
+                    ' minuter återhämtats från hushållsräknaren. Energi över en kvartgräns är tidsfördelad.',
+                );
               const parts = [
                 ['Observerat', 'observedMs', 'observed'],
                 ['Räknarestimat', 'counterEstimatedMs', 'estimated'],
@@ -277,16 +285,11 @@
           );
         if (report.phaseCurrent) {
           const formatA = (n) => n.toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' A';
-          for (const [source, title] of [
-            ['grid', 'Sparad fasström vid nätanslutningen'],
-            ['inverter', 'Sparad fasström vid växelriktaren'],
-          ]) {
-            const box = section(title);
-            const { coveredMs, fullQuarters, phases } = report.phaseCurrent[source];
-            if (!phases) {
-              paragraph(box, 'Fasström saknas för vald period.');
-              continue;
-            }
+          const box = section('Sparad fasström vid nätanslutningen');
+          const { coveredMs, fullQuarters, phases } = report.phaseCurrent.grid;
+          if (!phases) {
+            paragraph(box, 'Fasström saknas för vald period.');
+          } else {
             paragraph(
               box,
               'Täckt tid ' +

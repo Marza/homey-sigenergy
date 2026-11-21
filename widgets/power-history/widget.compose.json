@@ -1,0 +1,9 @@
+{
+  "name": { "en": "Power history", "sv": "Effekthistorik" },
+  "description": {
+    "en": "Five-minute power history and household forecast",
+    "sv": "Effekt per fem minuter och hushållsprognos"
+  },
+  "settings": [],
+  "api": { "getHistory": { "method": "GET", "path": "/:date" } }
+}

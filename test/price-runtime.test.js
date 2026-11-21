@@ -7,7 +7,6 @@ const fs = require('node:fs'),
   { createRequire } = require('node:module'),
   { EventEmitter } = require('node:events');
 const { calendar } = require('../lib/pricing/coverage');
-const { DEFAULTS } = require('../lib/charging/planner');
 function cache() {
   const now = new Date(),
     days = calendar(now);
@@ -31,7 +30,6 @@ class Settings extends EventEmitter {
     this.values = new Map([
       ['tibberToken', 'test-token'],
       ['tibberHomeId', 'fixture-home'],
-      ['chargingConfig', structuredClone(DEFAULTS)],
     ]);
   }
   get(k) {
@@ -93,10 +91,6 @@ test('price refresh preserves usable cache after failure and across an offline r
   assert.equal(settings.get('priceCache'), before);
   assert.equal(app.getDiagnostics().tibber.status, 'error');
   assert.equal(app.getDiagnostics().tibber.usable, true);
-  const plan = app.getPricePlan(50);
-  assert.equal(plan.advisoryOnly, true);
-  assert.equal(plan.currency, 'SEK');
-  assert.equal(plan.pricing.status, 'error');
   await app.onUninit();
   const restarted = appFixture(fetchPrices, settings).app;
   await restarted.onInit();
@@ -131,7 +125,6 @@ test('credentials changed during a request invalidate its result without publish
   resolve(cache());
   await pending;
   assert.equal(settings.get('priceCache'), before);
-  assert.equal(app.getPricePlan(50).status, 'no-prices');
   next = async () => cache();
   await app.refreshPrices();
   assert.equal(app.getDiagnostics().tibber.usable, true);
@@ -155,16 +148,17 @@ test('legacy and expired caches cannot silently provide inferred prices to plans
   });
   const before = settings.get('priceCache');
   settings.set('priceCache', { ...before, schema: 1 });
-  assert.equal(app.getPricePlan(10).status, 'no-prices');
+  assert.equal(app.getDiagnostics().tibber.usable, false);
   settings.set('priceCache', before);
   const expiredAt = new Date(Date.parse(before.prices.at(-1).end) + 1000);
+  const { priceStatus } = require('../lib/pricing/coverage');
+  assert.equal(priceStatus(Object.fromEntries(settings.values), expiredAt.getTime()).usable, false);
   settings.set('sigenergyStatus', { readAt: expiredAt.toISOString() });
   settings.set('backupStatus', {
     mode: 'on-grid',
     suspendEconomicOptimization: false,
     observedAt: expiredAt.toISOString(),
   });
-  assert.equal(app.getPricePlan(10, expiredAt).status, 'expired-prices');
   await app.onUninit();
 });
 module.exports = {};

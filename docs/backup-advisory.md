@@ -4,13 +4,13 @@ Hardware access remains read-only and learning mode is enforced. EV stop, Nibe e
 
 ## Current behavior
 
-Startup/restart and changed device settings invalidate the previous backup decision. Unknown, off-grid, failed, disabled, stale or future-dated plant/backup observations block runtime charging previews and price plans with `backup-restricted` and no charging slots. Current cap/reserve recommendations are removed. Both a fresh usable plant source and a fresh on-grid decision with `suspendEconomicOptimization: false` are required to resume advice.
+Startup, a connection change and stale readings invalidate the previous backup decision.
 
 Register 30009 is interpreted as 0 = grid, 1/2 = island, otherwise unknown. Five minutes of continuously observed grid readings are required at startup and after loss/island state. A gap longer than the plant freshness limit or a backwards clock resets that delay. A reader restart starts a new delay. Low valid battery SoC (<25%) requests critical Nibe mode while restricted; invalid or stale SoC cannot establish critical mode. No EV stop, Nibe block or automatic restart is executed.
 
-Backup decisions are published before optional battery/EVDC work. Settings events invalidate saved recommendations immediately; a minute timer checks freshness if polling stalls. Charging APIs and Dashboard projections check freshness at request time. Nibe policy is refreshed at transitions and at its next poll; policy timestamps do not imply a new temperature measurement. Existing Nibe tariff schedules remain authoritative; the app does not infer their active state.
+Backup decisions are published before optional battery and EVDC reads. The minute timer checks freshness. Nibe policy updates on transitions and on the next poll.
 
-Historical replay, tariff scenarios and observed demand estimates remain available. Replay results carry `historicalOnly: true` and current backup context. Settings label historical simulations and the Dashboard qualifies tariff scenarios. These are counterfactual historical calculations, not present dispatch instructions or guaranteed savings. Open browser views refresh periodically; a previously rendered result is not live permission to operate equipment.
+Household forecasts and observed demand estimates remain available in learning mode.
 
 ## Validation scope
 

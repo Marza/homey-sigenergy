@@ -1,0 +1,9 @@
+{
+  "name": { "en": "Energy flows", "sv": "Energiflöden" },
+  "description": {
+    "en": "Energy entering and leaving the system",
+    "sv": "Tillförd och använd energi i kWh"
+  },
+  "settings": [],
+  "api": { "getHistory": { "method": "GET", "path": "/:date/:period" } }
+}

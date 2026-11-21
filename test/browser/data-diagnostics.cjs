@@ -21,13 +21,7 @@ function reset() {
     averageKW: 0,
   };
   const at = Date.now();
-  f.data.gridPhaseCurrent = {
-    state: 'ok',
-    profile: 'gateway',
-    at,
-    amps: [23.5, 5, 0],
-    maxAgeMs: 30000,
-  };
+  f.data.gridPhaseCurrent = { state: 'ok', at, amps: [23.5, 5, 0], maxAgeMs: 30000 };
   f.data.inverterPhaseCurrent = { state: 'ok', at: at - 60000, amps: [2, 3, 4], maxAgeMs: 30000 };
   f.rows[6].phaseCurrent = {
     grid: {
@@ -106,6 +100,28 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', async () => {
+      if (url.pathname === '/api/diagnostics/grid-day') {
+        const { metric, phase } = JSON.parse(body);
+        const end = Date.now(),
+          t = Math.floor(end / 300000) * 300000 - 600000;
+        res.end(
+          JSON.stringify({
+            start: end - 86400000,
+            end,
+            binMs: 300000,
+            profile: 'gateway',
+            frequencyUnit: 7,
+            bins:
+              metric === 'volts' && phase === 1
+                ? []
+                : [
+                    { t, min: 49.97, mean: 50, max: 50.03, count: 3 },
+                    { t: t + 600000, min: 50, mean: 50, max: 50, count: 1 },
+                  ],
+          }),
+        );
+        return;
+      }
       if (url.pathname !== '/api/diagnostics/data-gaps') {
         res.end(JSON.stringify({ error: 'Synthetic unavailable data' }));
         return;
@@ -164,11 +180,24 @@ const server = http.createServer((req, res) => {
         await page.locator('#diagnosticRows').textContent(),
         /Medel sedan förra avläsningen 0 kW/,
       );
+      await page.locator('#gridPhaseStatus').getByText('L1 23,5 A · L2 5 A · L3 0 A').waitFor();
+      assert.equal(await page.locator('#inverterPhaseStatus').count(), 0);
+      await page.locator('#gridDayDetails > summary').click();
+      await page.locator('#gridDayMetric').selectOption('frequencyHz');
       await page
-        .locator('#gridPhaseStatus')
-        .getByText('Sigenergy Gateway · L1 23,5 A · L2 5 A · L3 0 A')
+        .locator('#gridDaySource')
+        .getByText(/växelriktaren.*7/)
         .waitFor();
-      await page.locator('#inverterPhaseStatus').getByText('Mätvärdena är inaktuella.').waitFor();
+      assert.ok(await page.locator('#gridDayPhase').isDisabled());
+      assert.equal(await page.locator('#gridDayChart svg path').count(), 3);
+      assert.equal(await page.locator('#gridDayTable tbody tr').count(), 2);
+      await page.locator('#gridDayMetric').selectOption('volts');
+      await page.locator('#gridDayPhase').selectOption('1');
+      await page
+        .locator('#gridDayStatus')
+        .getByText(/Inga avläsningar/)
+        .waitFor();
+      assert.equal(await page.locator('#gridDayChart svg').count(), 0);
       await page.locator('#tab-settings').click();
       if (width < 768) await page.locator('#settingsCategory').selectOption('data');
       else await page.locator('[data-settings-category="data"]').click();
@@ -199,8 +228,7 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Sparad fasström vid nätanslutningen/);
       assert.match(text, /Hela mätkvartar 1/);
       assert.match(text, /L1 · Medel 9 A · Topp 23,5 A/);
-      assert.match(text, /Sparad fasström vid växelriktaren/);
-      assert.match(text, /Fasström saknas för vald period/);
+      assert.doesNotMatch(text, /Sparad fasström vid växelriktaren/);
       assert.equal(await page.locator('.coverage-bar').count(), 6);
       const bars = await page.locator('.coverage-bar').evaluateAll((bs) =>
         bs.map((b) => ({

@@ -36,8 +36,21 @@ test('settings change connects with new settings before Homey updates getSetting
     { filename: path.join(__dirname, '../drivers/sigenergy/device.js') },
   );
   const device = new module.exports();
-  const oldSettings = { host: '192.0.2.10', port: 502, unitId: 247, pollSeconds: 10 };
-  const newSettings = { ...oldSettings, host: '192.0.2.20', port: 503, unitId: 1, pollSeconds: 20 };
+  const oldSettings = {
+    host: '192.0.2.10',
+    port: 502,
+    unitId: 247,
+    pollSeconds: 10,
+    phaseMeterSource: 'off',
+  };
+  const newSettings = {
+    ...oldSettings,
+    host: '192.0.2.20',
+    port: 503,
+    unitId: 1,
+    pollSeconds: 20,
+    phaseMeterSource: 'gateway',
+  };
   const cleared = [],
     intervals = [];
   device.getSettings = () => oldSettings;
@@ -65,5 +78,5 @@ test('settings change connects with new settings before Homey updates getSetting
   assert.equal(readers[0].closed, true);
   assert.equal(readers[1].settings, newSettings);
   assert.deepEqual(cleared, [1]);
-  assert.deepEqual(intervals, [10000, 20000]);
+  assert.deepEqual(intervals, [10000, 20000, 10000]);
 });

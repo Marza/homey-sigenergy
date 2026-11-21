@@ -130,7 +130,6 @@ test('Nibe config changes and disablement invalidate previous successes and erro
 });
 
 test('temperature context and automatic battery values reject future timestamps consistently', () => {
-  const { effectiveBatteryConfig, DEFAULT_OPTIMIZER } = require('../lib/optimization/simulator');
   const now = Date.now(),
     future = new Date(now + 60000).toISOString();
   assert.equal(
@@ -146,28 +145,6 @@ test('temperature context and automatic battery values reject future timestamps 
   assert.equal(
     temperatureContext({ dischargeLimitKW: 2, observedAt: future, now }).dischargeLimitKW,
     null,
-  );
-  assert.equal(
-    effectiveBatteryConfig(
-      DEFAULT_OPTIMIZER,
-      { readAt: future, values: { capacityKWh: 5 } },
-      { autoBatteryValues: true, now },
-    ).batteryCapacityKWh,
-    42,
-  );
-  const status = sourceStatus({
-    readAt: new Date(now).toISOString(),
-    error: 'timeout',
-    now,
-    maxAgeMs: 600000,
-  });
-  assert.equal(
-    effectiveBatteryConfig(
-      DEFAULT_OPTIMIZER,
-      { readAt: new Date(now).toISOString(), values: { capacityKWh: 5 } },
-      { autoBatteryValues: true, status },
-    ).batteryCapacityKWh,
-    42,
   );
 });
 

@@ -211,11 +211,9 @@ for (const count of [3, 5])
     v.run('onHomeyReady(Homey)');
     assert.equal(v.element('demandPeakLabel').textContent, `Medel av ${count} timtoppar`);
     assert.equal(v.element('demandKw').textContent, '4 kW');
-    assert.equal(v.element('simSaving').textContent, '100 kr');
     v.values.demandTariff = { ...tariff, peakCount: count === 3 ? 5 : 3 };
     v.refresh();
     assert.equal(v.element('demandKw').textContent, '–');
-    assert.equal(v.element('simSaving').textContent, '–');
     assert.match(v.element('demandState').textContent, /Inväntar/);
   });
 test('widget clears missing/invalid/read-error/off-season and old-month estimates', () => {
@@ -273,11 +271,9 @@ test('Telge holiday calendar survives settings edits and invalidates old widget 
     widget.element('demandState').textContent,
     /5\/260 mättimmar.*100 saknade.*155 återstående/,
   );
-  assert.match(widget.element('savingState').textContent, /observerade timmar.*100 saknade/);
   widget.values.demandTariff = base();
   widget.refresh();
   assert.equal(widget.element('demandKw').textContent, '–');
-  assert.equal(widget.element('simSaving').textContent, '–');
 });
 
 test('meter-import reference remains separate and hides after binding changes', () => {
@@ -401,7 +397,6 @@ test('monthly demand prioritizes Tibber when local distinct-day history is insuf
   assert.equal(v.element('demandPeakLabel').textContent, 'Medel hittills (3 av 5)');
   assert.match(v.element('demandState').textContent, /3 av 5 olika mätdagar/);
   assert.match(v.element('demandPeaks').textContent, /3 kW/);
-  assert.equal(v.element('simSaving').textContent, '–');
   for (const mode of ['stale', 'read-error', 'negative', 'new-tariff']) {
     v.values.meterDemandEstimate = { ...r, averageKw: 4.2, estimatedSek: 420 };
     v.failedReads.clear();
@@ -426,7 +421,6 @@ test('local monthly fallback is explicitly sourced and never adds Tibber volumes
   assert.equal(v.element('meterSek').textContent, '400 kr');
   assert.match(v.element('monthlySource').textContent, /Sigenergy/);
   assert.match(v.element('meterState').textContent, /lokal avgift/);
-  assert.equal(v.element('simSaving').textContent, '–');
   v.failedReads.add('demandEstimate');
   v.refresh();
   assert.equal(v.element('meterSek').textContent, '–');
@@ -455,7 +449,6 @@ test('first-day peaks and their provisional fee show immediately, including zero
     assert.match(v.element('meterState').textContent, /1 av 5 olika mätdagar/);
     assert.match(v.element('meterState').textContent, /Underlaget är ofullständigt/);
     assert.match(v.element('demandPeaks').textContent, /10:00 GMT\+1/);
-    assert.equal(v.element('simSaving').textContent, '–');
     v.values.demandEstimate = {
       ...estimate(tariff),
       selectedPeaks: [1, 2, 3, 4, 5].map((kw, i) => ({
@@ -520,8 +513,6 @@ test('partial fee uses the observed mean and matching saved rate while backend c
   assert.match(v.element('demandState').textContent, /baserad på 3 av 5 olika mätdagar/);
   assert.equal(v.values.demandEstimate.status, 'insufficient-data');
   assert.equal(v.values.demandEstimate.estimatedSek, null);
-  assert.equal(v.element('simDemand').textContent, '–');
-  assert.equal(v.element('simSaving').textContent, '–');
   assert.equal(v.writes.length, 0);
   for (const rate of [0, 1e308]) {
     v.values.demandTariff = { ...tariff, rateSekPerKw: rate };
