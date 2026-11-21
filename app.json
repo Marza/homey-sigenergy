@@ -91,6 +91,11 @@
       "method": "GET",
       "path": "/forecast/household",
       "public": false
+    },
+    "getGridDay": {
+      "method": "POST",
+      "path": "/diagnostics/grid-day",
+      "public": false
     }
   },
   "platforms": ["local"],
@@ -362,6 +367,45 @@
           "value": 0,
           "min": 0,
           "max": 246
+        },
+        {
+          "id": "phaseMeterSource",
+          "type": "dropdown",
+          "label": {
+            "en": "Grid phase measurement source",
+            "sv": "Mätkälla för nätfaser"
+          },
+          "value": "auto",
+          "values": [
+            {
+              "id": "auto",
+              "label": {
+                "en": "Automatic (configured SDM630 or Gateway)",
+                "sv": "Automatiskt (inställd SDM630 eller Gateway)"
+              }
+            },
+            {
+              "id": "gateway",
+              "label": {
+                "en": "Sigenergy Gateway",
+                "sv": "Sigenergy Gateway"
+              }
+            },
+            {
+              "id": "sdm630",
+              "label": {
+                "en": "SDM630",
+                "sv": "SDM630"
+              }
+            },
+            {
+              "id": "off",
+              "label": {
+                "en": "Off",
+                "sv": "Av"
+              }
+            }
+          ]
         },
         {
           "id": "phaseMeterHost",

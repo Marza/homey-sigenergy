@@ -24,6 +24,38 @@ test('read the SDM630 register block and reject unsupported sources or invalid p
   await assert.rejects(reader.phaseCurrents('inverter'), /Unsupported/);
 });
 
+test('read connected gateway grid phases and observe mode and alarms even after grid-sensor loss', async () => {
+  const reader = new SigenergyReader({ host: 'example.invalid', unitId: 247 });
+  const calls = [];
+  const words = (n) => [n >>> 16, n & 65535];
+  reader.read = async (addr, count, timeout) => {
+    calls.push([addr, count, timeout]);
+    if (addr === 30004) return [1, 0, 0, 0, 0, 0];
+    if (addr === 30027) return [0x3001];
+    return (
+      addr === 30286 ? [23379, 22963, 22583, 306, -196, 278] : [3, 4, -4, -644, -399, -586]
+    ).flatMap(words);
+  };
+  assert.deepEqual(await reader.gatewayPhases(), {
+    gridMode: 0,
+    gridAlarms: 24,
+    volts: [233.79, 229.63, 225.83],
+    amps: [3.06, 1.96, 2.78],
+    activeKW: [0.003, 0.004, -0.004],
+    reactiveKvar: [-0.644, -0.399, -0.586],
+  });
+  assert.deepEqual(calls, [
+    [30004, 6, 1000],
+    [30027, 1, 1000],
+    [30286, 12, 1000],
+    [30052, 12, 1000],
+  ]);
+  reader.read = async (addr) => (addr === 30004 ? [0, 0, 0, 0, 0, 1] : [65535]);
+  assert.deepEqual(await reader.gatewayPhases(), { gridMode: 1, gridAlarms: null });
+  reader.unitId = 1;
+  await assert.rejects(reader.gatewayPhases(), /unit 247/);
+});
+
 test('persist phase averages and peaks separately across quarter boundaries, gaps and source changes', () => {
   const data = new Map();
   const settings = { get: (key) => data.get(key), set: (key, value) => data.set(key, value) };
@@ -131,6 +163,29 @@ test('configure the grid phase reader and discard reads from an old connection',
   await pending;
   assert.equal(data.get('gridPhaseCurrent').state, 'read-error');
   assert.equal(observations.length, 3);
+});
+
+test('selecting the Gateway uses the plant connection and creates a distinct history binding', () => {
+  const settings = {
+    host: 'plant.invalid',
+    port: 5020,
+    unitId: 247,
+    addressOffset: -1,
+    phaseMeterHost: 'meter.invalid',
+    phaseMeterPort: 1502,
+    phaseMeterUnitId: 8,
+  };
+  const original = phaseReaders(settings, 10).grid;
+  const explicitMeter = phaseReaders({ ...settings, phaseMeterSource: 'sdm630' }, 10).grid;
+  assert.equal(explicitMeter.binding, original.binding);
+  const gateway = phaseReaders({ ...settings, phaseMeterSource: 'gateway' }, 10).grid;
+  assert.equal(gateway.profile, 'gateway');
+  assert.equal(gateway.reader.host, settings.host);
+  assert.equal(gateway.reader.port, settings.port);
+  assert.equal(gateway.reader.unitId, 247);
+  assert.equal(gateway.reader.addressOffset, -1);
+  assert.notEqual(gateway.binding, original.binding);
+  assert.equal(phaseReaders({ ...settings, phaseMeterSource: 'invalid' }, 10).grid.reader, null);
 });
 
 test('trim the oldest phase observations first when the history reaches its size limit', () => {

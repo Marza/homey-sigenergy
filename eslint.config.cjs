@@ -43,6 +43,7 @@ module.exports = [
 
       'settings/household-settings.js',
       'settings/data-diagnostics.js',
+      'settings/grid-day.js',
       'settings/settings-assistant.js',
       'widgets/*/public/history-widget.js',
     ],

@@ -9,6 +9,13 @@ const {
 const { getEnergyHistory } = require('./lib/pricing/energy-history');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
+  async getGridDay({ homey, body }) {
+    const source = homey.settings.get('gridPhaseCurrent');
+    return {
+      ...homey.app.gridDay.report(source?.binding, body?.metric, body?.phase),
+      profile: source?.profile ?? null,
+    };
+  },
   async getHouseholdForecast({ homey }) {
     return homey.app.forecast.report();
   },

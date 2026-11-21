@@ -44,6 +44,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
   startReader(settings = this.getSettings()) {
     const reason = this.reader ? 'connection-changed' : 'reader-started';
     if (this.timer) this.homey.clearInterval(this.timer);
+    if (this.phaseTimer) this.homey.clearInterval(this.phaseTimer);
+    this.phaseTimer = null;
     if (this.reader) this.reader.close();
     for (const charger of Object.values(this.chargers || {})) charger.reader?.close();
     closePhaseReaders(this.phaseReaders, this.homey);
@@ -66,7 +68,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
     // Allow scheduling jitter while identifying a missed poll in the energy history.
     this.powerGapMs = Math.min(60000, seconds * 1500);
     this.meterGapMs = Math.min(90000, seconds * 1500);
-    this.phaseReaders = phaseReaders(settings, seconds);
+    this.phaseReaders = phaseReaders(settings);
     for (const [source, entry] of Object.entries(this.phaseReaders))
       publishPhaseCurrent(this.homey, source, entry, entry.state);
     this.island = new IslandController({ maxGapMs: Math.max(30000, seconds * 3000) });
@@ -149,17 +151,25 @@ module.exports = class SigenergyDevice extends Homey.Device {
     );
     const generation = this.generation;
     const current = () => !this.stopped && generation === this.generation;
+    const phaseTick = () => {
+      for (const [source, entry] of Object.entries(this.phaseReaders))
+        pollPhaseCurrent(this.homey, source, entry, current).catch((error) => this.error(error));
+    };
     const tick = () => {
       this.poll().catch((error) => this.error(error));
       for (const key of Object.keys(CHARGERS))
         this.pollCharger(key).catch((error) => this.error(error));
-      for (const [source, entry] of Object.entries(this.phaseReaders))
-        pollPhaseCurrent(this.homey, source, entry, current).catch((error) => this.error(error));
+      if (seconds === 10) phaseTick();
     };
     this.timer = this.homey.setInterval(tick, seconds * 1000);
+    if (seconds !== 10 && this.phaseReaders.grid.reader)
+      this.phaseTimer = this.homey.setInterval(phaseTick, 10000);
     cleared
       .then(() => {
-        if (!this.stopped && generation === this.generation) tick();
+        if (current()) {
+          tick();
+          if (this.phaseTimer) phaseTick();
+        }
       })
       .catch((error) => this.error(error));
   }
@@ -531,6 +541,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
       household: { ...config.household, enabled: false },
     });
     if (this.timer) this.homey.clearInterval(this.timer);
+    if (this.phaseTimer) this.homey.clearInterval(this.phaseTimer);
+    this.phaseTimer = null;
     if (this.reader) this.reader.close();
     for (const charger of Object.values(this.chargers || {})) charger.reader?.close();
     closePhaseReaders(this.phaseReaders, this.homey);

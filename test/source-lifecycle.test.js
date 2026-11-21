@@ -153,6 +153,7 @@ function deviceFixture({
     port: 502,
     unitId: 247,
     pollSeconds: 10,
+    phaseMeterSource: 'sdm630',
     evdcEnabled: true,
     evdcUnitId: 7,
   });

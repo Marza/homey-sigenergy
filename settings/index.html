@@ -13,6 +13,7 @@
     <script src="household-forecast.js"></script>
     <script src="contract-versions.js"></script>
     <script src="household-settings.js"></script>
+    <script src="grid-day.js"></script>
     <script src="data-diagnostics.js"></script>
     <link rel="stylesheet" href="styles.css" />
     <script src="navigation.js"></script>
@@ -265,9 +266,45 @@
       <h4>Nätanslutning (hela hushållet)</h4>
       <p id="gridPhaseStatus" aria-live="polite">Väntar på mätdata…</p>
       <p class="sub">
-        Ställ in nätmätarens Modbus-adress i Sigenergy-enhetens avancerade inställningar. För
-        kontroll av huvudsäkringen används en SDM630 vid nätanslutningen.
+        Välj mätkälla för nätfaser i Sigenergy-enhetens avancerade inställningar. Gateway använder
+        anläggningens Modbus-adress.
       </p>
+      <details class="card" id="gridDayDetails">
+        <summary>Nätets senaste 24 timmar</summary>
+        <label for="gridDayMetric">Mätvärde</label>
+        <select id="gridDayMetric">
+          <option value="amps">Ström (A)</option>
+          <option value="volts">Fasspänning – gatewayens nätsida (V)</option>
+          <option value="activeKW">Aktiv effekt (kW)</option>
+          <option value="reactiveKvar">Reaktiv effekt (kvar)</option>
+        </select>
+        <label for="gridDayPhase">Fas</label
+        ><select id="gridDayPhase">
+          <option value="0">L1</option>
+          <option value="1">L2</option>
+          <option value="2">L3</option>
+        </select>
+        <p id="gridDaySource"></p>
+        <p class="sub">
+          Avläsning var 10:e sekund. Diagrammet visar min, medel och max per fem minuter.
+        </p>
+        <p id="gridDayStatus" aria-live="polite"></p>
+        <div id="gridDayChart"></div>
+        <details id="gridEventDetails" hidden>
+          <summary>Driftläge och nätlarm</summary>
+          <p>
+            Lodräta markeringar i diagrammet visar observerad övergång från nätdrift till ödrift.
+            Listan visar de 30 senaste observationerna av driftläget och anläggningens nätlarm.
+            Korta händelser mellan två avläsningar kan missas. Uppmätt nätfrekvens från gatewayens
+            nätsida saknar verifierat lokalt register.
+          </p>
+          <ol id="gridEvents"></ol>
+        </details>
+        <details>
+          <summary>Visa mätvärden i tabell</summary>
+          <div id="gridDayTable"></div>
+        </details>
+      </details>
       <h3>Temperatur och batterigränser</h3>
       <p id="batteryTelemetryStatus"></p>
       <p id="temperatureStatus">Väntar på mätdata…</p>
@@ -2204,6 +2241,7 @@
         ContractVersions.bind(Homey);
         HouseholdForecastView.bind(Homey);
         HouseholdSettings.bind(Homey);
+        globalThis.GridDayView?.bind(Homey);
         DataDiagnosticsSettings.bind(Homey);
         Homey.ready();
       }

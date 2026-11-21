@@ -100,6 +100,33 @@ const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => (body += c));
     req.on('end', async () => {
+      if (url.pathname === '/api/diagnostics/grid-day') {
+        const { metric, phase } = JSON.parse(body);
+        const end = Date.now(),
+          t = Math.floor(end / 300000) * 300000 - 600000;
+        res.end(
+          JSON.stringify({
+            start: end - 86400000,
+            end,
+            binMs: 300000,
+            profile: 'gateway',
+            events: [
+              { at: t, mode: 0, alarms: 0, resumed: true },
+              { at: t + 10000, mode: 1, alarms: 16, resumed: false },
+            ],
+            bins:
+              metric === 'volts'
+                ? phase === 1
+                  ? []
+                  : [{ t, min: 229.5, mean: 230, max: 230.5, count: 3 }]
+                : [
+                    { t, min: 49.97, mean: 50, max: 50.03, count: 3 },
+                    { t: t + 600000, min: 50, mean: 50, max: 50, count: 1 },
+                  ],
+          }),
+        );
+        return;
+      }
       if (url.pathname !== '/api/diagnostics/data-gaps') {
         res.end(JSON.stringify({ error: 'Synthetic unavailable data' }));
         return;
@@ -160,6 +187,30 @@ const server = http.createServer((req, res) => {
       );
       await page.locator('#gridPhaseStatus').getByText('L1 23,5 A · L2 5 A · L3 0 A').waitFor();
       assert.equal(await page.locator('#inverterPhaseStatus').count(), 0);
+      await page.locator('#gridDayDetails > summary').click();
+      await page.locator('#gridEventDetails > summary').click();
+      await page
+        .locator('#gridEvents')
+        .getByText(/Automatisk ödrift.*Underfrekvens/)
+        .waitFor();
+      assert.equal(await page.locator('#gridDayChart line title').count(), 1);
+      assert.equal(await page.locator('#gridDayMetric option[value="frequencyHz"]').count(), 0);
+      await page.locator('#gridDayMetric').selectOption('volts');
+      await page
+        .locator('#gridDaySource')
+        .getByText(/Sigenergy Gateway, nätsidan/)
+        .waitFor();
+      await page.waitForFunction(
+        () =>
+          document.querySelector('#gridDayTable tbody tr td:nth-child(3)')?.textContent === '230',
+      );
+      assert.equal(await page.locator('#gridDayChart svg path').count(), 3);
+      await page.locator('#gridDayPhase').selectOption('1');
+      await page
+        .locator('#gridDayStatus')
+        .getByText(/Inga avläsningar/)
+        .waitFor();
+      assert.equal(await page.locator('#gridDayChart svg').count(), 0);
       await page.locator('#tab-settings').click();
       if (width < 768) await page.locator('#settingsCategory').selectOption('data');
       else await page.locator('[data-settings-category="data"]').click();

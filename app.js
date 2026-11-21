@@ -21,6 +21,7 @@ const {
 const { fetchConsumption, shouldSync } = require('./lib/pricing/consumption-sync');
 const { fetchTibberPrices } = require('./lib/pricing/tibber');
 const { shouldRefreshPrices, hasTomorrowPrices } = require('./lib/pricing/refresh-policy');
+const { GridDay } = require('./lib/energy/grid-day');
 module.exports = class SigenergyApp extends Homey.App {
   async onInit() {
     // Read-only is enforced in code, not only through a UI toggle.
@@ -37,6 +38,7 @@ module.exports = class SigenergyApp extends Homey.App {
     this.dataDiagnostics = new DataDiagnostics(this.homey.settings);
     this.dataDiagnostics.record('app', 'app-started');
     this.history = new HistoryStore(this.homey.settings, () => Date.now(), this.dataDiagnostics);
+    this.gridDay = new GridDay(this.homey.settings);
     this.forecast = new HouseholdForecast(this.homey.settings, this.history);
     this.refreshDemandEstimate();
     this.demandTimer = this.homey.setInterval(() => this.refreshDemandEstimate(), 15 * 60 * 1000);
@@ -49,6 +51,7 @@ module.exports = class SigenergyApp extends Homey.App {
       } catch (e) {
         this.error('History flush:', e.message);
       } finally {
+        this.flushGridDay();
         this.dataDiagnostics.flush();
       }
     }, 60 * 1000);
@@ -391,6 +394,13 @@ module.exports = class SigenergyApp extends Homey.App {
     validateTariff(tariff);
     return calculateDemandCharge(slots ?? calculationSlots(this.history), tariff, month);
   }
+  flushGridDay() {
+    try {
+      this.gridDay?.flush();
+    } catch (error) {
+      this.error('Grid history flush:', error.message);
+    }
+  }
   async onUninit() {
     this.dataDiagnostics?.record('app', 'app-stopped');
     this.stopping = true;
@@ -405,6 +415,7 @@ module.exports = class SigenergyApp extends Homey.App {
     if (this.priceTimer) this.homey.clearInterval(this.priceTimer);
     if (this.consumptionTimer) this.homey.clearInterval(this.consumptionTimer);
     if (this.nibeTimer) this.homey.clearInterval(this.nibeTimer);
+    this.flushGridDay();
     if (this.history) this.history.flush();
   }
 };
