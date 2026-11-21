@@ -114,13 +114,17 @@
           range = report.range;
           date.value = range.date;
           date.min = range.earliest;
-          date.max = range.today;
+          date.max = range.latest ?? range.today;
           back.disabled = !range.previous;
           next.disabled = !range.next;
           if (report.status !== 'ok') return fail();
           const hasData = render(report);
           results.hidden = !hasData;
-          status.textContent = hasData ? '' : 'Inga kompletta mätintervall för perioden.';
+          status.textContent = hasData
+            ? ''
+            : range.date > range.today
+              ? 'Ingen hushållsprognos för dygnet.'
+              : 'Inga kompletta mätintervall för perioden.';
           layout.refresh();
         })
         .catch(fail)
