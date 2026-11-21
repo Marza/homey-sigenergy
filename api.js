@@ -9,6 +9,15 @@ const {
 const { getEnergyHistory } = require('./lib/pricing/energy-history');
 const { getCounterDiagnostics } = require('./lib/energy/diagnostics');
 module.exports = {
+  getHistoryOverview({ homey }) {
+    const { slots, daily, legacyDaily } = homey.app.history.read();
+    return {
+      slots: slots.slice(-32).map(({ t, counts, sum }) => ({ t, counts, sum })),
+      slotCount: slots.length,
+      dayCount: daily.length,
+      legacyDayCount: legacyDaily.length,
+    };
+  },
   async getGridDay({ homey, body }) {
     const source = homey.settings.get('gridPhaseCurrent');
     return {

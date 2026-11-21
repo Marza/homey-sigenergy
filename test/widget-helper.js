@@ -1,5 +1,30 @@
 'use strict';
 const { getOverview } = require('../widgets/energy-overview/api');
+const { HistoryStore } = require('../lib/history');
+const { historySettings } = require('../lib/packed-history');
+const { getHistoryOverview } = require('../api');
+
+function attachHistoryApi(Homey) {
+  Homey.api = (method, path, body, callback) => {
+    if (method !== 'GET' || path !== '/history/overview') return;
+    const settings = {
+      get(key) {
+        let value;
+        Homey.get(key, (err, result) => {
+          if (err) throw err;
+          value = result;
+        });
+        return value;
+      },
+    };
+    try {
+      const history = new HistoryStore(historySettings(settings));
+      callback(null, getHistoryOverview({ homey: { app: { history } } }));
+    } catch (error) {
+      callback(error);
+    }
+  };
+}
 // Existing rendering fixtures deliver settings synchronously. Exercise the real
 // snapshot API with them while keeping their assertions deterministic.
 function attachWidgetApi(Homey, Clock = Date) {
@@ -45,4 +70,4 @@ function attachWidgetApi(Homey, Clock = Date) {
   };
   return Homey;
 }
-module.exports = { attachWidgetApi };
+module.exports = { attachWidgetApi, attachHistoryApi };

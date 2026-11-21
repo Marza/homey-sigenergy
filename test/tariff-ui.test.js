@@ -1,5 +1,5 @@
 'use strict';
-const { attachWidgetApi } = require('./widget-helper');
+const { attachWidgetApi, attachHistoryApi } = require('./widget-helper');
 const test = require('node:test'),
   assert = require('node:assert/strict');
 const fs = require('node:fs'),
@@ -77,6 +77,7 @@ function view(file, initial = {}) {
     setInterval: (callback) => timers.push(callback),
   });
   if (file.startsWith('widgets/')) attachWidgetApi(Homey, Clock);
+  else attachHistoryApi(Homey);
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   for (const match of html.matchAll(/<script src="([^"]+)"><\/script>/g))
     if (!match[1].startsWith('/'))
