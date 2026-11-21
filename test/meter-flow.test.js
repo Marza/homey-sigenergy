@@ -167,6 +167,13 @@ test('full meter and raw coverage use the shared net grid and ESS once, partial 
   );
   assert.equal(result.meteredGrid, true);
   assert.equal(row.importWh, 430);
+  const interrupted = calculationSlot({
+    ...row,
+    meterFlow: { ...row.meterFlow, recoveredMs: 60000 },
+  });
+  assert.equal(interrupted.meteredGrid, undefined);
+  assert.equal(interrupted.importWh, 430);
+  assert.equal(interrupted.essWh, -145);
   assert.equal(calculationSlot({ ...row, coverageMs: 0 }).meteredGrid, undefined);
   assert.equal(calculationSlot({ ...row, meterFlow: minute }).gridWh, 430);
 });
