@@ -68,7 +68,7 @@ module.exports = class SigenergyApp extends Homey.App {
     this.nibePolling = false;
     this.nibeTimer = this.homey.setInterval(
       () => this.pollNibe().catch((e) => this.error('Nibe:', e.message)),
-      30000,
+      60000,
     );
     this.pollNibe().catch((e) => this.log('Nibe monitoring:', e.message));
     this.priceRefreshing = false;
@@ -154,6 +154,7 @@ module.exports = class SigenergyApp extends Homey.App {
       });
       const readings = await reader.snapshot();
       if (!current()) return;
+      this.history.observeMinute('outdoorC', readings.outdoorC, reader.outdoorReadAt ?? Date.now());
       const advisory = this.getBackupAdvisory();
       const policy = heatPumpPolicy({
         gridMode: advisory.mode,

@@ -202,7 +202,7 @@ test('failed writes retry both sides once, and a missing/overlapping/full target
 test('backup preserves allocation evidence, rejects metadata tampering and supports old version 7', () => {
   const f = collect(fixture()),
     file = f.history.export();
-  assert.equal(file.schema, 14);
+  assert.equal(file.schema, 16);
   const g = fixture();
   g.at(1800);
   g.history.import(file);
@@ -267,7 +267,7 @@ test('no counter bridge across restarts, imports, source changes, off-grid, long
         scenario === 'connection' ? 'connection-changed' : 'off-grid',
       );
     }
-    const s = scenario === 'long' ? 1200 : 960;
+    const s = scenario === 'long' ? 1800 : 960;
     f.at(s);
     f.history.append(power);
     const c = raw(s),

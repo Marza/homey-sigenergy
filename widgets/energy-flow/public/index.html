@@ -277,7 +277,10 @@
           document.getElementById('flow-status').textContent = meterReport
             ? 'Beräknad fördelning · ' +
               value((100 * meterReport.ms) / meterReport.expectedMs) +
-              ' % mättäckning'
+              ' % täckning' +
+              (meterReport.recoveredMs
+                ? ' · ' + value(meterReport.recoveredMs / 60000) + ' min återhämtade från räknare'
+                : '')
             : 'Kvartssummor. Batteri och DC visas netto per kvart.' +
               (report.meters ? '' : ' Perioden saknar sammanhängande flödesräknare.');
 
@@ -352,7 +355,7 @@
               );
             }
             document.getElementById('flow-coverage').textContent =
-              'Räknarnas förändring per avläsning (cirka en minut). Samtidiga källor fördelas proportionellt. Skillnader i energibalansen och intervall med riktningsbyte lämnas ofördelade.';
+              'Flödena bygger på skillnaden mellan två räknaravläsningar. Samtidiga källor fördelas proportionellt. Skillnader i energibalansen och intervall med riktningsbyte lämnas ofördelade.';
           } else {
             for (const [key, label] of Object.entries(globalThis.HistoryWidget.labels)) {
               const item = document.createElement('li');

@@ -364,17 +364,6 @@
           "max": 246
         },
         {
-          "id": "phaseInverterUnitId",
-          "type": "number",
-          "label": {
-            "en": "Inverter ID for phase current (0 = use configured EVDC inverter)",
-            "sv": "Växelriktar-ID för fasström (0 = använd konfigurerad EVDC-växelriktare)"
-          },
-          "value": 0,
-          "min": 0,
-          "max": 246
-        },
-        {
           "id": "phaseMeterHost",
           "type": "text",
           "label": {

@@ -34,6 +34,14 @@ test('default own PV is unchanged and does not probe third-party power', async (
   assert.equal(calls.length, 6);
   assert.ok(!calls.some((c) => c.address === 30194));
 });
+test('intermediate plant poll reads power without reading the SoC register', async () => {
+  const { reader, calls } = fixture();
+  const data = await reader.snapshot('self', false);
+  assert.ok(!calls.some((c) => c.address === 30014));
+  assert.equal(data.soc, undefined);
+  assert.equal(data.essW, 900);
+});
+
 test('explicit third-party and combined modes select distinct watts on the same plant connection', async () => {
   for (const [mode, expected] of [
     ['third-party', 3400],

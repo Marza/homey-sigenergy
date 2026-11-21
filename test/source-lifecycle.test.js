@@ -26,7 +26,7 @@ function load(file, overrides) {
     module = { exports: {} };
   vm.runInNewContext(
     fs.readFileSync(full, 'utf8'),
-    { module, require: (id) => (id in overrides ? overrides[id] : requireFile(id)) },
+    { module, Date, require: (id) => (id in overrides ? overrides[id] : requireFile(id)) },
     { filename: full },
   );
   return module.exports;
@@ -88,14 +88,15 @@ function deviceFixture({
   const settings = new Settings(),
     capabilities = new Map(),
     readers = [],
-    samples = [];
+    samples = [],
+    minuteSamples = [];
   class Reader {
     constructor(config) {
       this.config = config;
       readers.push(this);
     }
-    snapshot(solarSource) {
-      return snapshotRead(this, solarSource);
+    snapshot(...args) {
+      return snapshotRead(this, ...args);
     }
     read(...args) {
       return evacRead(this, ...args);
@@ -138,7 +139,13 @@ function deviceFixture({
     settings,
     setInterval: () => 1,
     clearInterval() {},
-    app: { history: { append: (...args) => samples.push(args), event() {} } },
+    app: {
+      history: {
+        append: (...args) => samples.push(args),
+        observeMinute: (...args) => minuteSamples.push(args),
+        event() {},
+      },
+    },
     flow: { getTriggerCard: () => ({ trigger: async () => {} }) },
   };
   device.getSettings = () => ({
@@ -157,10 +164,11 @@ function deviceFixture({
     device.available = false;
   };
   device.error = device.log = () => {};
-  return { device, settings, capabilities, readers, samples };
+  return { device, settings, capabilities, readers, samples, minuteSamples };
 }
 
-test('device publishes EVDC state on first failure, recovers, disables and shuts down', async () => {
+test('device publishes EVDC state on first failure, recovers, disables and shuts down', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   let fail = true;
   const { device, settings, capabilities } = deviceFixture({
     evdcRead: async () => {
@@ -184,6 +192,7 @@ test('device publishes EVDC state on first failure, recovers, disables and shuts
   assert.equal(d.battery.status, 'error');
   assert.equal(device.available, true);
   fail = false;
+  t.mock.timers.tick(60000);
   await device.pollCharger('evdc');
   d = diagnostics(settings);
   assert.equal(d.evdc.status, 'ok');
@@ -196,10 +205,11 @@ test('device publishes EVDC state on first failure, recovers, disables and shuts
   assert.equal(diagnostics(settings).sigenergy.status, 'disabled');
 });
 
-test('EVDC uses its own inverter address and marks failed power reads as gaps', async () => {
+test('EVDC uses its own inverter address and marks failed power reads as gaps', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   let values = { powerW: 7200 };
   const powerFailure = Error('timeout');
-  const { device, settings, capabilities, readers, samples } = deviceFixture({
+  const { device, settings, capabilities, readers, samples, minuteSamples } = deviceFixture({
     evdcRead: async () => ({
       values,
       errors: values.powerW === undefined ? { powerW: 'timeout' } : { soc: 'unavailable' },
@@ -211,24 +221,56 @@ test('EVDC uses its own inverter address and marks failed power reads as gaps', 
   await tick();
   assert.deepEqual(
     readers.map((reader) => reader.config.unitId),
-    [247, 7, 7],
+    [247, 7],
   );
   assert.equal(capabilities.get('measure_ev_power'), 7200);
   assert.equal(capabilities.get('measure_ev_soc'), null);
   assert.equal(diagnostics(settings).evdc.status, 'partial');
 
+  t.mock.timers.tick(60000);
   values = { soc: 50 };
   await device.pollCharger('evdc');
-  assert.deepEqual({ ...samples.at(-1)[0] }, { evW: null, evSoc: 50 });
+  assert.deepEqual({ ...samples.at(-1)[0] }, { evW: null });
+  assert.deepEqual(minuteSamples.at(-1).slice(0, 2), ['evSoc', 50]);
   assert.equal(samples.at(-1)[2], 'modbus-timeout');
   assert.equal(capabilities.get('measure_ev_power'), null);
   assert.equal(device.available, true);
 
   await device.onSettings({ newSettings: { ...device.getSettings(), evdcUnitId: 247 } });
   await tick();
-  assert.equal(readers.length, 4);
-  assert.ok(readers.slice(0, 3).every((reader) => reader.closed));
+  assert.equal(readers.length, 3);
+  assert.ok(readers.slice(0, 2).every((reader) => reader.closed));
   assert.match(settings.get('evdcError'), /Modbus-ID/);
+  await device.onUninit();
+});
+
+test('fast plant and EVDC polls reuse live SoC and submit only new minute readings to history', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1800000000000 });
+  const plant = [],
+    dc = [];
+  const { device, capabilities, minuteSamples } = deviceFixture({
+    snapshotRead: async (_reader, _mode, due) => {
+      plant.push(due);
+      return { ...snapshot, soc: due ? 60 : undefined };
+    },
+    evdcRead: async (_reader, due) => {
+      dc.push(due);
+      return { values: due ? { powerW: 0, soc: 0 } : { powerW: 0 }, powerReadAt: Date.now() };
+    },
+  });
+  await device.onInit();
+  await tick();
+  for (let i = 1; i <= 6; i++) {
+    t.mock.timers.tick(10000);
+    await device.poll();
+    await device.pollCharger('evdc');
+    assert.equal(capabilities.get('measure_battery'), 60);
+    assert.equal(capabilities.get('measure_ev_soc'), 0);
+  }
+  assert.deepEqual(plant, [true, false, false, false, false, false, true]);
+  assert.deepEqual(dc, plant);
+  for (const field of ['soc', 'evSoc'])
+    assert.equal(minuteSamples.filter(([key]) => key === field).length, 2);
   await device.onUninit();
 });
 
@@ -251,11 +293,15 @@ test('EVAC uses its own endpoint, publishes cumulative energy and records separa
     evacHost: '192.0.2.20',
     evacUnitId: 9,
   });
+  const counters = [];
+  device.homey.app.history.observeCounters = (raw, binding, channel) =>
+    counters.push({ raw, binding, channel });
   await device.onInit();
   await tick();
+  assert.deepEqual({ ...counters.find((c) => c.channel === 'evac').raw.values }, { ac: '12345' });
   assert.deepEqual(
     readers.map((reader) => reader.config.unitId),
-    [247, 7, 7, 9],
+    [247, 7, 9],
   );
   assert.ok(samples.some(([sample]) => sample.evacW === 11000 && sample.evW === undefined));
   assert.equal(capabilities.get('measure_evac_power'), 11000);
@@ -273,7 +319,7 @@ test('EVAC uses its own endpoint, publishes cumulative energy and records separa
   assert.equal(readers.at(-1).closed, true);
 });
 
-test('the device polls inverter and grid phase current on their separate Modbus endpoints', async () => {
+test('the device polls grid current without opening an inverter phase reader', async () => {
   const { device, settings, readers } = deviceFixture({
     phaseRead: async (reader, source) => {
       const { host, port, unitId } = reader.config;
@@ -298,20 +344,26 @@ test('the device polls inverter and grid phase current on their separate Modbus 
     observed.push([source, amps]);
   await device.onInit();
   await tick();
-  assert.deepEqual(settings.get('inverterPhaseCurrent').amps, [8, 7, 6]);
+  assert.ok(!settings.get('inverterPhaseCurrent'));
   assert.deepEqual(settings.get('gridPhaseCurrent').amps, [11, 24, 9]);
-  assert.deepEqual(observed, [
-    ['grid', [11, 24, 9]],
-    ['inverter', [8, 7, 6]],
-  ]);
+  assert.deepEqual(observed, [['grid', [11, 24, 9]]]);
   await device.onUninit();
   assert.ok(readers.every((reader) => reader.closed));
 });
 
-test('a complete meter block supplies the history and household diagnostic from the same read', async () => {
+test('each ten-second tick shares one plant meter block and skips overlapping reads', async () => {
   const meters = { house: 43 };
+  let reads = 0,
+    finish;
   const { device, settings } = deviceFixture({
-    flowRead: () => meters,
+    flowRead: () => {
+      reads++;
+      return reads === 2
+        ? new Promise((resolve) => {
+            finish = () => resolve(meters);
+          })
+        : meters;
+    },
     householdRead: () => {
       throw Error('unexpected separate read');
     },
@@ -320,12 +372,25 @@ test('a complete meter block supplies the history and household diagnostic from 
   device.getSettings = () => ({ ...base, energyMetersProfile: 'sigenergy-v29-statistics' });
   device.getStoreValue = () => undefined;
   device.setStoreValue = async () => {};
+  let pollTick;
+  device.homey.setInterval = (fn, period) => {
+    assert.equal(period, 10000);
+    pollTick = fn;
+    return 1;
+  };
   const received = [];
   device.homey.app.history.observeFlowMeters = (...args) => received.push(args);
   await device.onInit();
   await tick();
-  assert.equal(received.length, 1);
-  assert.equal(received[0][0], meters);
+  pollTick();
+  await tick();
+  pollTick();
+  await tick();
+  assert.equal(reads, 2);
+  finish();
+  await tick();
+  assert.equal(received.length, 2);
+  assert.ok(received.every(([block, , , maxGapMs]) => block === meters && maxGapMs === 15000));
   assert.equal(settings.get('householdCounterStatus').totalKWh, 0.43);
   assert.equal(settings.get('householdCounterStatus').powerW, 1234);
   await device.onUninit();
@@ -354,7 +419,6 @@ test('the V2.9 profile reads household energy without invalidating site data on 
   assert.equal(settings.get('householdCounterStatus').averageKW, 0);
   assert.equal(diagnostics(settings).household.status, 'ok');
   failure = true;
-  device.lastEnergyProbeAt = null;
   await device.poll();
   assert.equal(settings.get('householdCounterStatus'), null);
   assert.equal(diagnostics(settings).household.status, 'error');
@@ -366,9 +430,8 @@ test('the V2.9 profile reads household energy without invalidating site data on 
   await device.poll();
   assert.equal(seen.length, failedCount + 1, 'retry the household counter on the next plant poll');
   await device.poll();
-  assert.equal(seen.length, failedCount + 1, 'persistent errors wait for the next scheduled probe');
+  assert.equal(seen.length, failedCount + 2, 'each healthy poll retries the counter once');
   failure = false;
-  device.lastEnergyProbeAt = null;
   await device.poll();
   assert.equal(settings.get('householdCounterStatus').totalKWh, 1234.56);
   await device.onUninit();
@@ -460,6 +523,11 @@ test('changing Nibe configuration while a read is pending discards the old resul
   assert.equal(app.getDiagnostics().nibe.status, 'no-data');
   await app.pollNibe();
   assert.equal(app.getTemperatureContext().outdoorC, -3);
+  const bins = app.history.export().slots.flatMap((row) => row.minuteMeans?.outdoorC ?? []);
+  assert.deepEqual(
+    bins.map(({ mean, count }) => [mean, count]),
+    [[-3, 1]],
+  );
   await app.onUninit();
 });
 
@@ -524,17 +592,14 @@ test('optional counter probing commits high-water marks before publish and never
   assert.equal(stored.channels.solar.raw, '1000');
   raw = '1050';
   failWrite = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(Object.keys(device.getEnergySnapshot().meters.values).length, 0);
   assert.equal(stored.channels.solar.raw, '1000');
   assert.equal(device.available, true);
   failWrite = false;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(device.getEnergySnapshot().meters.values.solar, 10.5);
   failRead = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(device.getEnergySnapshot().gridW, 2000);
   assert.equal(Object.keys(device.getEnergySnapshot().meters.values).length, 0);
@@ -776,7 +841,6 @@ test('gap recovery reuses the optional counter probe after persistence and canno
   assert.ok(observed[0].raw.durationMs >= 10);
   assert.equal(device.getEnergySnapshot().meters.values.imported, 20);
   resetCounters = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(observed.length, 2);
   assert.deepEqual(
@@ -786,14 +850,12 @@ test('gap recovery reuses the optional counter probe after persistence and canno
   );
   resetCounters = false;
   failStore = true;
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(observed.length, 2);
   failStore = false;
   device.homey.app.history.observeCounters = () => {
     throw Error('synthetic');
   };
-  device.lastEnergyProbeAt = 0;
   await device.poll();
   assert.equal(device.getEnergySnapshot().meters.values.imported, 20);
   await device.onUninit();

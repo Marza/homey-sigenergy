@@ -159,7 +159,7 @@ const server = http.createServer((req, res) => {
         /Medel sedan förra avläsningen 0 kW/,
       );
       await page.locator('#gridPhaseStatus').getByText('L1 23,5 A · L2 5 A · L3 0 A').waitFor();
-      await page.locator('#inverterPhaseStatus').getByText('Mätvärdena är inaktuella.').waitFor();
+      assert.equal(await page.locator('#inverterPhaseStatus').count(), 0);
       await page.locator('#tab-settings').click();
       if (width < 768) await page.locator('#settingsCategory').selectOption('data');
       else await page.locator('[data-settings-category="data"]').click();
@@ -190,8 +190,7 @@ const server = http.createServer((req, res) => {
       assert.match(text, /Sparad fasström vid nätanslutningen/);
       assert.match(text, /Hela mätkvartar 1/);
       assert.match(text, /L1 · Medel 9 A · Topp 23,5 A/);
-      assert.match(text, /Sparad fasström vid växelriktaren/);
-      assert.match(text, /Fasström saknas för vald period/);
+      assert.doesNotMatch(text, /Sparad fasström vid växelriktaren/);
       assert.equal(await page.locator('.coverage-bar').count(), 6);
       const bars = await page.locator('.coverage-bar').evaluateAll((bs) =>
         bs.map((b) => ({
