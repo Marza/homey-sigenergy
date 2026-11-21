@@ -10,8 +10,6 @@ const {
   contractAt,
   hash,
 } = require('../lib/pricing/contract-timeline');
-const { replayBattery } = require('../lib/optimization/balanced-replay');
-const { compareReplay } = require('../lib/pricing/replay-comparison');
 const { TibberHistoryPrices } = require('../lib/pricing/tibber-history-prices');
 const { HistoryStore } = require('../lib/history');
 const { parseExport } = require('../lib/history-format');
@@ -42,15 +40,6 @@ const tariff = () => ({
   peakCount: 1,
   distinctDays: false,
   rateSekPerKw: 40,
-});
-const battery = () => ({
-  capacityKWh: 10,
-  initialKWh: 5,
-  reserveKWh: 1,
-  maxChargeKW: 4,
-  maxDischargeKW: 4,
-  chargeEfficiency: 0.9,
-  dischargeEfficiency: 0.9,
 });
 function fixture() {
   const data = {
@@ -112,9 +101,6 @@ function publish(f, from = '2026-06-01', includeNetwork = true) {
     },
     END,
   );
-}
-function input() {
-  return { hours: 4, capsKW: [2, 3, 4], battery: battery(), confirmModelAssumptions: true };
 }
 test('dated snapshots freeze tax, network, wear and tariff; checkedOn never supplies a start', () => {
   const f = fixture();
@@ -222,156 +208,6 @@ test('unverified persistence never reports contract success', () => {
   f.homey.settings.set = () => {};
   assert.throws(() => publish(f), /unverified/);
 });
-test('balanced replay preserves conservation, signs, constraints and terminal energy', () => {
-  const load = Array.from({ length: 16 }, (_, i) => ({
-    t: START + i * Q,
-    netLoadKWh: i < 4 ? 1 : 0.25,
-  }));
-  const r = replayBattery(load, battery(), 2);
-  assert.equal(r.terminalMatched, true);
-  close(r.initialKWh, r.finalKWh);
-  close(r.balanceResidualKWh, 0);
-  assert.ok(r.lossesKWh > 0);
-  assert.ok(r.chargedKWh > r.dischargedKWh);
-  close(r.chargedKWh - r.dischargedKWh, r.lossesKWh);
-  for (const s of r.scenario) {
-    assert.ok(s.storedKWh >= 1 - 1e-8 && s.storedKWh <= 5 + 1e-8);
-    assert.ok(!(s.chargeKWh > 0 && s.dischargeKWh > 0));
-    assert.ok(s.chargeKWh <= 1 && s.dischargeKWh <= 1);
-    close(s.importWh - s.exportWh, s.gridWh);
-  }
-});
-test('solar recharge reduces export and is not free; terminal depletion remains explicit', () => {
-  const r = replayBattery(
-    [
-      { t: START, netLoadKWh: 1 },
-      { t: START + Q, netLoadKWh: -1 },
-    ],
-    { ...battery(), chargeEfficiency: 1, dischargeEfficiency: 1 },
-    2,
-  );
-  assert.equal(r.terminalMatched, true);
-  close(r.scenario[1].exportWh, 500);
-  close(r.scenario[1].chargeKWh, 0.5);
-  const empty = replayBattery([{ t: START, netLoadKWh: 1 }], battery(), 2);
-  assert.equal(empty.terminalMatched, false);
-  assert.ok(empty.terminalShortfallKWh > 0);
-  const floor = replayBattery([{ t: START, netLoadKWh: 1 }], { ...battery(), initialKWh: 1 }, 2);
-  assert.equal(floor.dischargedKWh, 0);
-  assert.ok(floor.uncoveredKWh > 0);
-});
-test('battery model rejects invalid capabilities, gaps, duplicate intervals and oversized windows', () => {
-  const load = [{ t: START, netLoadKWh: 1 }];
-  for (const change of [
-    { capacityKWh: 0 },
-    { initialKWh: 11 },
-    { reserveKWh: 6 },
-    { maxChargeKW: 0 },
-    { maxDischargeKW: -1 },
-    { chargeEfficiency: 0 },
-    { dischargeEfficiency: 2 },
-    { initialKWh: NaN },
-  ])
-    assert.throws(() => replayBattery(load, { ...battery(), ...change }, 2));
-  for (const bad of [
-    [],
-    Array(3073).fill(load[0]),
-    [...load, ...load],
-    [{ t: START + 1, netLoadKWh: 1 }],
-    [{ t: START, netLoadKWh: Infinity }],
-  ])
-    assert.throws(() => replayBattery(bad, battery(), 2));
-  assert.throws(() => replayBattery(load, battery(), -1));
-});
-test('integrated comparison prices the same period with dated fees, wear and demand', () => {
-  const f = fixture();
-  publish(f);
-  const r = compareReplay(f.homey, input(), END);
-  assert.equal(r.status, 'indicative');
-  assert.equal(r.financiallyComparable, false);
-  assert.equal(r.rankingBasis, 'none');
-  assert.equal(r.contractVersions.length, 1);
-  assert.equal(r.candidates.length, 3);
-  const c = r.candidates[0];
-  assert.equal(c.terminalMatched, true);
-  assert.ok(c.scenario.wearSek > 0);
-  assert.equal(c.baseline.wearSek, 0);
-  assert.ok(c.scenario.demand.totalSek < c.baseline.demand.totalSek);
-  close(c.indicativeNetDifferenceSek, c.baseline.totalSek - c.scenario.totalSek);
-  close(c.scenario.energySek, c.scenario.importCostSek - c.scenario.exportRevenueSek);
-  f.data.costContract.energyTaxExVatSekPerKWh = 99;
-  f.data.demandTariff.rateSekPerKw = 99999;
-  assert.deepEqual(compareReplay(f.homey, input(), END), r);
-});
-test('original battery charge is subtracted from grid energy exactly once', () => {
-  const f = fixture();
-  publish(f);
-  for (const s of f.rows) {
-    s.essWh = 100;
-    s.gridWh += 100;
-    s.importWh += 100;
-  }
-  const r = compareReplay(f.homey, input(), END);
-  close(r.candidates[0].baseline.importKWh, 7);
-});
-test('unrestored energy and insufficient tariff peaks block net-cost difference', () => {
-  const f = fixture();
-  publish(f);
-  const high = compareReplay(f.homey, { ...input(), hours: 1, capsKW: [0.1] }, END);
-  assert.equal(high.candidates[0].reason, 'terminal-energy-not-restored');
-  assert.equal(high.candidates[0].indicativeNetDifferenceSek, null);
-  const g = fixture();
-  g.data.demandTariff.peakCount = 5;
-  g.data.demandTariff.distinctDays = true;
-  publish(g);
-  const r = compareReplay(g.homey, input(), END);
-  assert.equal(r.candidates[0].reason, 'insufficient-demand-peaks');
-  assert.equal(r.candidates[0].baseline.totalSek, null);
-});
-test('missing coverage, terms or prices cannot silently shrink a comparison period', () => {
-  for (const [change, key] of [
-    [(f) => f.rows.pop(), 'energyQuarters'],
-    [(f) => delete f.rows[0].essCoverageMs, 'batteryCoverageQuarters'],
-    [(f) => delete f.data.tibberHistoryPriceCache.rows[0].production, 'productionPriceQuarters'],
-    [(f) => delete f.data.tibberHistoryPriceCache.rows[0].consumption, 'purchasePriceQuarters'],
-  ]) {
-    const f = fixture();
-    publish(f);
-    change(f);
-    const r = compareReplay(f.homey, input(), END);
-    assert.equal(r.reason, 'incomplete-comparison-window');
-    assert.ok(r.missing[key] > 0);
-    assert.equal(r.candidates, undefined);
-  }
-  const f = fixture();
-  publish(f, '2026-06-12');
-  assert.equal(compareReplay(f.homey, input(), END).missing.contractQuarters, 16);
-});
-test('source changes, bad input, invalid archives and corrupted history fail closed', () => {
-  for (const body of [
-    null,
-    { ...input(), confirmModelAssumptions: false },
-    { ...input(), hours: 769 },
-    { ...input(), capsKW: [2, 2] },
-    { ...input(), capsKW: Array.from({ length: 21 }, (_, i) => i) },
-  ])
-    assert.equal(compareReplay(fixture().homey, body, END).status, 'unavailable');
-  const f = fixture();
-  assert.equal(compareReplay(f.homey, input(), END).reason, 'dated-contract-required');
-  publish(f);
-  f.data.tibberToken = 'changed';
-  assert.equal(compareReplay(f.homey, input(), END).reason, 'tibber-home-not-confirmed');
-  const g = fixture();
-  publish(g);
-  g.data.tibberHistoryPriceCache = null;
-  assert.equal(compareReplay(g.homey, input(), END).reason, 'historical-prices-unavailable');
-  const bad = fixture();
-  publish(bad);
-  bad.rows.push(bad.rows[0]);
-  assert.equal(compareReplay(bad.homey, input(), END).reason, 'invalid-history');
-  bad.data.costContractTimeline.entries[0].id = 'tampered';
-  assert.equal(compareReplay(bad.homey, input(), END).status, 'unavailable');
-});
 test('dated observed ledger does not reprice history when the draft changes', () => {
   const f = fixture();
   publish(f);
@@ -437,12 +273,7 @@ test('new economic API routes are authenticated and do not add device control', 
   const api = require('../api'),
     manifest = require('../app.json'),
     f = fixture();
-  for (const name of [
-    'getContractTimeline',
-    'publishCostContract',
-    'restoreCostContracts',
-    'compareBatteryReplay',
-  ])
+  for (const name of ['getContractTimeline', 'publishCostContract', 'restoreCostContracts'])
     assert.equal(manifest.api[name].public, false);
   const s = await api.getContractTimeline({ homey: f.homey });
   assert.equal(s.timeline.entries.length, 0);
@@ -462,54 +293,8 @@ test('new economic API routes are authenticated and do not add device control', 
     homey: f.homey,
     body: { timeline: fresh.timeline, expectedRevision: fresh.revision, confirmSamePlant: true },
   });
-  assert.equal(
-    (await api.compareBatteryReplay({ homey: f.homey, body: input() })).controlApplied,
-    false,
-  );
 });
 
-function dayFixture() {
-  const f = fixture();
-  f.rows.splice(
-    0,
-    f.rows.length,
-    ...Array.from({ length: 96 }, (_, i) => ({
-      schema: 2,
-      t: END - 24 * H + i * Q,
-      gridWh: 250,
-      importWh: 250,
-      exportWh: 0,
-      coverageMs: Q,
-      directionalCoverageMs: Q,
-      essWh: 0,
-      essCoverageMs: Q,
-    })),
-  );
-  f.data.tibberHistoryPriceCache.rows = Array.from({ length: 24 }, (_, i) => ({
-    t: END - 24 * H + i * H,
-    consumption: { price: 1 },
-    production: { price: -0.1 },
-  }));
-  return f;
-}
-test('different dated energy fees are applied per Stockholm date without repricing earlier hours', () => {
-  const f = dayFixture();
-  publish(f);
-  f.data.costContract.energyTaxExVatSekPerKWh = 0.7;
-  publish(f, '2026-06-11');
-  const r = compareReplay(f.homey, { ...input(), hours: 24 }, END);
-  assert.equal(r.contractVersions.length, 2);
-  close(r.candidates[0].baseline.importCostSek, 43);
-});
-test('mid-month demand-rate changes are blocked instead of guessing a prorated bill', () => {
-  const f = dayFixture();
-  publish(f);
-  f.data.demandTariff.rateSekPerKw = 80;
-  publish(f, '2026-06-11');
-  const r = compareReplay(f.homey, { ...input(), hours: 24 }, END);
-  assert.equal(r.candidates[0].reason, 'tariff-changed-within-month');
-  assert.equal(r.candidates[0].indicativeNetDifferenceSek, null);
-});
 test('contract effective dates follow Stockholm midnights across both DST transitions', () => {
   const f = fixture();
   publish(f, '2026-03-29');
@@ -520,15 +305,4 @@ test('contract effective dates follow Stockholm midnights across both DST transi
   const u = readTimeline(f.homey);
   assert.equal(contractAt(u, Date.parse('2026-10-24T21:59:59Z')).from, '2026-03-29');
   assert.equal(contractAt(u, Date.parse('2026-10-24T22:00:00Z')).from, '2026-10-25');
-});
-
-test('inactive tariff seasons and explicit zero demand price contribute zero without requiring peaks', () => {
-  for (const change of [{ months: [1, 2, 3] }, { rateSekPerKw: 0 }]) {
-    const f = fixture();
-    Object.assign(f.data.demandTariff, change, { peakCount: 5, distinctDays: true });
-    publish(f);
-    const r = compareReplay(f.homey, input(), END);
-    assert.equal(r.candidates[0].status, 'indicative');
-    assert.equal(r.candidates[0].scenario.demand.totalSek, 0);
-  }
 });

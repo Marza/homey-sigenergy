@@ -4,7 +4,6 @@ const assert = require('node:assert/strict');
 const { excludedDate } = require('../lib/tariff-calendar');
 const { activeAt, calculateDemandCharge } = require('../lib/demand-tariff');
 const { tariffKey, validateTariff, parseTariffForm } = require('../lib/tariff-config');
-const { evaluateTariffScenarios } = require('../lib/optimization/tariff-optimizer');
 const tariff = {
   start: '07:00',
   end: '20:00',
@@ -169,29 +168,6 @@ test('DST real hours and Stockholm month boundaries preserve coverage', () => {
     0,
   );
 });
-test('baseline and replay carry identical observed-hour coverage', () => {
-  const rows = [...hour('2026-01-07T09:00Z', 8), ...hour('2026-01-08T09:00Z', 6)];
-  const result = evaluateTariffScenarios(
-    rows,
-    {
-      minCapKW: 3,
-      maxCapKW: 3,
-      reserveMinPercent: 20,
-      reserveMaxPercent: 20,
-      initialSocPercent: 90,
-      batteryCapacityKWh: 42,
-    },
-    tariff,
-    '2026-01',
-    past,
-  );
-  assert.equal(result.status, 'insufficient-data');
-  assert.equal(result.scope, 'observed-hours');
-  assert.deepEqual(result.coverage, result.baseline.coverage);
-  assert.equal(result.coverage.status, 'partial');
-  assert.equal(result.best, null); // Sparse peaks do not provide replay coverage.
-});
-
 test('an invalid duplicate also invalidates its otherwise complete hour', () => {
   const rows = hour('2026-01-07T09:00Z', 5);
   rows.unshift({ ...rows[0], coverageMs: 900001 });

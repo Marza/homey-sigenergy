@@ -1,6 +1,6 @@
 'use strict';
 const { currentMonth } = require('../../lib/tariff-config');
-const { diagnostics, backupAdvisory } = require('../../lib/source-status');
+const { diagnostics } = require('../../lib/source-status');
 const pick = (value, keys) =>
   value && typeof value === 'object'
     ? Object.fromEntries(
@@ -108,7 +108,6 @@ function getOverview({ homey }, now) {
         usable: false,
         error: 'Status kunde inte läsas',
       };
-  const advisory = backupAdvisory(sourceValues, now ?? Date.now(), sources.sigenergy);
   const state = read('historyState');
   let slots = [];
   if (state === null || state === undefined) slots = read('historySlots') || [];
@@ -121,8 +120,7 @@ function getOverview({ homey }, now) {
   const latest = slots
     .filter((row) => Number.isFinite(row?.t))
     .reduce((last, row) => (!last || row.t > last.t ? row : last), null);
-  const tariff = read('demandTariff'),
-    optimization = read('tariffOptimization');
+  const tariff = read('demandTariff');
   const meterState = read('tibberConsumptionArchive') || read('tibberConsumptionHistory');
   const meterEstimate = read('meterDemandEstimate');
   const consumptionSync = read('tibberConsumptionSync');
@@ -163,14 +161,6 @@ function getOverview({ homey }, now) {
           readings: pick(sourceValues.nibeStatus.readings, ['outdoorC']),
         }
       : null,
-    optimizationRecommendation: advisory.restricted
-      ? { ...advisory, updatedAt: new Date(now ?? Date.now()).toISOString() }
-      : pick(read('optimizationRecommendation'), [
-          'updatedAt',
-          'status',
-          'capKW',
-          'reservePercent',
-        ]),
     demandTariff: pick(tariff, [
       'start',
       'end',
@@ -182,14 +172,6 @@ function getOverview({ homey }, now) {
       'calendar',
     ]),
     demandEstimate: estimate(read('demandEstimate'), now ?? Date.now()),
-    tariffOptimization: optimization
-      ? {
-          status: optimization.status,
-          backupAdvisory: advisory,
-          baseline: estimate(optimization.baseline, now ?? Date.now()),
-          best: pick(optimization.best, ['simulatedDemandSek', 'demandSavingSek']),
-        }
-      : null,
   };
   if (errors.includes('historySlots')) errors.push('historyState');
   return {

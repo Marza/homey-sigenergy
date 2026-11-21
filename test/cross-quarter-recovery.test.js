@@ -508,19 +508,12 @@ test('partition evidence cannot bypass export versioning and malformed pending b
 
 test('complete cross-quarter estimates retain provenance in readiness and hourly aggregation without enabling control', () => {
   const { fixture: ready } = require('./fixtures/readiness.cjs');
-  const { checkReadiness } = require('../lib/pricing/comparison-readiness');
   const { hourlyEnergy } = require('../lib/pricing/hourly-energy');
   const f = collect(fixture()),
     context = ready({ hours: 4, now: T + 4 * 3600000 });
   const rawRows = f.history.getSlots().slice(0, 2);
   context.rows.splice(0, 2, ...rawRows);
   context.homey.app.history.getEnergySlots = () => context.rows.map(effectiveSlot);
-  const readiness = checkReadiness(context.homey, { hours: 4, mode: 'battery' }, context.now);
-  assert.equal(readiness.dataComplete, true);
-  assert.equal(readiness.counterRecoveredQuarters, 2);
-  assert.equal(readiness.modelValidated, false);
-  assert.equal(readiness.controlApplied, false);
-  assert.equal(readiness.financiallyComparable, false);
   const energy = energyHistory(context.rows.map(effectiveSlot), context.now);
   const hourly = hourlyEnergy(energy, null, false, context.now);
   assert.equal(hourly.counterRecoveredHours, 1);

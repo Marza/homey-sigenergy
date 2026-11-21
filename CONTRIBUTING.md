@@ -33,15 +33,11 @@ Coverage includes every runtime file under `lib/` and `drivers/`, plus `app.js`,
 
 Open `coverage/index.html` for per-file results. CI retains HTML, LCOV and JSON-summary reports in the coverage artifact for 14 days, including reports from failed coverage runs. Keep the thresholds checked in and raise them as useful tests improve coverage. The first adoption formats existing source in one pass; subsequent PRs should contain only formatting needed for their changes.
 
-The shared simulation engine is `lib/optimization/simulator.js`; `npm run format` also synchronizes its browser copy to `settings/simulator.js`. Keep browser/Node parity and unsafe-range regression tests passing. Do not add a separate replay loop to the settings page.
-
 Widget definitions live in `widgets/energy-overview/widget.compose.json` and are explicitly registered in `app.json` because this repository does not enable Homey Compose. Keep both consistent; tests enforce registration. `node scripts/verify-widget.js` checks `.homeybuild`, and release verification repeats it against the extracted archive.
-
-The shared charging planner is `lib/charging/planner.js`; the same sync command updates `settings/charging-planner.js`. Keep input/timezone validation, DST resolution and preview UI tests aligned with the backend; never add charging commands to the preview route.
 
 Widget sizing/fit rules live in `lib/widget-layout.js`; the sync command updates `widgets/energy-overview/public/widget-layout.js`. Measure intrinsic content, preserve overflow when constrained, and avoid intercepting global touch/wheel gestures or accessing the Dashboard parent document.
 
-Cost contract validation is shared by Node and settings through `lib/pricing/cost-model.js`; the sync script generates `settings/cost-model.js`. Preserve explicit component provenance, tax inclusion, directional energy and matching battery boundaries. Economic-preview inputs are user-supplied, and must not unlock runtime financial ranking without a verified source and complete replay basis.
+Cost contract validation is shared by Node and settings through `lib/pricing/cost-model.js`; the sync script generates `settings/cost-model.js`. Preserve explicit component provenance, tax inclusion, directional energy and matching battery boundaries.
 
 Native Energy companions share `lib/energy/reporting.js` and the existing plant's in-memory snapshot. Keep them free of Modbus connections and control capabilities. Treat source loss as unavailable, preserve signs/real zero, test lifecycle races, and keep kWh behind a documented register profile, preserve integer high-water state before publication, and test reset/source-change acknowledgement. Never substitute rolling history or Tibber imports for cumulative counters. See `docs/homey-energy.md`.
 
@@ -80,21 +76,15 @@ included in the fixture. For a local SDK comparison, `SETTINGS_HOST_CSS` can poi
 to a private stylesheet bundle; do not commit that file or private screenshots.
 
 `settings/settings-assistant.js` provides draft-only setup helpers: named tariff
-weekdays, schedule copying, a checked-date shortcut, period picks and read-only
+weekdays, a checked-date shortcut and read-only
 unit explanations. It must not call Homey APIs, apply tariff presets, publish
 contract dates or attest historical assumptions. Host callbacks explicitly refresh
-weekday/schedule controls after successful reads; failed reads keep bulk actions
+weekday controls after successful reads; failed reads keep bulk actions
 disabled. Numeric inputs and persisted schemas retain their original units and
 precision. Conversions describe the draft without normalizing or changing it.
 
 The browser test also covers these interactions, existing irregular day selections,
-explicit saves, inactive schedule targets, hidden required fields and read failures.
+explicit saves, hidden required fields and read failures.
 Preserve the existing validators and keep advanced fields discoverable when invalid.
 
-Economic comparison input coverage lives in `lib/pricing/comparison-data.js`.
-Keep inspection and replay eligibility predicates aligned. The authenticated
-readiness route returns an allowlisted diagnostic report, never its internal
-context, raw meter/price/contract rows or connection fingerprints. Missing and
-unknown data are different states. Keep window, gap-count and DST tests passing.
-`npm run test:settings-ui` also runs the real scanner through a local synthetic
-browser/API flow, including mode changes, delayed errors and stale response races.
+Forecast tests exercise cold starts, missing quarters, Stockholm clock changes, frozen predictions after restart and scoring against subsequently measured outcomes. The browser suite renders the forecast from a synthetic local household history. Keep the Homey household's data out of fixtures and pull requests.

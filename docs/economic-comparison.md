@@ -1,4 +1,6 @@
-# Economic comparison: inputs and remaining integration
+# Economic comparison: inputs and remaining integration (archived)
+
+This document describes the retired simulation in releases through v0.17.44. For the current feature, see the [household forecast](../README.md#household-forecast).
 
 Issue #10 adds contract settings, an authenticated computation endpoint and a strict boundary between demand-charge estimates and complete net costs. It does not establish the household's production contract or enable hardware control.
 

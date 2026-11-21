@@ -1,4 +1,6 @@
-# Read-only charging-plan preview
+# Read-only charging-plan preview (archived)
+
+This document describes the retired simulation in releases through v0.17.44. For the current feature, see the [household forecast](../README.md#household-forecast).
 
 The app settings can request an authenticated **POST `/charging/preview`** dry run. The handler reads saved charging configuration and the existing validated Tibber cache. It does not save inputs, fetch prices, change device settings or send charging commands. The installed/released app and the preview development branch are separate; review and merge the preview before deploying it.
 

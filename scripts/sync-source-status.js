@@ -9,10 +9,6 @@ for (const [source, name] of [
     fs.copyFileSync(source, `${directory}/${name}`);
 }
 
-fs.copyFileSync('lib/optimization/simulator.js', 'settings/simulator.js');
-
-fs.copyFileSync('lib/charging/planner.js', 'settings/charging-planner.js');
-
 for (const widget of ['energy-overview', 'energy-flow', 'power-history'])
   fs.copyFileSync('lib/widget-layout.js', `widgets/${widget}/public/widget-layout.js`);
 

@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   const KEY = 'householdImportLimits';
-  function bind(Homey, onSaved) {
+  function bind(Homey) {
     const field = (key) => document.getElementById('household-' + key);
     const limit = field('import-limit');
     const fuse = field('main-fuse');
@@ -11,7 +11,7 @@
 
     limit.oninput = fuse.oninput = () => {
       edited = true;
-      status.textContent = 'Spara ändringarna för att använda dem i jämförelsen.';
+      status.textContent = 'Spara ändringarna.';
     };
     Homey.get(KEY, (error, value) => {
       if (edited) return;
@@ -43,7 +43,6 @@
         status.textContent = error
           ? 'Importgränserna kunde inte sparas.'
           : 'Hushållets importgränser sparades.';
-        if (!error) onSaved();
       });
     };
   }

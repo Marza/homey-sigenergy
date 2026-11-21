@@ -54,7 +54,5 @@ test('runtime calculations read canonical history instead of frozen migration ke
   app.homey = { settings };
   app.history = new HistoryStore(settings);
   assert.equal(app.getDemandCharge('2026-01').averageKw, 4);
-  assert.equal(app.getOptimizationPreview().status, 'insufficient-data');
-  assert.equal(app.getOptimizationPreview().coverage.validSlots, 4);
-  assert.ok(app.getAdvancedOptimizationPreview().candidates.length > 0);
+  assert.equal(app.getAdvancedOptimizationPreview, undefined);
 });

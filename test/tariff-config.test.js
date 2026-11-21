@@ -5,7 +5,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const T = require('../lib/tariff-config');
 const { validateTariff, calculateDemandCharge } = require('../lib/demand-tariff');
-const { evaluateTariffScenarios } = require('../lib/optimization/tariff-optimizer');
 const tariff = () => ({
   start: '07:00',
   end: '20:00',
@@ -145,7 +144,5 @@ test('three- and five-peak estimates carry the exact configuration key', () => {
     assert.equal(result.peakCount, count);
     assert.equal(result.selectedPeaks.length, count);
     assert.equal(result.tariffKey, T.tariffKey(config));
-    const insufficient = evaluateTariffScenarios([], {}, config, '2026-01');
-    assert.match(insufficient.reason, new RegExp(`krav: ${count}`));
   }
 });

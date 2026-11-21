@@ -157,13 +157,14 @@ const server = http.createServer((req, res) => {
           assert.equal(await page.locator('#meterSek').textContent(), '420 kr');
           assert.equal(await page.locator('#demandSek').textContent(), '200 kr');
           assert.equal(await page.locator('#demandKw').textContent(), '2 kW');
-          assert.equal(await page.locator('#simSaving').textContent(), '–');
           assert.match(await page.locator('#demandState').textContent(), /3 av 5 olika mätdagar/);
-          const monthly = await page.locator('#monthly-demand').boundingBox();
-          const recommendation = await page
-            .getByText('Rekommenderade inställningar', { exact: true })
-            .boundingBox();
-          assert.ok(monthly.y < recommendation.y, 'monthly amount precedes recommendations');
+          if (process.env.WRITE_OVERVIEW_PREVIEWS && (width === 320 || width === 390)) {
+            await page.setViewportSize({ width: 400, height: 900 });
+            await page.screenshot({
+              path: path.resolve(directory, '..', 'preview-' + scheme + '.png'),
+            });
+            await page.setViewportSize({ width, height: 900 });
+          }
           if (process.env.SETTINGS_SCREENSHOTS) {
             fs.mkdirSync(process.env.SETTINGS_SCREENSHOTS, { recursive: true });
             await page.screenshot({

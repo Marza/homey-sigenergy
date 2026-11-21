@@ -1,4 +1,6 @@
-# Solar surplus preview
+# Solar surplus preview (archived)
+
+This document describes the retired simulation in releases through v0.17.44. For the current feature, see the [household forecast](../README.md#household-forecast).
 
 The settings page's **Solöverskott – förhandsvisning utan styrning** section offers a short, read-only scenario for additional charging of the home battery and/or a connected EV, with the remainder exported. It is independent of the deadline-based Tibber charging plan and does not execute either plan. Select **home first** or **EV first** explicitly; these are user priorities, not economic rankings. No import/export price, tariff saving or future production forecast is inferred.
 
