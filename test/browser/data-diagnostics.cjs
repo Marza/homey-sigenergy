@@ -110,7 +110,10 @@ const server = http.createServer((req, res) => {
             end,
             binMs: 300000,
             profile: 'gateway',
-            frequencyUnit: 7,
+            events: [
+              { at: t, mode: 0, alarms: 0, resumed: true },
+              { at: t + 10000, mode: 1, alarms: 16, resumed: false },
+            ],
             bins:
               metric === 'volts'
                 ? phase === 1
@@ -185,14 +188,13 @@ const server = http.createServer((req, res) => {
       await page.locator('#gridPhaseStatus').getByText('L1 23,5 A · L2 5 A · L3 0 A').waitFor();
       assert.equal(await page.locator('#inverterPhaseStatus').count(), 0);
       await page.locator('#gridDayDetails > summary').click();
-      await page.locator('#gridDayMetric').selectOption('frequencyHz');
+      await page.locator('#gridEventDetails > summary').click();
       await page
-        .locator('#gridDaySource')
-        .getByText(/växelriktaren.*7/)
+        .locator('#gridEvents')
+        .getByText(/Automatisk ödrift.*Underfrekvens/)
         .waitFor();
-      assert.ok(await page.locator('#gridDayPhase').isDisabled());
-      assert.equal(await page.locator('#gridDayChart svg path').count(), 3);
-      assert.equal(await page.locator('#gridDayTable tbody tr').count(), 2);
+      assert.equal(await page.locator('#gridDayChart line title').count(), 1);
+      assert.equal(await page.locator('#gridDayMetric option[value="frequencyHz"]').count(), 0);
       await page.locator('#gridDayMetric').selectOption('volts');
       await page
         .locator('#gridDaySource')

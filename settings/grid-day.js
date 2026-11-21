@@ -1,7 +1,7 @@
 'use strict';
 
 globalThis.GridDayView = (() => {
-  const units = { amps: 'A', volts: 'V', activeKW: 'kW', reactiveKvar: 'kvar', frequencyHz: 'Hz' };
+  const units = { amps: 'A', volts: 'V', activeKW: 'kW', reactiveKvar: 'kvar' };
   const lines = [
     { key: 'min', title: 'Min', color: '#007a71', dash: '3 3' },
     { key: 'mean', title: 'Medel', color: '#4267bf', dash: '' },
@@ -19,7 +19,7 @@ globalThis.GridDayView = (() => {
     if (label !== undefined) el.textContent = label;
     return el;
   };
-  function chart({ start, end, binMs, bins }, unit) {
+  function chart({ start, end, binMs, bins, events = [] }, unit) {
     const svg = svgNode('svg', {
       viewBox: '0 0 400 190',
       width: '100%',
@@ -46,6 +46,23 @@ globalThis.GridDayView = (() => {
         }),
         label(48, y(tick) + 4, number.format(tick), 'end'),
       );
+    }
+    let previousMode;
+    for (const event of events) {
+      if (!event.resumed && previousMode === 0 && (event.mode === 1 || event.mode === 2)) {
+        const xAt = 52 + (336 * (event.at - start)) / (end - start);
+        const marker = svgNode('line', {
+          x1: xAt,
+          x2: xAt,
+          y1: 18,
+          y2: 138,
+          stroke: 'currentColor',
+          'stroke-dasharray': '2 4',
+        });
+        marker.append(svgNode('title', {}, 'Ödrift observerad ' + time.format(event.at)));
+        svg.append(marker);
+      }
+      previousMode = event.mode;
     }
     for (const [i, line] of lines.entries()) {
       let path = '';
@@ -120,8 +137,6 @@ globalThis.GridDayView = (() => {
     function refresh() {
       const request = ++revision;
       if (!details.open || details.closest('[hidden]')) return;
-      const hz = metric.value === 'frequencyHz';
-      phase.disabled = hz;
       Homey.api(
         'POST',
         '/diagnostics/grid-day',
@@ -135,15 +150,44 @@ globalThis.GridDayView = (() => {
           get('Source').textContent =
             err || !result
               ? ''
-              : hz
-                ? result.frequencyUnit
-                  ? 'Gemensam nätfrekvens via växelriktaren · Modbus-ID ' + result.frequencyUnit
-                  : 'För nätfrekvens behövs Gateway som mätkälla och växelriktarens Modbus-ID.'
-                : result.profile === 'gateway'
-                  ? 'Mätkälla: Sigenergy Gateway, nätsidan.'
-                  : result.profile === 'sdm630'
-                    ? 'Mätkälla: SDM630 vid nätanslutningen (ström).'
-                    : 'Ingen aktiv mätkälla.';
+              : result.profile === 'gateway'
+                ? 'Mätkälla: Sigenergy Gateway, nätsidan.'
+                : result.profile === 'sdm630'
+                  ? 'Mätkälla: SDM630 vid nätanslutningen (ström).'
+                  : 'Ingen aktiv mätkälla.';
+          const events = result?.events ?? [];
+          const list = document.getElementById('gridEvents');
+          list.replaceChildren();
+          document.getElementById('gridEventDetails').hidden =
+            !!err || result?.profile !== 'gateway';
+          for (const event of events.slice(-30).reverse()) {
+            const row = document.createElement('li');
+            const mode =
+              ['Nätdrift', 'Automatisk ödrift', 'Manuell ödrift'][event.mode] ?? 'Okänt driftläge';
+            const names = [
+              'Nätavbrott',
+              'Överspänning',
+              'Underspänning',
+              'Överfrekvens',
+              'Underfrekvens',
+              'Spänningsobalans',
+            ];
+            const alarms = !Number.isInteger(event.alarms)
+              ? 'Larmstatus saknas'
+              : names.filter((_, i) => event.alarms & (1 << i)).join(', ') || 'Inga aktiva nätlarm';
+            const timestamp = new Date(event.at).toLocaleTimeString('sv-SE', {
+              timeZone: 'Europe/Stockholm',
+            });
+            row.textContent =
+              timestamp +
+              ' · ' +
+              mode +
+              ' · ' +
+              alarms +
+              (event.resumed ? ' (första avläsning i mätperioden)' : '');
+            list.append(row);
+          }
+          if (!events.length) list.textContent = 'Inga observationer under de senaste 24 timmarna.';
           const bins = result?.bins;
           if (err || !Array.isArray(bins) || !bins.length) {
             get('Status').textContent = err

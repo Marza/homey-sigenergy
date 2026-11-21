@@ -2,7 +2,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { GridDay } = require('../lib/energy/grid-day');
-const { phaseReaders, pollPhaseCurrent } = require('../lib/energy/phase-reader');
 const { SigenergyReader } = require('../lib/modbus');
 const { getGridDay } = require('../api');
 const T = Date.parse('2026-11-21T23:55:00Z'),
@@ -32,18 +31,17 @@ test('raw ten-second readings survive restart and yield observed extrema and mea
     max: 10,
     mean: 7.5,
   });
-  assert.deepEqual(store.report('site', 'frequencyHz', 0, 2).bins, []);
-  assert.equal(store.report('site', 'frequencyHz', 0, 1).bins[0].count, 2);
+  assert.throws(() => store.report('site', 'frequencyHz'), /mätserie/); // Older inverter samples never become gateway Hz.
   assert.equal(store.report('site').bins.length, 2);
   assert.equal(store.report('other').bins.length, 0);
   assert.throws(() => store.report('site', 'bad'), /mätserie/);
   settings.set('gridPhaseCurrent', { binding: 'site', profile: 'gateway', frequencyUnit: 1 });
   const result = await getGridDay({
     homey: { app: { gridDay: store }, settings },
-    body: { metric: 'frequencyHz', phase: 0 },
+    body: { metric: 'amps', phase: 0 },
   });
-  assert.equal(result.frequencyUnit, 1);
-  assert.equal(result.bins[0].max, 50.02);
+  assert.equal(result.profile, 'gateway');
+  assert.equal(result.bins[0].max, 7);
   now = T + DAY + 10000;
   assert.equal(store.report('site').bins[0].count, 1);
   add(DAY + 10000, [3, 4, 5]);
@@ -62,42 +60,29 @@ test('raw ten-second readings survive restart and yield observed extrema and mea
   );
 });
 
-test('the Gateway frequency uses only the selected inverter on-grid, and its failure preserves phase data', async () => {
-  const config = { host: 'example.invalid', port: 502, evdcEnabled: true, evdcUnitId: 3 };
-  const { grid } = phaseReaders(config);
-  assert.equal(grid.profile, 'gateway');
-  assert.equal(grid.reader.unitId, 247);
-  assert.equal(grid.frequencyReader.unitId, 3);
-  assert.equal(phaseReaders({ ...config, gridFrequencyUnitId: 7 }).grid.frequencyReader.unitId, 7);
-  assert.equal(phaseReaders({ host: config.host }).grid.frequencyReader, null);
-  const seen = [],
-    currents = [];
-  const homey = {
-    settings: new Map(),
-    app: {
-      gridDay: { append: (_binding, data) => seen.push(data) },
-      history: { observePhaseCurrent: (_src, _key, a) => currents.push(a) },
-    },
-  };
-  let onGrid = true,
-    fail = false,
-    count = 0;
-  grid.reader.gatewayPhases = async () => ({ onGrid, amps: [0, 2, 3], volts: [230, 231, 232] });
-  grid.frequencyReader.gridFrequency = async () => {
-    count++;
-    if (fail) throw Error('unavailable');
-    return 50.02;
-  };
-  await pollPhaseCurrent(homey, 'grid', grid, () => true);
-  assert.equal(seen[0].frequencyHz, 50.02);
-  fail = true;
-  await pollPhaseCurrent(homey, 'grid', grid, () => true);
-  assert.equal(seen[1].frequencyHz, null);
-  assert.deepEqual(currents[1], [0, 2, 3]);
-  onGrid = false;
-  await pollPhaseCurrent(homey, 'grid', grid, () => true);
-  assert.equal(count, 2);
-  assert.equal(seen[2].frequencyHz, undefined);
+test('grid mode and sampled grid alarms follow the source, actual timestamps and gaps', () => {
+  const store = new GridDay(new Map(), () => T + 90000);
+  const add = (s, gridMode, gridAlarms) =>
+    store.append('site', { gridMode, gridAlarms }, T + s * 1000);
+  add(0, 0, 0);
+  add(10, 0, 0);
+  add(20, 0, 16);
+  add(30, 1, 16);
+  add(40, 1, null);
+  add(70, 2, 0);
+  store.append('other', { gridMode: 0, gridAlarms: 32 }, T + 80000);
+  const { events, bins } = store.report('site');
+  assert.deepEqual(bins, []);
+  assert.deepEqual(
+    events.map((e) => [(e.at - T) / 1000, e.mode, e.alarms, e.resumed]),
+    [
+      [0, 0, 0, true],
+      [20, 0, 16, false],
+      [30, 1, 16, false],
+      [40, 1, null, false],
+      [70, 2, 0, true],
+    ],
+  );
 });
 
 test('unsupported voltage or power blocks leave current-only firmware usable', async () => {
@@ -111,7 +96,8 @@ test('unsupported voltage or power blocks leave current-only firmware usable', a
   assert.deepEqual(d.amps, [0, null, 1.5]);
   assert.deepEqual(d.volts, [null, null, null]);
   assert.deepEqual(d.activeKW, [null, null, null]);
-  assert.equal(d.onGrid, false);
+  assert.equal(d.gridMode, 1);
+  assert.equal(d.gridAlarms, null);
 });
 
 test('the V2.9 temperature word and reserved words cannot masquerade as gateway phase voltages', async () => {

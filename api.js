@@ -12,14 +12,8 @@ module.exports = {
   async getGridDay({ homey, body }) {
     const source = homey.settings.get('gridPhaseCurrent');
     return {
-      ...homey.app.gridDay.report(
-        source?.binding,
-        body?.metric,
-        body?.phase,
-        source?.frequencyUnit,
-      ),
+      ...homey.app.gridDay.report(source?.binding, body?.metric, body?.phase),
       profile: source?.profile ?? null,
-      frequencyUnit: source?.frequencyUnit ?? null,
     };
   },
   async getHouseholdForecast({ homey }) {

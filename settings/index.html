@@ -277,7 +277,6 @@
           <option value="volts">Fasspänning – gatewayens nätsida (V)</option>
           <option value="activeKW">Aktiv effekt (kW)</option>
           <option value="reactiveKvar">Reaktiv effekt (kvar)</option>
-          <option value="frequencyHz">Gemensam nätfrekvens (Hz)</option>
         </select>
         <label for="gridDayPhase">Fas</label
         ><select id="gridDayPhase">
@@ -291,6 +290,16 @@
         </p>
         <p id="gridDayStatus" aria-live="polite"></p>
         <div id="gridDayChart"></div>
+        <details id="gridEventDetails" hidden>
+          <summary>Driftläge och nätlarm</summary>
+          <p>
+            Lodräta markeringar i diagrammet visar observerad övergång från nätdrift till ödrift.
+            Listan visar de 30 senaste observationerna av driftläget och anläggningens nätlarm.
+            Korta händelser mellan två avläsningar kan missas. Uppmätt nätfrekvens från gatewayens
+            nätsida saknar verifierat lokalt register.
+          </p>
+          <ol id="gridEvents"></ol>
+        </details>
         <details>
           <summary>Visa mätvärden i tabell</summary>
           <div id="gridDayTable"></div>
