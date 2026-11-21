@@ -21,6 +21,7 @@ const {
 const { fetchConsumption, shouldSync } = require('./lib/pricing/consumption-sync');
 const { fetchTibberPrices } = require('./lib/pricing/tibber');
 const { shouldRefreshPrices, hasTomorrowPrices } = require('./lib/pricing/refresh-policy');
+const { historySettings } = require('./lib/packed-history');
 const { GridDay } = require('./lib/energy/grid-day');
 module.exports = class SigenergyApp extends Homey.App {
   async onInit() {
@@ -37,7 +38,11 @@ module.exports = class SigenergyApp extends Homey.App {
     this.configurePrices();
     this.dataDiagnostics = new DataDiagnostics(this.homey.settings);
     this.dataDiagnostics.record('app', 'app-started');
-    this.history = new HistoryStore(this.homey.settings, () => Date.now(), this.dataDiagnostics);
+    this.history = new HistoryStore(
+      historySettings(this.homey.settings),
+      () => Date.now(),
+      this.dataDiagnostics,
+    );
     this.gridDay = new GridDay(this.homey.settings);
     this.forecast = new HouseholdForecast(this.homey.settings, this.history);
     this.refreshDemandEstimate();
