@@ -11,10 +11,11 @@ const {
   publishPhaseCurrent,
   pollPhaseCurrent,
 } = require('../../lib/energy/phase-reader');
+const minuteOf = (ms) => Math.floor(ms / 60000);
 const CHARGERS = {
   evdc: {
     read: readEvdc,
-    history: { evW: 'powerW', evSoc: 'soc' },
+    history: { evW: 'powerW' },
     capabilities: { measure_ev_power: 'powerW', measure_ev_soc: 'soc' },
     sourceLabel: 'växelriktarens Modbus-ID (1–246) för EVDC',
   },
@@ -58,6 +59,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
     );
     this.pollFailure = null;
     this.lastBatteryProbeAt = null;
+    this.batterySocMinute = null;
+    this.batterySoc = null;
     this.reader = new SigenergyReader(settings);
     const seconds = Math.max(5, Number(settings.pollSeconds) || 10);
     // Allow scheduling jitter while identifying a missed poll in the energy history.
@@ -190,9 +193,21 @@ module.exports = class SigenergyDevice extends Homey.Device {
       settings = this.activeSettings;
     const current = () => !this.stopped && generation === this.generation;
     try {
-      const data = await reader.snapshot(settings.energySolarSource || 'self');
+      const minute = minuteOf(pollStartedAt);
+      const includeSoc = minute !== this.batterySocMinute;
+      if (includeSoc) {
+        this.batterySocMinute = minute;
+        this.batterySoc = null;
+      }
+      const data = await reader.snapshot(settings.energySolarSource || 'self', includeSoc);
       if (!current()) return;
       snapshotRead = true;
+      if (includeSoc && Number.isFinite(data.soc)) {
+        const at = data.socReadAt ?? Date.now();
+        this.batterySocMinute = minuteOf(at);
+        this.batterySoc = data.soc;
+        this.homey.app.history?.observeMinute?.('soc', data.soc, at);
+      }
       this.energySnapshot = {
         generation: this.generation,
         readAt: Date.now(),
@@ -202,11 +217,11 @@ module.exports = class SigenergyDevice extends Homey.Device {
         selfPvW: data.selfPvW,
         thirdPartyPvW: data.thirdPartyPvW,
         essW: data.essW,
-        soc: data.soc,
+        soc: this.batterySoc,
         capacityKWh: data.capacityKWh,
         gridMode: data.gridMode,
       };
-      const backup = this.island.update(data.gridMode, data.soc);
+      const backup = this.island.update(data.gridMode, this.batterySoc);
       this.homey.settings.set('sigenergyStatus', {
         readAt: new Date().toISOString(),
         gridMode: data.gridMode,
@@ -224,7 +239,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
           this.homey.settings.set('batteryTelemetryError', null);
           this.homey.settings.set('batteryTelemetry', {
             ...optional,
-            values: { ...optional.values, capacityKWh: data.capacityKWh, soc: data.soc },
+            values: { ...optional.values, capacityKWh: data.capacityKWh, soc: this.batterySoc },
           });
         } catch (error) {
           if (!current()) return;
@@ -236,7 +251,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
         if (previous)
           this.homey.settings.set('batteryTelemetry', {
             ...previous,
-            values: { ...previous.values, capacityKWh: data.capacityKWh, soc: data.soc },
+            values: { ...previous.values, capacityKWh: data.capacityKWh, soc: this.batterySoc },
           });
       }
       this.homey.app.history?.append(
@@ -244,14 +259,13 @@ module.exports = class SigenergyDevice extends Homey.Device {
           gridW: data.gridMode === 0 ? data.gridW : null,
           pvW: data.pvW,
           essW: data.essW,
-          soc: data.soc,
         },
         undefined,
         data.gridMode === 0 ? 'invalid-sample' : 'off-grid',
         this.powerGapMs,
       );
       await Promise.all([
-        this.setCapabilityValue('measure_battery', data.soc),
+        this.setCapabilityValue('measure_battery', this.batterySoc),
         this.setCapabilityValue('measure_grid_power', data.gridW),
         this.setCapabilityValue('measure_ess_power', data.essW),
         this.setCapabilityValue('measure_pv_power', data.pvW),
@@ -405,20 +419,39 @@ module.exports = class SigenergyDevice extends Homey.Device {
     const profile = CHARGERS[key];
     const started = Date.now();
     try {
-      const { values, errors, powerReadAt, powerFailure } = await profile.read({
-        read: (...args) => {
-          if (!current()) throw Error('Charger reader replaced');
-          return reader.read(...args);
+      const dc = key === 'evdc';
+      const minute = minuteOf(started);
+      const includeSoc = dc && minute !== charger.socMinute;
+      if (includeSoc) charger.socMinute = minute;
+      const {
+        values,
+        errors = {},
+        powerReadAt,
+        powerFailure,
+        socReadAt,
+      } = await profile.read(
+        {
+          read: (...args) => {
+            if (!current()) throw Error('Charger reader replaced');
+            return reader.read(...args);
+          },
         },
-      });
+        includeSoc,
+      );
       if (!current()) return;
+      if (includeSoc) {
+        const at = socReadAt ?? powerReadAt;
+        charger.socMinute = minuteOf(at);
+        charger.soc = values.soc;
+        charger.socError = errors.soc;
+        this.homey.app.history?.observeMinute?.('evSoc', values.soc, at);
+      }
       this.homey.app.history?.append(
         chargerValues(profile.history, values),
         powerReadAt,
         powerFailure ? readFailureReason(powerFailure) : 'invalid-sample',
         this.powerGapMs,
       );
-      const dc = key === 'evdc';
       const totals = dc
         ? { dcIn: values.totalChargedKWh, dcOut: values.totalDischargedKWh }
         : { ac: values.totalConsumedKWh };
@@ -434,12 +467,14 @@ module.exports = class SigenergyDevice extends Homey.Device {
           dc ? 'ev' : 'evac',
         );
       }
+      const liveValues =
+        dc && Number.isFinite(charger.soc) ? { ...values, soc: charger.soc } : values;
       this.homey.settings.set(key === 'evdc' ? 'lastEvdc' : 'lastEvac', {
-        ...values,
-        errors,
+        ...liveValues,
+        errors: dc && charger.socError ? { ...errors, soc: charger.socError } : errors,
         readAt: new Date(powerReadAt).toISOString(),
       });
-      await this.publishChargerCapabilities(profile.capabilities, values);
+      await this.publishChargerCapabilities(profile.capabilities, liveValues);
     } finally {
       charger.polling = false;
       if (!current()) reader.close();

@@ -26,7 +26,7 @@ function load(file, overrides) {
     module = { exports: {} };
   vm.runInNewContext(
     fs.readFileSync(full, 'utf8'),
-    { module, require: (id) => (id in overrides ? overrides[id] : requireFile(id)) },
+    { module, Date, require: (id) => (id in overrides ? overrides[id] : requireFile(id)) },
     { filename: full },
   );
   return module.exports;
@@ -88,14 +88,15 @@ function deviceFixture({
   const settings = new Settings(),
     capabilities = new Map(),
     readers = [],
-    samples = [];
+    samples = [],
+    minuteSamples = [];
   class Reader {
     constructor(config) {
       this.config = config;
       readers.push(this);
     }
-    snapshot(solarSource) {
-      return snapshotRead(this, solarSource);
+    snapshot(...args) {
+      return snapshotRead(this, ...args);
     }
     read(...args) {
       return evacRead(this, ...args);
@@ -138,7 +139,13 @@ function deviceFixture({
     settings,
     setInterval: () => 1,
     clearInterval() {},
-    app: { history: { append: (...args) => samples.push(args), event() {} } },
+    app: {
+      history: {
+        append: (...args) => samples.push(args),
+        observeMinute: (...args) => minuteSamples.push(args),
+        event() {},
+      },
+    },
     flow: { getTriggerCard: () => ({ trigger: async () => {} }) },
   };
   device.getSettings = () => ({
@@ -157,10 +164,11 @@ function deviceFixture({
     device.available = false;
   };
   device.error = device.log = () => {};
-  return { device, settings, capabilities, readers, samples };
+  return { device, settings, capabilities, readers, samples, minuteSamples };
 }
 
-test('device publishes EVDC state on first failure, recovers, disables and shuts down', async () => {
+test('device publishes EVDC state on first failure, recovers, disables and shuts down', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   let fail = true;
   const { device, settings, capabilities } = deviceFixture({
     evdcRead: async () => {
@@ -184,6 +192,7 @@ test('device publishes EVDC state on first failure, recovers, disables and shuts
   assert.equal(d.battery.status, 'error');
   assert.equal(device.available, true);
   fail = false;
+  t.mock.timers.tick(60000);
   await device.pollCharger('evdc');
   d = diagnostics(settings);
   assert.equal(d.evdc.status, 'ok');
@@ -196,10 +205,11 @@ test('device publishes EVDC state on first failure, recovers, disables and shuts
   assert.equal(diagnostics(settings).sigenergy.status, 'disabled');
 });
 
-test('EVDC uses its own inverter address and marks failed power reads as gaps', async () => {
+test('EVDC uses its own inverter address and marks failed power reads as gaps', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
   let values = { powerW: 7200 };
   const powerFailure = Error('timeout');
-  const { device, settings, capabilities, readers, samples } = deviceFixture({
+  const { device, settings, capabilities, readers, samples, minuteSamples } = deviceFixture({
     evdcRead: async () => ({
       values,
       errors: values.powerW === undefined ? { powerW: 'timeout' } : { soc: 'unavailable' },
@@ -217,9 +227,11 @@ test('EVDC uses its own inverter address and marks failed power reads as gaps', 
   assert.equal(capabilities.get('measure_ev_soc'), null);
   assert.equal(diagnostics(settings).evdc.status, 'partial');
 
+  t.mock.timers.tick(60000);
   values = { soc: 50 };
   await device.pollCharger('evdc');
-  assert.deepEqual({ ...samples.at(-1)[0] }, { evW: null, evSoc: 50 });
+  assert.deepEqual({ ...samples.at(-1)[0] }, { evW: null });
+  assert.deepEqual(minuteSamples.at(-1).slice(0, 2), ['evSoc', 50]);
   assert.equal(samples.at(-1)[2], 'modbus-timeout');
   assert.equal(capabilities.get('measure_ev_power'), null);
   assert.equal(device.available, true);
@@ -229,6 +241,36 @@ test('EVDC uses its own inverter address and marks failed power reads as gaps', 
   assert.equal(readers.length, 3);
   assert.ok(readers.slice(0, 2).every((reader) => reader.closed));
   assert.match(settings.get('evdcError'), /Modbus-ID/);
+  await device.onUninit();
+});
+
+test('fast plant and EVDC polls reuse live SoC and submit only new minute readings to history', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 1800000000000 });
+  const plant = [],
+    dc = [];
+  const { device, capabilities, minuteSamples } = deviceFixture({
+    snapshotRead: async (_reader, _mode, due) => {
+      plant.push(due);
+      return { ...snapshot, soc: due ? 60 : undefined };
+    },
+    evdcRead: async (_reader, due) => {
+      dc.push(due);
+      return { values: due ? { powerW: 0, soc: 0 } : { powerW: 0 }, powerReadAt: Date.now() };
+    },
+  });
+  await device.onInit();
+  await tick();
+  for (let i = 1; i <= 6; i++) {
+    t.mock.timers.tick(10000);
+    await device.poll();
+    await device.pollCharger('evdc');
+    assert.equal(capabilities.get('measure_battery'), 60);
+    assert.equal(capabilities.get('measure_ev_soc'), 0);
+  }
+  assert.deepEqual(plant, [true, false, false, false, false, false, true]);
+  assert.deepEqual(dc, plant);
+  for (const field of ['soc', 'evSoc'])
+    assert.equal(minuteSamples.filter(([key]) => key === field).length, 2);
   await device.onUninit();
 });
 
@@ -481,6 +523,11 @@ test('changing Nibe configuration while a read is pending discards the old resul
   assert.equal(app.getDiagnostics().nibe.status, 'no-data');
   await app.pollNibe();
   assert.equal(app.getTemperatureContext().outdoorC, -3);
+  const bins = app.history.export().slots.flatMap((row) => row.minuteMeans?.outdoorC ?? []);
+  assert.deepEqual(
+    bins.map(({ mean, count }) => [mean, count]),
+    [[-3, 1]],
+  );
   await app.onUninit();
 });
 
