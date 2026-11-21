@@ -17,6 +17,7 @@
   "category": "energy",
   "permissions": [],
   "api": {
+    "getHistoryOverview": { "method": "GET", "path": "/history/overview", "public": false },
     "exportHistory": {
       "method": "GET",
       "path": "/history/export",

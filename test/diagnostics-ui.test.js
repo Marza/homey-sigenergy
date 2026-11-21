@@ -1,5 +1,5 @@
 'use strict';
-const { attachWidgetApi } = require('./widget-helper');
+const { attachWidgetApi, attachHistoryApi } = require('./widget-helper');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -29,6 +29,7 @@ function view(file) {
     nibeHost: '192.0.2.30',
     nibeStatus: { readAt, readings: { outdoorC: -2 } },
     historyState: {
+      timezone: 'Europe/Stockholm',
       schema: 3,
       slots: [
         {
@@ -77,6 +78,7 @@ function view(file) {
     ready() {},
   };
   if (file.startsWith('widgets/')) attachWidgetApi(Homey, Clock);
+  else attachHistoryApi(Homey);
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const browserCopy = path.join(path.dirname(file), 'source-status.js');
   assert.match(html, /<script src="source-status.js"><\/script>/);

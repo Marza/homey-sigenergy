@@ -2,6 +2,12 @@
 
 Quarter-hour records introduced by issue #5 retain `schema: 2`. Issue #6 stores them with daily summaries and events in a single `historyState` setting with schema 3. History remains bounded app-settings storage, not a billing meter or a database.
 
+### Storage on Homey
+
+The app stores the quarter-history snapshot and each nonempty hour of raw grid measurements as gzip-compressed JSON in Homey app settings. Homey serializes the settings collection when a live status value changes. Packing the archives keeps the SDK from traversing every historical sample on each poll. The quarter snapshot is replaced in one write. Existing snapshots convert on their next successful commit, and existing grid hours convert at the next checkpoint. The 4 MiB quarter-history budget applies to the uncompressed snapshot.
+
+Manual exports still contain ordinary JSON. App versions through v0.17.49 from GitHub cannot read the packed settings. Keep a JSON export before downgrading.
+
 ## Record fields
 
 | Field | Meaning |

@@ -1382,42 +1382,7 @@
           ? (Number(w) / 1000).toLocaleString('sv-SE', { maximumFractionDigits: 2 }) + ' kW'
           : '–';
       function readHistory(Homey, callback) {
-        Homey.get('historyState', (error, state) => {
-          if (error) {
-            callback(error);
-            return;
-          }
-          if (state !== null && state !== undefined) {
-            if (
-              state.schema !== 3 ||
-              !['slots', 'daily', 'events', 'legacyDaily'].every((k) => Array.isArray(state[k]))
-            ) {
-              callback(new Error('Historiken kunde inte läsas.'));
-              return;
-            }
-            callback(null, state);
-            return;
-          }
-          const history = { slots: [], daily: [], events: [], legacyDaily: [] };
-          let remaining = 3,
-            failed = false;
-          for (const [key, target] of [
-            ['historySlots', 'slots'],
-            ['historyDaily', 'daily'],
-            ['historyEvents', 'events'],
-          ]) {
-            Homey.get(key, (err, value) => {
-              if (failed) return;
-              if (err) {
-                failed = true;
-                callback(err);
-                return;
-              }
-              history[target] = Array.isArray(value) ? value : [];
-              if (--remaining === 0) callback(null, history);
-            });
-          }
-        });
+        Homey.api('GET', '/history/overview', null, callback);
       }
       function historyAverage(row, key) {
         const count = row?.counts?.[key],
@@ -1529,7 +1494,7 @@
               'historySummary',
               error
                 ? 'Historiken kunde inte läsas'
-                : `${slots.length} sparade 15-minutersintervall · ${history.daily.length} dagssammanställningar · ${history.legacyDaily.length} äldre dagsposter`,
+                : `${history.slotCount} sparade 15-minutersintervall · ${history.dayCount} dagssammanställningar · ${history.legacyDayCount} äldre dagsposter`,
             );
           });
           get('backupStatus', (status) => {

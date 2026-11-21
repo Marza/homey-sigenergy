@@ -1,5 +1,5 @@
 'use strict';
-const { attachWidgetApi } = require('./widget-helper');
+const { attachWidgetApi, attachHistoryApi } = require('./widget-helper');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -18,7 +18,14 @@ function render(file, row, start, canonical = false) {
   const Homey = {
     get(key, callback) {
       if (canonical && key === 'historyState')
-        callback(null, { schema: 3, slots: [row], daily: [], events: [], legacyDaily: [] });
+        callback(null, {
+          timezone: 'Europe/Stockholm',
+          schema: 3,
+          slots: [row],
+          daily: [],
+          events: [],
+          legacyDaily: [],
+        });
       else
         callback(
           null,
@@ -34,6 +41,7 @@ function render(file, row, start, canonical = false) {
     ready() {},
   };
   if (file.startsWith('widgets/')) attachWidgetApi(Homey);
+  else attachHistoryApi(Homey);
   const html = fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
   const script =
     fs.readFileSync(path.join(__dirname, '../lib/widget-layout.js'), 'utf8') +

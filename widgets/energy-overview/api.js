@@ -1,4 +1,5 @@
 'use strict';
+const { unpack } = require('../../lib/packed-history');
 const { currentMonth } = require('../../lib/tariff-config');
 const { diagnostics } = require('../../lib/source-status');
 const pick = (value, keys) =>
@@ -80,7 +81,8 @@ function getOverview({ homey }, now) {
   const errors = [];
   const read = (key) => {
     try {
-      return homey.settings.get(key);
+      const value = homey.settings.get(key);
+      return key === 'historyState' ? unpack(value) : value;
     } catch {
       errors.push(key);
       return null;
