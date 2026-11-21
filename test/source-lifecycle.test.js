@@ -362,6 +362,15 @@ test('the V2.9 profile reads household energy without invalidating site data on 
   assert.equal(seen.at(-1)[2], 'modbus-timeout');
   assert.equal(diagnostics(settings).sigenergy.status, 'ok');
   assert.equal(device.available, true);
+  const failedCount = seen.length;
+  await device.poll();
+  assert.equal(seen.length, failedCount + 1, 'retry the household counter on the next plant poll');
+  await device.poll();
+  assert.equal(seen.length, failedCount + 1, 'persistent errors wait for the next scheduled probe');
+  failure = false;
+  device.lastEnergyProbeAt = null;
+  await device.poll();
+  assert.equal(settings.get('householdCounterStatus').totalKWh, 1234.56);
   await device.onUninit();
 });
 
