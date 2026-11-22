@@ -25,6 +25,19 @@ const reasons = {
   limit: 'Ange hushållets importgräns.',
   battery: 'Kontrollera batteriets aktuella gränser och om en plan ryms inom importgränsen.',
 };
+const MIN_SELL_KWH = 1;
+function tradeWindows(plan) {
+  const windows = [];
+  for (const p of plan.filter((p) => p.action === 'buy' || p.action === 'sell')) {
+    const kWh = p.action === 'buy' ? p.buyKWh : p.sellKWh,
+      last = windows.at(-1);
+    if (last?.action === p.action && last.end === p.t) {
+      last.end += Q;
+      last.kWh += kWh;
+    } else windows.push({ start: p.t, end: p.t + Q, action: p.action, kWh });
+  }
+  return windows.filter((w) => w.action === 'buy' || w.kWh >= MIN_SELL_KWH);
+}
 function draw(data, day, index) {
   const { start, end } = data.days[day],
     rows = data.quarters.filter((r) => r.t >= start && r.t < end);
@@ -117,6 +130,11 @@ function draw(data, day, index) {
   add('line', { x1: x(row.t), x2: x(row.t), y1: 10, y2: 185, stroke: 'var(--sub)', opacity: 0.45 });
   const p = plan.find((p) => p.t === row.t),
     m = measured.filter((p) => p.t >= row.t && p.t < row.t + Q).at(-1);
+  const windows = tradeWindows(plan);
+  const action =
+    p?.action === 'sell' && !windows.some((w) => w.start <= p.t && p.t < w.end)
+      ? 'house'
+      : p?.action;
   by('time').textContent = time(row.t) + '–' + time(row.t + Q);
   by('detail').textContent =
     'Köp ' +
@@ -125,17 +143,8 @@ function draw(data, day, index) {
     value(row.sell, 'kr/kWh') +
     ' · ' +
     (p
-      ? 'Prognos ' + value(p.soc, '%') + ' → ' + value(p.endSoc, '%') + ' · ' + actions[p.action]
+      ? 'Prognos ' + value(p.soc, '%') + ' → ' + value(p.endSoc, '%') + ' · ' + actions[action]
       : 'Uppmätt ' + value(m?.soc, '%'));
-  const windows = [];
-  for (const p of plan.filter((p) => p.action === 'buy' || p.action === 'sell')) {
-    const kWh = p.action === 'buy' ? p.buyKWh : p.sellKWh,
-      last = windows.at(-1);
-    if (last?.action === p.action && last.end === p.t) {
-      last.end += Q;
-      last.kWh += kWh;
-    } else windows.push({ start: p.t, end: p.t + Q, action: p.action, kWh });
-  }
   by('actions').replaceChildren();
   for (const w of windows) {
     const div = document.createElement('div'),
@@ -149,7 +158,7 @@ function draw(data, day, index) {
   }
   if (!windows.length)
     by('actions').textContent = plan.length
-      ? 'Inga planerade batteriaffärer under perioden.'
+      ? 'Inga föreslagna batteriaffärer under perioden.'
       : 'Ingen plan för perioden.';
   by('status').textContent =
     (plan.length ? 'Plan till ' + time(plan.at(-1).t + Q) + '. ' : '') +
