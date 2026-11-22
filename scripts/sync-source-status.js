@@ -9,7 +9,7 @@ for (const [source, name] of [
     fs.copyFileSync(source, `${directory}/${name}`);
 }
 
-for (const widget of ['energy-overview', 'energy-flow', 'power-history'])
+for (const widget of ['energy-overview', 'energy-flow', 'power-history', 'battery-plan'])
   fs.copyFileSync('lib/widget-layout.js', `widgets/${widget}/public/widget-layout.js`);
 
 for (const asset of ['history-widget.js', 'history-widget.css'])

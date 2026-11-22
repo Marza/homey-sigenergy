@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Batteri och elpris</title>
+    <link rel="stylesheet" href="chart.css" />
+    <script defer src="widget-layout.js"></script>
+    <script defer src="chart.js"></script>
+  </head>
+  <body>
+    <main id="widget-content">
+      <header>
+        <h1>Batteri och elpris</h1>
+        <select id="day" aria-label="Välj dygn">
+          <option value="today">Idag</option>
+          <option value="tomorrow">Imorgon</option>
+        </select>
+      </header>
+      <div class="legend">
+        <span class="buy">Köppris</span><span class="sell">Säljpris</span
+        ><span class="soc">Batterinivå</span><span class="projected">Prognos</span>
+      </div>
+      <div class="units"><span>Pris · kr/kWh</span><span>Laddnivå · %</span></div>
+      <svg
+        id="chart"
+        viewBox="0 0 400 220"
+        role="img"
+        aria-label="Köp- och säljpris samt uppmätt och prognostiserad batterinivå"
+      ></svg>
+      <label id="time" for="cursor">Välj kvart</label>
+      <input type="range" id="cursor" min="0" max="0" value="0" aria-label="Inspektera kvart" />
+      <p id="detail"></p>
+      <h2>Föreslagna affärer</h2>
+      <div id="actions"></div>
+      <p id="status" role="status">Hämtar priser och mätningar …</p>
+      <details>
+        <summary>Så räknas planen</summary>
+        <p>
+          Köp inkluderar avtalets skatter och avgifter. Sälj är uppskattad spotersättning med
+          avtalets nätnytta och exportavgift.
+        </p>
+        <p>
+          Planen väger husprognosen mot de senaste sju dygnens sol- och billaddning vid samma
+          klockslag. Den antar 95 % verkningsgrad per riktning och räknar med batterislitage,
+          batteriets effektgränser och hushållets importgräns. Med sparad huvudsäkring begränsas
+          extra import och export av den högsta uppmätta fasströmmen vid samma klockslag, med
+          antagen balanserad trefaseffekt vid 230 V. Under effektavgiftens mätfönster planeras ingen
+          nätladdning av batteriet.
+        </p>
+        <p>
+          Prognosen utgår från senaste laddnivån vid nästa kvart och avslutas på samma nivå. Väder,
+          nya laddpass och fasobalans kan ändra utfallet. Endast rådgivning.
+        </p>
+      </details>
+    </main>
+  </body>
+</html>

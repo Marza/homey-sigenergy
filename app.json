@@ -766,6 +766,16 @@
     ]
   },
   "widgets": {
+    "battery-plan": {
+      "id": "battery-plan",
+      "name": { "en": "Battery and electricity prices", "sv": "Batteri och elpris" },
+      "description": {
+        "en": "Purchase and sale prices, battery charge and advisory schedule",
+        "sv": "Köppris, säljpris, batterinivå och föreslagen laddplan"
+      },
+      "settings": [],
+      "api": { "getPlan": { "method": "GET", "path": "/" } }
+    },
     "energy-flow": {
       "id": "energy-flow",
       "name": { "en": "Energy flows", "sv": "Energiflöden" },

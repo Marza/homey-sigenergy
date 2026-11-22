@@ -42,6 +42,18 @@ function verifyWidget(directory) {
       assert.ok(fs.statSync(path.join(folder, file)).size > 0, `Widget ${id} missing ${file}`);
     assert.equal(typeof require(path.resolve(folder, 'api.js')).getHistory, 'function');
   }
+  const batteryDir = path.join(directory, 'widgets/battery-plan');
+  assert.deepEqual(manifest.widgets['battery-plan'].api, { getPlan: { method: 'GET', path: '/' } });
+  assert.equal(typeof require(path.resolve(batteryDir, 'api.js')).getPlan, 'function');
+  for (const file of [
+    'public/index.html',
+    'public/chart.js',
+    'public/chart.css',
+    'public/widget-layout.js',
+    'preview-light.png',
+    'preview-dark.png',
+  ])
+    assert.ok(fs.statSync(path.join(batteryDir, file)).size > 0);
   for (const asset of ['history-widget.js', 'history-widget.css', 'widget-layout.js']) {
     const read = (id) => fs.readFileSync(path.join(directory, 'widgets', id, 'public', asset));
     assert.deepEqual(

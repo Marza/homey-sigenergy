@@ -46,6 +46,7 @@ module.exports = [
       'settings/grid-day.js',
       'settings/settings-assistant.js',
       'widgets/*/public/history-widget.js',
+      'widgets/battery-plan/public/chart.js',
     ],
     languageOptions: { globals: globals.browser },
   },

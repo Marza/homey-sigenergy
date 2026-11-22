@@ -1,0 +1,9 @@
+{
+  "name": { "en": "Battery and electricity prices", "sv": "Batteri och elpris" },
+  "description": {
+    "en": "Purchase and sale prices, battery charge and advisory schedule",
+    "sv": "Köppris, säljpris, batterinivå och föreslagen laddplan"
+  },
+  "settings": [],
+  "api": { "getPlan": { "method": "GET", "path": "/" } }
+}
