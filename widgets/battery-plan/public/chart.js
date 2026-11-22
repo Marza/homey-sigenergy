@@ -167,6 +167,9 @@ function draw(data, day, index) {
       ? 'Inga föreslagna batteriaffärer under perioden.'
       : 'Ingen plan för perioden.';
   by('status').textContent =
+    'Beräknad på Homey kl. ' +
+    time(data.now) +
+    '. ' +
     (plan.length ? 'Plan till ' + time(plan.at(-1).t + Q) + '. ' : '') +
     (Number.isFinite(peak)
       ? 'Effektmål ' +

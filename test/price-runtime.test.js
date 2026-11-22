@@ -40,7 +40,7 @@ class Settings extends EventEmitter {
     this.emit('set', k);
   }
 }
-function appFixture(fetchPrices, settings = new Settings()) {
+function appFixture(fetchPrices, settings = new Settings(), planner) {
   const file = path.join(__dirname, '../app.js'),
     requireApp = createRequire(file),
     module = { exports: {} };
@@ -53,7 +53,9 @@ function appFixture(fetchPrices, settings = new Settings()) {
           ? { App: class {} }
           : id === './lib/pricing/tibber'
             ? { fetchTibberPrices: fetchPrices }
-            : requireApp(id),
+            : planner && id === './lib/energy/battery-plan-report'
+              ? { getBatteryPlan: planner }
+              : requireApp(id),
     },
     { filename: file },
   );
@@ -162,3 +164,68 @@ test('legacy and expired caches cannot silently provide inferred prices to plans
   await app.onUninit();
 });
 module.exports = {};
+
+test('Homey refreshes one shared battery plan without widget requests and discards invalid advice', async () => {
+  const widget = require('../widgets/battery-plan/api');
+  let runs = 0,
+    fail = false;
+  const planner = ({ settings }) => {
+    runs++;
+    if (fail) throw Error('Calculation failed');
+    return {
+      now: Date.now(),
+      chargeLimitKW: settings.get('batteryTelemetry')?.values.chargePowerLimitKW,
+      plan: [{ action: 'buy' }],
+    };
+  };
+  const { app, settings } = appFixture(async () => cache(), new Settings(), planner);
+  const timers = new Map();
+  app.homey.setInterval = (fn, ms) => {
+    timers.set(fn, ms);
+    return fn;
+  };
+  app.homey.clearInterval = (fn) => timers.delete(fn);
+  const read = () => widget.getPlan({ homey: { app } });
+  await app.onInit();
+  assert.equal(runs, 1);
+  const tick = app.historyTimer;
+  assert.equal(timers.get(tick), 60000);
+  settings.set('sourceConfig', {
+    ...settings.get('sourceConfig'),
+    sigenergy: { configured: true, enabled: true },
+  });
+  settings.set('sigenergyStatus', { readAt: new Date().toISOString() });
+  settings.set('backupStatus', {
+    mode: 'on-grid',
+    suspendEconomicOptimization: false,
+    observedAt: new Date().toISOString(),
+  });
+  settings.set('batteryTelemetry', { values: { chargePowerLimitKW: 8 } });
+  tick();
+  assert.equal(runs, 2);
+  assert.equal(read().chargeLimitKW, 8);
+  assert.strictEqual(read(), read());
+  assert.equal(runs, 2);
+  assert.throws(() => app.getLatestBatteryPlan(read().now + 120001));
+  settings.set('backupStatus', {
+    mode: 'off-grid',
+    suspendEconomicOptimization: true,
+    observedAt: new Date().toISOString(),
+  });
+  assert.equal(read().reason, 'grid');
+  assert.equal(read().plan.length, 0);
+  settings.set('householdImportLimits', { importLimitKW: 10 });
+  assert.throws(read);
+  fail = true;
+  tick();
+  assert.throws(read);
+  fail = false;
+  tick();
+  assert.equal(runs, 4);
+  await app.onUninit();
+  assert.ok(!timers.has(tick));
+  assert.throws(read);
+  await app.onInit();
+  assert.equal(runs, 5);
+  await app.onUninit();
+});
