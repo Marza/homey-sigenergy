@@ -131,6 +131,10 @@ function draw(data, day, index) {
   const p = plan.find((p) => p.t === row.t),
     m = measured.filter((p) => p.t >= row.t && p.t < row.t + Q).at(-1);
   const windows = tradeWindows(plan);
+  const peak = plan.reduce(
+    (max, q) => (q.peakWindow ? Math.max(max, q.gridImportKW) : max),
+    -Infinity,
+  );
   const action =
     p?.action === 'sell' && !windows.some((w) => w.start <= p.t && p.t < w.end)
       ? 'house'
@@ -144,7 +148,9 @@ function draw(data, day, index) {
     ' · ' +
     (p
       ? 'Prognos ' + value(p.soc, '%') + ' → ' + value(p.endSoc, '%') + ' · ' + actions[action]
-      : 'Uppmätt ' + value(m?.soc, '%'));
+      : 'Uppmätt ' + value(m?.soc, '%')) +
+    (Number.isFinite(p?.gridImportKW) ? ' · Nätimport ' + value(p.gridImportKW, 'kW') : '') +
+    (p?.chargeKW > 0 ? ' · Batteriladdning ' + value(p.chargeKW, 'kW') : '');
   by('actions').replaceChildren();
   for (const w of windows) {
     const div = document.createElement('div'),
@@ -162,6 +168,17 @@ function draw(data, day, index) {
       : 'Ingen plan för perioden.';
   by('status').textContent =
     (plan.length ? 'Plan till ' + time(plan.at(-1).t + Q) + '. ' : '') +
+    (Number.isFinite(peak)
+      ? 'Effektmål ' +
+        value(data.tariffTargetKW, 'kW') +
+        ' · högsta planerade kvart under mätfönstret ' +
+        value(peak, 'kW') +
+        '. ' +
+        (peak > data.tariffTargetKW + 1e-8 ? 'Planen överskrider effektmålet. ' : '')
+      : '') +
+    (Number.isFinite(data.chargeLimitKW)
+      ? 'Batteriets aktuella laddgräns ' + value(data.chargeLimitKW, 'kW') + '. '
+      : '') +
     (reasons[data.reason] ?? '') +
     (data.missingPhase ? ' Saknad fashistorik begränsar batteriaffärer under vissa kvartar.' : '');
 }

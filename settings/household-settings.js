@@ -4,15 +4,19 @@
   function bind(Homey) {
     const field = (key) => document.getElementById('household-' + key);
     const limit = field('import-limit');
+    const target = field('tariff-target');
     const fuse = field('main-fuse');
     const button = field('save-limits');
     const status = field('limits-status');
     let edited = false;
 
-    limit.oninput = fuse.oninput = () => {
-      edited = true;
-      status.textContent = 'Spara ändringarna.';
-    };
+    limit.oninput =
+      target.oninput =
+      fuse.oninput =
+        () => {
+          edited = true;
+          status.textContent = 'Spara ändringarna.';
+        };
     Homey.get(KEY, (error, value) => {
       if (edited) return;
       if (error) {
@@ -20,6 +24,7 @@
         return;
       }
       limit.value = value?.importLimitKW ?? '';
+      target.value = value?.tariffTargetKW ?? target.defaultValue;
       fuse.value = value?.mainFuseA ?? '';
     });
     button.onclick = () => {
@@ -27,6 +32,11 @@
       edited = true;
       const text = limit.value.trim().replace(',', '.');
       const importLimitKW = text ? Number(text) : null;
+      const tariffTargetKW = Number(target.value.trim().replace(',', '.'));
+      if (!Number.isFinite(tariffTargetKW) || tariffTargetKW <= 0 || tariffTargetKW > 1000) {
+        status.textContent = 'Ange ett effektmål större än 0 och högst 1 000 kW.';
+        return;
+      }
       const mainFuseA = fuse.value ? Number(fuse.value) : null;
       if (
         (importLimitKW !== null &&
@@ -37,9 +47,9 @@
         return;
       }
 
-      button.disabled = limit.disabled = fuse.disabled = true;
-      Homey.set(KEY, { importLimitKW, mainFuseA }, (error) => {
-        button.disabled = limit.disabled = fuse.disabled = false;
+      button.disabled = limit.disabled = target.disabled = fuse.disabled = true;
+      Homey.set(KEY, { importLimitKW, mainFuseA, tariffTargetKW }, (error) => {
+        button.disabled = limit.disabled = target.disabled = fuse.disabled = false;
         status.textContent = error
           ? 'Importgränserna kunde inte sparas.'
           : 'Hushållets importgränser sparades.';

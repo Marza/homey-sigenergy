@@ -28,6 +28,7 @@ const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/javascript');
     // The host CSS arrives after the app CSS, before onHomeyReady, like the SDK.
     const initial = {
+      householdImportLimits: { importLimitKW: 17.3, mainFuseA: 25 },
       costContract: {
         schema: 2,
         currency: 'SEK',
@@ -272,6 +273,17 @@ const server = http.createServer((req, res) => {
       );
       assert.equal(await page.locator('#econ-from').inputValue(), '');
       await category('household');
+      assert.equal(await page.locator('#household-tariff-target').inputValue(), '3');
+      await page.locator('#household-tariff-target').fill('0');
+      await page.locator('#household-save-limits').click();
+      assert.match(await page.locator('#household-limits-status').innerText(), /effektmål/);
+      await page.locator('#household-tariff-target').fill('2,5');
+      await page.locator('#household-save-limits').click();
+      assert.deepEqual(await page.evaluate(() => window.syntheticSettings.householdImportLimits), {
+        importLimitKW: 17.3,
+        mainFuseA: 25,
+        tariffTargetKW: 2.5,
+      });
       await category('costs');
       assert.equal(await page.locator('#costOtherImport').inputValue(), '0,037125');
       await page.locator('#saveCostContract').click();
