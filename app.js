@@ -5,6 +5,7 @@ const { randomUUID, createHash } = require('node:crypto');
 const { diagnostics, nibeKey, batteryValues, backupAdvisory } = require('./lib/diagnostics');
 const { temperatureContext } = require('./lib/optimization/temperature');
 const { DEFAULT_OPERATION, resolveOperation } = require('./lib/operation-mode');
+const { getBatteryPlan } = require('./lib/energy/battery-plan-report');
 const { HouseholdForecast } = require('./lib/energy/household-forecast');
 const { HistoryStore, calculationSlots } = require('./lib/history');
 const { DataDiagnostics } = require('./lib/data-diagnostics');
@@ -47,7 +48,9 @@ module.exports = class SigenergyApp extends Homey.App {
     this.forecast = new HouseholdForecast(this.homey.settings, this.history);
     this.refreshDemandEstimate();
     this.demandTimer = this.homey.setInterval(() => this.refreshDemandEstimate(), 15 * 60 * 1000);
+    this.stopping = false;
     this.refreshForecast();
+    this.refreshBatteryPlan();
     this.historyTimer = this.homey.setInterval(() => {
       try {
         this.history.flush();
@@ -56,12 +59,18 @@ module.exports = class SigenergyApp extends Homey.App {
       } catch (e) {
         this.error('History flush:', e.message);
       } finally {
+        this.refreshBatteryPlan();
         this.flushGridDay();
         this.dataDiagnostics.flush();
       }
     }, 60 * 1000);
-    this.stopping = false;
     this.settingsChanged = (key) => {
+      if (
+        ['householdImportLimits', 'costContractTimeline', 'tibberToken', 'tibberHomeId'].includes(
+          key,
+        )
+      )
+        this.batteryPlan = null;
       if (['backupStatus', 'sigenergyStatus', 'sigenergyError', 'sourceConfig'].includes(key))
         this.syncBackupAdvisories();
       if (['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'].includes(key))
@@ -251,6 +260,14 @@ module.exports = class SigenergyApp extends Homey.App {
   }
   syncBackupAdvisories() {
     const advisory = this.getBackupAdvisory();
+    if (advisory.restricted && this.batteryPlan?.plan.length) {
+      this.batteryPlan = {
+        ...this.batteryPlan,
+        plan: [],
+        reason: 'grid',
+        liveSoc: advisory.batterySoc,
+      };
+    }
     const key =
       advisory.status + advisory.mode + (advisory.batterySoc !== null && advisory.batterySoc < 25);
     if (key === this.backupAdvisoryKey) return;
@@ -264,6 +281,21 @@ module.exports = class SigenergyApp extends Homey.App {
           batterySoc: advisory.batterySoc,
         }),
       });
+  }
+  refreshBatteryPlan() {
+    if (this.stopping) return;
+    try {
+      this.batteryPlan = getBatteryPlan({ settings: this.homey.settings, app: this });
+    } catch (error) {
+      this.batteryPlan = null;
+      this.error('Battery plan:', error.message);
+    }
+  }
+  getLatestBatteryPlan(now = Date.now()) {
+    const report = this.batteryPlan;
+    if (!report || now < report.now || now - report.now > 120000)
+      throw new Error('Aktuell batteriplan saknas.');
+    return report;
   }
   refreshForecast() {
     try {
@@ -409,6 +441,7 @@ module.exports = class SigenergyApp extends Homey.App {
   async onUninit() {
     this.dataDiagnostics?.record('app', 'app-stopped');
     this.stopping = true;
+    this.batteryPlan = null;
     this.tibberHistoryPrices?.stop();
     if (this.tibberHistoryPricesTimer) this.homey.clearInterval(this.tibberHistoryPricesTimer);
     if (this.settingsChanged) {

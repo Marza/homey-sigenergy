@@ -56,9 +56,14 @@ async function checkTradeThreshold(page) {
   ];
   const data = {
     ...sample,
+    tariffTargetKW: 3,
+    chargeLimitKW: 2.66,
     plan: trades.map(([action, kWh], i) => ({
       t: quarters[i].t,
       action,
+      peakWindow: i === 0,
+      gridImportKW: 3.4,
+      chargeKW: action === 'buy' ? 2 : 0,
       soc: 70,
       endSoc: 69,
       buyKWh: action === 'buy' ? kWh : 0,
@@ -67,6 +72,12 @@ async function checkTradeThreshold(page) {
   };
   const render = (index, report = data) =>
     page.evaluate(({ report, index }) => window.draw(report, 'today', index), { report, index });
+  await render(0);
+  assert.match(await page.locator('#status').innerText(), /3,4 kW.*överskrider effektmålet/);
+  assert.match(await page.locator('#status').innerText(), /aktuella laddgräns 2,66 kW/);
+  assert.match(await page.locator('#detail').innerText(), /Nätimport 3,4 kW/);
+  await render(3);
+  assert.match(await page.locator('#detail').innerText(), /Batteriladdning 2 kW/);
   await render(0);
   assert.deepEqual(await page.locator('.window span').allTextContents(), [
     'Nätladda · 0,1 kWh',

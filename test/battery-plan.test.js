@@ -37,9 +37,8 @@ test('bounds and peak windows apply to grid charging, including negative prices'
   assert.equal(optimize([slot(1, 0, 4)], b), null);
   assert.equal(optimize([slot(1, 0)], { ...b, low: 80 }), null);
 });
-function fixture() {
-  const now = Date.parse('2026-11-22T10:01:00Z'),
-    first = Math.ceil(now / Q) * Q;
+function fixture(now = Date.parse('2026-11-22T10:01:00Z')) {
+  const first = Math.ceil(now / Q) * Q;
   const stamped = new Date(now).toISOString();
   const slots = [
     { t: first - 96 * Q, fieldCoverageMs: { pvW: Q }, pvWh: 0 },
@@ -208,4 +207,64 @@ test('binding the plan to a main fuse suppresses extra network trades without ph
   const plan = optimize(quarters, b);
   assert.ok(plan[0].buyKWh > 0 && plan[0].buyKWh <= 0.25);
   assert.ok(plan[1].sellKWh > 0 && plan[1].sellKWh <= 0.2);
+});
+
+test('the report applies the household target only inside the effective Stockholm tariff window', () => {
+  const sunday = fixture();
+  assert.equal(sunday.report().tariffTargetKW, 3);
+  assert.ok(sunday.report().plan.every((q) => !q.peakWindow));
+  const monday = fixture(Date.parse('2026-11-23T10:01:00Z'));
+  monday.data.householdImportLimits.tariffTargetKW = 1.2;
+  monday.data.householdForecastV1.issues[0].wh.fill(750);
+  const result = monday.report();
+  assert.equal(result.tariffTargetKW, 1.2);
+  assert.equal(result.plan.length, 2);
+  assert.ok(
+    result.plan.every((q) => q.peakWindow && q.gridImportKW <= 1.2 + 1e-9 && q.buyKWh === 0),
+  );
+});
+
+test('precharges for an expensive peak even when the energy price alone favors waiting', () => {
+  const s = { ...b, low: 20, soc: 20, importKW: 7, tariffTargetKW: 3 };
+  const plan = optimize([slot(5, 0, 0.25), { ...slot(1, 0, 1.5), peakWindow: true }], s);
+  assert.ok(plan[0].chargeKW > 0);
+  assert.ok(plan[1].gridImportKW <= 3 + 1e-9);
+  assert.equal(plan[1].action, 'house');
+  const limited = optimize(
+    [
+      { ...slot(5, 0), phaseRoomKWh: 0 },
+      { ...slot(1, 0, 1.5), peakWindow: true },
+    ],
+    s,
+  );
+  assert.equal(limited[0].buyKWh, 0);
+  assert.equal(limited[1].gridImportKW, 6);
+  // The battery cutoff and the household connection remain hard limits.
+  assert.equal(limited[1].endSoc, s.low);
+  assert.equal(optimize([{ ...slot(1, 0, 2), peakWindow: true }], s), null);
+});
+
+test('can draw opening energy to protect the target without a grid refill in the horizon', () => {
+  const s = { ...b, tariffTargetKW: 3 };
+  const [q] = optimize([{ ...slot(1, 0, 1), peakWindow: true }], s);
+  assert.ok(q.gridImportKW <= 3 + 1e-9 && q.endSoc < s.soc && q.endSoc >= s.low);
+});
+
+test('concentrates equal-price grid charging within remaining import and BMS capacity', () => {
+  const s = {
+    ...b,
+    soc: 20,
+    low: 20,
+    high: 90,
+    capacity: 19,
+    importKW: 17.3,
+    chargeKW: 14.3,
+    dischargeKW: 17,
+  };
+  const plan = optimize([slot(1, 0, 0.75), slot(1, 0, 0.75), slot(5, 0, 3.1)], s);
+  assert.equal(plan.filter((q) => q.buyKWh > 0).length, 1);
+  const q = plan.find((q) => q.buyKWh > 0);
+  assert.ok(q.chargeKW > 12 && q.chargeKW <= 14.3 + 1e-9 && q.gridImportKW <= 17.3 + 1e-9);
+  const netLimited = optimize([slot(1, 0, 2), slot(4, 0, 3)], s);
+  assert.ok(netLimited[0].chargeKW > 8 && netLimited[0].chargeKW <= 9.3 + 1e-9);
 });
