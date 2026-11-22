@@ -1,0 +1,159 @@
+:root {
+  color-scheme: light dark;
+  --surface: #fff;
+  --ink: #181e2b;
+  --sub: #526073;
+  --line: #ccd2d9;
+  --buy: #80700a;
+  --sell: #ad5704;
+  --soc: #007c7d;
+  --soft: #edf4f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #242732;
+    --ink: #f7f8ff;
+    --sub: #bac3d2;
+    --line: #505461;
+    --buy: #f4ed85;
+    --sell: #ffad39;
+    --soc: #58ded8;
+    --soft: #31383f;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  min-height: 0;
+  background: var(--surface);
+  color: var(--ink);
+  font:
+    14px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+}
+html[data-widget-fits='true'],
+html[data-widget-fits='true'] body {
+  overflow: hidden;
+}
+main {
+  padding: 14px 14px 11px;
+}
+header,
+.units,
+.window {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+h1,
+h2,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+h2 {
+  font-size: 15px;
+  margin: 14px 0 4px;
+}
+select {
+  font: inherit;
+  background: var(--soft);
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+}
+.legend {
+  display: flex;
+  gap: 7px 15px;
+  flex-wrap: wrap;
+  color: var(--sub);
+  font-size: 12px;
+  margin: 12px 0;
+}
+.legend span:before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  background: var(--key);
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.buy {
+  --key: var(--buy);
+}
+.sell {
+  --key: var(--sell);
+}
+.soc {
+  --key: var(--soc);
+}
+.legend .projected:before {
+  background: none;
+  border-top: 2px dashed var(--soc);
+}
+.units,
+#detail,
+#status,
+details,
+.window {
+  color: var(--sub);
+  font-size: 12px;
+}
+svg {
+  width: 100%;
+  display: block;
+  overflow: visible;
+}
+svg text {
+  font-size: 11px;
+  fill: var(--sub);
+  font-variant-numeric: tabular-nums;
+}
+svg path {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+#time {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+input {
+  width: 100%;
+  accent-color: var(--soc);
+  margin: 4px 0;
+}
+#detail {
+  min-height: 16px;
+}
+.window {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.window b {
+  color: var(--ink);
+  font-weight: 600;
+}
+#status {
+  margin-top: 6px;
+}
+details {
+  margin-top: 9px;
+}
+summary {
+  cursor: pointer;
+}
+details p {
+  margin-top: 6px;
+}
