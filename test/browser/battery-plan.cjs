@@ -43,6 +43,44 @@ const plan = optimize(
   },
 );
 const sample = { days, now, quarters, measured, liveSoc, plan, reason: 'prices' };
+async function checkTradeThreshold(page) {
+  const trades = [
+    ['sell', 0.00241],
+    ['house', 0],
+    ['sell', 0.9999],
+    ['buy', 0.1],
+    ['sell', 0.4],
+    ['sell', 0.6],
+    ['hold', 0],
+    ['sell', 1.25],
+  ];
+  const data = {
+    ...sample,
+    plan: trades.map(([action, kWh], i) => ({
+      t: quarters[i].t,
+      action,
+      soc: 70,
+      endSoc: 69,
+      buyKWh: action === 'buy' ? kWh : 0,
+      sellKWh: action === 'sell' ? kWh : 0,
+    })),
+  };
+  const render = (index, report = data) =>
+    page.evaluate(({ report, index }) => window.draw(report, 'today', index), { report, index });
+  await render(0);
+  assert.deepEqual(await page.locator('.window span').allTextContents(), [
+    'Nätladda · 0,1 kWh',
+    'Sälj från batteriet · 1 kWh',
+    'Sälj från batteriet · 1,25 kWh',
+  ]);
+  assert.match(await page.locator('#detail').innerText(), /Använd i huset/);
+  await render(2);
+  assert.match(await page.locator('#detail').innerText(), /Använd i huset/);
+  await render(5);
+  assert.match(await page.locator('#detail').innerText(), /Sälj från batteriet/);
+  await render(0, { ...data, plan: data.plan.slice(0, 3) });
+  assert.match(await page.locator('#actions').innerText(), /Inga föreslagna batteriaffärer/);
+}
 async function run() {
   const browser = await chromium.launch();
   try {
@@ -73,6 +111,7 @@ async function run() {
       await page.setViewportSize({ width: 320, height: 650 });
       await page.locator('summary').click();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await checkTradeThreshold(page);
       assert.deepEqual(errors, []);
       await page.close();
     }
