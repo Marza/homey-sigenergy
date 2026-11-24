@@ -34,6 +34,8 @@ test('raw ten-second readings survive restart and yield observed extrema and mea
   assert.throws(() => store.report('site', 'frequencyHz'), /mätserie/); // Older inverter samples never become gateway Hz.
   assert.equal(store.report('site').bins.length, 2);
   assert.equal(store.report('other').bins.length, 0);
+  assert.equal(store.report('site', 'volts', 1).phaseCurrentSamples, 3);
+  assert.equal(store.report('other', 'volts', 1).phaseCurrentSamples, 0);
   assert.throws(() => store.report('site', 'bad'), /mätserie/);
   settings.set('gridPhaseCurrent', { binding: 'site', profile: 'gateway', frequencyUnit: 1 });
   const result = await getGridDay({

@@ -125,7 +125,7 @@
           r.known +
           ' av 96 kvartar har prognos. ' +
           r.comparable +
-          ' bygger på minst tre jämförbara dagar. Övriga använder gårdagens kvart när den finns.';
+          ' bygger på minst tre jämförbara dagar. Övriga använder i första hand gårdagens kvart och i andra hand tidigare mätningar vid samma klockslag, uppdelade på vardag och helg.';
         el('total').textContent = r.totalKWh === null ? '–' : fmt.format(r.totalKWh) + ' kWh';
         el('peak').textContent =
           r.peakKW === null
@@ -156,27 +156,52 @@
             'Första jämförelsen visas efter ett uppmätt prognosintervall.';
         const s = r.score;
         const lastErrorKWh = r.recentErrorKWh ?? s.lastErrorKWh;
-        el('accuracy').textContent =
-          (r.completedRuns
-            ? r.fullyScoredRuns +
-              ' av ' +
-              r.completedRuns +
-              ' avslutade rullande prognoser har full mättäckning och prognos för hela dygnet. '
-            : '') +
-          (Number.isFinite(lastErrorKWh)
+        const summary = el('accuracy');
+        summary.replaceChildren();
+        const paragraph = (text) => {
+          const p = document.createElement('p');
+          p.textContent = text;
+          summary.append(p);
+        };
+        paragraph(
+          'Avslutade rullande 24-timmarsprognoser: ' +
+            r.completedRuns +
+            '. Helt utvärderade: ' +
+            r.fullyScoredRuns +
+            '.',
+        );
+        if (r.completedRuns && r.comparison) {
+          const { forecastKW, actualKW } = r.comparison;
+          const paired = forecastKW.filter(
+            (v, i) => Number.isFinite(v) && Number.isFinite(actualKW[i]),
+          ).length;
+          paragraph(
+            'I perioden som visas ovan har ' +
+              paired +
+              ' av 96 kvartar både prognos och mätvärde. Kvartar utan prognos: ' +
+              forecastKW.filter((v) => !Number.isFinite(v)).length +
+              '. Kvartar utan komplett mätning: ' +
+              actualKW.filter((v) => !Number.isFinite(v)).length +
+              '.',
+          );
+        }
+        paragraph(
+          Number.isFinite(lastErrorKWh)
             ? 'Senaste kompletta dygnets utfall minus prognos: ' +
-              fmt.format(lastErrorKWh) +
-              ' kWh. '
-            : 'Inget helt dygn har utvärderats ännu. ') +
-          (s.pairs
-            ? 'Medelabsolutfel i dygnsreferenserna för ' +
+                fmt.format(lastErrorKWh) +
+                ' kWh.'
+            : 'Dygnsfelet kan beräknas när alla 96 kvartar har både prognos och komplett mätning.',
+        );
+        if (s.pairs)
+          paragraph(
+            'Medelabsolutfel i dygnsreferenserna (' +
               s.pairs +
-              ' gemensamma kvartar: prognos ' +
+              ' jämförbara kvartar): prognos ' +
               fmt.format(s.maeKW) +
               ' kW, gårdagens profil ' +
               fmt.format(s.yesterdayMaeKW) +
-              ' kW.'
-            : '');
+              ' kW.',
+          );
       });
     }
     load();

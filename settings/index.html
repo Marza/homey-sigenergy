@@ -246,7 +246,7 @@
       <div class="section">
         <h3>Tidigare prognos och uppmätt förbrukning</h3>
         <div id="forecast-comparison"></div>
-        <p id="forecast-accuracy"></p>
+        <div id="forecast-accuracy"></div>
       </div>
     </section>
     <section
@@ -306,11 +306,69 @@
         </details>
       </details>
       <h3>Temperatur och batterigränser</h3>
-      <p id="batteryTelemetryStatus"></p>
-      <p id="temperatureStatus">Väntar på mätdata…</p>
+      <p id="batteryTelemetryStatus" class="sub"></p>
+      <dl class="battery-readings">
+        <div>
+          <dt>Utomhus · Nibe BT1</dt>
+          <dd id="battery-outdoorC" data-unit="°C">–</dd>
+        </div>
+        <div>
+          <dt>Batteritemperatur</dt>
+          <dd id="battery-batteryTemperatureC" data-unit="°C">–</dd>
+        </div>
+        <div>
+          <dt>Aktuell laddgräns</dt>
+          <dd id="battery-chargePowerLimitKW" data-unit="kW">–</dd>
+        </div>
+        <div>
+          <dt>Aktuell urladdningsgräns</dt>
+          <dd id="battery-dischargePowerLimitKW" data-unit="kW">–</dd>
+        </div>
+        <div>
+          <dt>Laddnivå</dt>
+          <dd id="battery-soc" data-unit="%">–</dd>
+        </div>
+      </dl>
+      <details class="settings-details">
+        <summary>Energi, kapacitet och nominella gränser</summary>
+        <dl class="battery-readings">
+          <div>
+            <dt>Utrymme för laddning</dt>
+            <dd id="battery-availableChargeKWh" data-unit="kWh">–</dd>
+          </div>
+          <div>
+            <dt>Tillgängligt för urladdning</dt>
+            <dd id="battery-availableDischargeKWh" data-unit="kWh">–</dd>
+          </div>
+          <div>
+            <dt>Batterikapacitet</dt>
+            <dd id="battery-capacityKWh" data-unit="kWh">–</dd>
+          </div>
+          <div>
+            <dt>Övre laddgräns</dt>
+            <dd id="battery-chargeCutoffSoc" data-unit="%">–</dd>
+          </div>
+          <div>
+            <dt>Nedre laddgräns</dt>
+            <dd id="battery-dischargeCutoffSoc" data-unit="%">–</dd>
+          </div>
+          <div>
+            <dt>Nominell laddeffekt</dt>
+            <dd id="battery-nominalChargeKW" data-unit="kW">–</dd>
+          </div>
+          <div>
+            <dt>Nominell urladdningseffekt</dt>
+            <dd id="battery-nominalDischargeKW" data-unit="kW">–</dd>
+          </div>
+          <div>
+            <dt>Batterihälsa (SoH)</dt>
+            <dd id="battery-soh" data-unit="%">–</dd>
+          </div>
+        </dl>
+      </details>
       <p class="sub">
-        Batteritemperatur visas endast om ett verifierat register finns. Utetemperaturen kommer från
-        Nibe BT1.
+        Batteriets uppgifter kommer från Sigenergy och är inte verifierade mot hårdvaran.
+        Batteritemperaturen kräver ett verifierat temperaturregister.
       </p>
     </section>
     <section
@@ -1689,22 +1747,21 @@
           }
           const outdoor = values.nibeStatus?.readings?.outdoorC;
           const b = SourceStatus.batteryValues(values.batteryTelemetry, sources.battery);
-          document.getElementById('temperatureStatus').textContent =
-            'Ute: ' +
-            (sources.nibe.usable && Number.isFinite(outdoor) && outdoor >= -50 && outdoor <= 100
-              ? outdoor + ' °C'
-              : 'saknas') +
-            ' · BMS laddgräns: ' +
-            (Number.isFinite(b.chargePowerLimitKW) ? b.chargePowerLimitKW + ' kW' : 'saknas') +
-            ' · BMS urladdningsgräns: ' +
-            (Number.isFinite(b.dischargePowerLimitKW) ? b.dischargePowerLimitKW + ' kW' : 'saknas');
-          const vals = Object.entries(b)
-            .map(([k, v]) => k + ': ' + v)
-            .join(' · ');
-          document.getElementById('batteryTelemetryStatus').textContent =
-            SourceStatus.describe(sources.battery) +
-            (vals ? ' · ' + vals : ' · Batterivärden saknas') +
-            ' · Ej verifierat mot hårdvara';
+          const readings = {
+            ...b,
+            outdoorC: sources.nibe.usable && outdoor >= -50 && outdoor <= 100 ? outdoor : null,
+          };
+          for (const field of document.querySelectorAll('.battery-readings dd')) {
+            const value = readings[field.id.slice('battery-'.length)];
+            field.textContent = Number.isFinite(value)
+              ? value.toLocaleString('sv-SE', { maximumFractionDigits: 3 }) +
+                ' ' +
+                field.dataset.unit
+              : 'Saknas';
+          }
+          document.getElementById('batteryTelemetryStatus').textContent = SourceStatus.describe(
+            sources.battery,
+          );
         });
       }
 

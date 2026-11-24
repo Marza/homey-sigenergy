@@ -110,6 +110,7 @@ const server = http.createServer((req, res) => {
             end,
             binMs: 300000,
             profile: 'gateway',
+            phaseCurrentSamples: 12,
             events: [
               { at: t, mode: 0, alarms: 0, resumed: true },
               { at: t + 10000, mode: 1, alarms: 16, resumed: false },
@@ -208,7 +209,7 @@ const server = http.createServer((req, res) => {
       await page.locator('#gridDayPhase').selectOption('1');
       await page
         .locator('#gridDayStatus')
-        .getByText(/Inga avläsningar/)
+        .getByText(/Ingen giltig fasspänning för L2.*12 strömmätningar/)
         .waitFor();
       assert.equal(await page.locator('#gridDayChart svg').count(), 0);
       await page.locator('#tab-settings').click();
