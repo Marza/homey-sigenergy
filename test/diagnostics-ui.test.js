@@ -60,7 +60,13 @@ function view(file) {
     return elements.get(id);
   };
   const document = {
-    querySelectorAll: () => [],
+    querySelectorAll: (selector) =>
+      selector === '.battery-readings dd'
+        ? Array.from(
+            html.matchAll(/<dd id="(battery-[^"]+)" data-unit="([^"]+)"/g),
+            ([, id, unit]) => Object.assign(element(id), { id, dataset: { unit } }),
+          )
+        : [],
     getElementById: element,
     createElement: () => ({ textContent: '' }),
   };
@@ -201,8 +207,9 @@ test('settings exposes partial battery errors and omits failed limits from tempe
     errors: { dischargePowerLimitKW: 'Unsupported register' },
   };
   v.refresh();
-  assert.match(v.text('temperatureStatus'), /BMS laddgräns: 2 kW/);
-  assert.match(v.text('temperatureStatus'), /BMS urladdningsgräns: saknas/);
+  assert.equal(v.text('battery-chargePowerLimitKW'), '2 kW');
+  assert.match(v.text('battery-outdoorC'), /^[−-]2 °C$/);
+  assert.equal(v.text('battery-dischargePowerLimitKW'), 'Saknas');
   const rows = v
     .element('diagnosticRows')
     .children.map((p) => p.textContent)

@@ -129,3 +129,18 @@ test('rolling forecasts score the same actual quarters as the yesterday baseline
   assert.equal(r.score.maeKW, 1);
   assert.equal(r.score.yesterdayMaeKW, 0.6);
 });
+
+test('last forecast quarter uses available same-type history when yesterday is still in progress', () => {
+  // Tuesday 10:00 UTC. Wednesday's final quarter corresponds to the current unfinished Tuesday quarter.
+  const f = fixture([row(T - DAY, 350), row(T - 3 * DAY, 999), row(T, 800)]);
+  const forecast = f.model.report(T);
+  assert.equal(forecast.forecastKW.at(-1), 1.4);
+  assert.equal(forecast.comparable, 0);
+  assert.equal(f.data.get('householdForecastV1').issues[0].yesterday.at(-1), null);
+  assert.equal(
+    fixture([row(T - 3 * DAY, 999), row(T, 800)])
+      .model.report(T)
+      .forecastKW.at(-1),
+    null,
+  );
+});

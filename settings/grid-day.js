@@ -193,7 +193,14 @@ globalThis.GridDayView = (() => {
             get('Status').textContent = err
               ? 'Kunde inte hämta dygnshistoriken.'
               : metric.value === 'volts' && result?.profile === 'gateway'
-                ? 'Inga avläsningar av fasspänning. Vissa versioner av Gateway saknar dessa spänningsregister.'
+                ? 'Ingen giltig fasspänning för L' +
+                  (Number(phase.value) + 1) +
+                  ' från gatewayens nätsida de senaste 24 timmarna. ' +
+                  (result.phaseCurrentSamples
+                    ? 'Under samma period finns ' +
+                      number.format(result.phaseCurrentSamples) +
+                      ' strömmätningar för fasen. Gatewayens Modbus-register för spänning varierar mellan protokollversioner.'
+                    : 'Det saknas även strömmätningar för fasen under perioden.')
                 : 'Inga avläsningar för den valda serien under de senaste 24 timmarna.';
             return;
           }

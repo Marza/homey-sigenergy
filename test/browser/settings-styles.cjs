@@ -68,6 +68,8 @@ const server = http.createServer((req, res) => {
       { getSlots: () => rows },
     );
     model.refresh(start + q * 96 * 14);
+    // The earlier issued forecast lacked a quarter that later received a complete measurement.
+    map.get('householdForecastV1').issues.at(-1).wh[12] = null;
     const forecast = model.report(start + q * 96 * 15 + q);
     res.end(`window.syntheticSettings=${JSON.stringify(initial)};window.syntheticWrites=[];window.syntheticApiWrites=[];window.Homey={
       get:(key,cb)=>setTimeout(()=>new URLSearchParams(location.search).has('readFail')&&['demandTariff','chargingConfig'].includes(key)?cb(Error('Synthetic read failure')):cb(null,structuredClone(window.syntheticSettings[key]??null)),20),
@@ -128,6 +130,9 @@ const server = http.createServer((req, res) => {
       assert.equal(await page.locator('#forecast-total').innerText(), '24 kWh');
       assert.equal(await page.locator('#forecast-chart table tr').count(), 97);
       assert.equal(await page.locator('#forecast-comparison svg path').count(), 2);
+      const accuracy = await page.locator('#forecast-accuracy').innerText();
+      assert.match(accuracy, /24-timmarsprognoser: 1.*Helt utvärderade: 0/);
+      assert.match(accuracy, /95 av 96.*utan prognos: 1.*utan komplett mätning: 0/);
       await page.locator('#tab-settings').click();
       for (const category of categories) {
         if (width < 768) await page.locator('#settingsCategory').selectOption(category);
