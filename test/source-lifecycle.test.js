@@ -74,6 +74,8 @@ function deviceFixture({
   evacRead,
   evdcRead = async () => ({ values: { soc: 0, powerW: 0 }, powerReadAt: Date.now() }),
   phaseRead = async () => [0, 0, 0],
+  gatewayStatusRead,
+  gatewayPhasesRead,
   energyRead = async () => ({ values: {} }),
   householdRead = async () => '123456',
   flowRead = async () => {
@@ -115,6 +117,12 @@ function deviceFixture({
     }
     batteryTelemetry() {
       return batteryRead(this);
+    }
+    readGatewayStatus() {
+      return gatewayStatusRead();
+    }
+    gatewayPhases(shared) {
+      return gatewayPhasesRead(shared);
     }
     phaseCurrents(source) {
       return phaseRead(this, source);
@@ -860,4 +868,61 @@ test('gap recovery reuses the optional counter probe after persistence and canno
   await device.poll();
   assert.equal(device.getEnergySnapshot().meters.values.imported, 20);
   await device.onUninit();
+});
+
+test('ten-second gateway and unit 247 polls share a fresh request only on coincident eligible ticks', async () => {
+  for (const [unitId, pollSeconds, shares] of [
+    [247, 10, true],
+    [1, 10, false],
+    [247, 20, false],
+  ]) {
+    let reads = 0;
+    const plant = [],
+      phase = [],
+      timers = [];
+    const { device } = deviceFixture({
+      snapshotRead: async (_reader, _solar, _soc, shared) => {
+        plant.push(shared);
+        return snapshot;
+      },
+      gatewayStatusRead: async () => ({ gridMode: ++reads % 2 }),
+      gatewayPhasesRead: async (shared) => {
+        phase.push(shared);
+        return { amps: [1, 2, 3] };
+      },
+    });
+    device.getSettings = () => ({
+      host: 'gateway.invalid',
+      unitId,
+      pollSeconds,
+      phaseMeterSource: 'gateway',
+    });
+    device.homey.setInterval = (fn) => timers.push(fn);
+    await device.onInit();
+    await tick();
+    timers[0]();
+    await tick();
+    assert.equal(plant.length, 2);
+    assert.equal(reads, shares ? 2 : 0);
+    if (shares) {
+      assert.deepEqual(phase, plant);
+      assert.notEqual(plant[0], plant[1]);
+      device.phaseReaders.grid.busy = true;
+      timers[0]();
+      await tick();
+      assert.equal(plant.at(-1), undefined);
+      assert.equal(phase.length, 2);
+      device.phaseReaders.grid.busy = false;
+      device.polling = true;
+      timers[0]();
+      await tick();
+      assert.equal(phase.at(-1), undefined);
+      assert.equal(reads, 2);
+      device.polling = false;
+    } else {
+      assert.ok(plant.every((p) => p === undefined));
+      assert.ok(phase.length > 0 && phase.every((p) => p === undefined));
+    }
+    await device.onUninit();
+  }
 });

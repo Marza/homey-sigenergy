@@ -156,3 +156,40 @@ test('short and timed-out blocks never manufacture readings or disable the next 
   reader.read = read;
   assert.equal((await reader.snapshot()).gridW, -500);
 });
+
+test('gateway phase diagnostics and plant use one FC04 grid observation per combined poll', async () => {
+  const { reader, calls } = fixture();
+  const gateway = new SigenergyReader({ unitId: 247 });
+  const gatewayCalls = [];
+  let status = [1, ...words(-1250), 0, 0, 2];
+  gateway.read = async (addr, count) => {
+    gatewayCalls.push([addr, count]);
+    if (addr === 30004) return status;
+    return Array(count).fill(0);
+  };
+  for (const expectedMode of [2, 0]) {
+    status[5] = expectedMode;
+    const sample = gateway.readGatewayStatus();
+    const [plant, phase] = await Promise.all([
+      reader.snapshot('self', false, sample),
+      gateway.gatewayPhases(sample),
+    ]);
+    assert.equal(plant.gridW, -1250);
+    assert.equal(plant.gridMode, expectedMode);
+    assert.equal(phase.gridMode, expectedMode);
+  }
+  assert.equal(gatewayCalls.filter(([address]) => address === 30004).length, 2);
+  assert.ok(!calls.some(({ address }) => [30005, 30009].includes(address)));
+  for (const response of [[], [0, 0, 0, 0, 0, -1], null]) {
+    status = response;
+    const sample = gateway.readGatewayStatus();
+    const [plant, phase] = await Promise.all([
+      reader.snapshot('self', false, sample),
+      gateway.gatewayPhases(sample),
+    ]);
+    assert.equal(plant.gridMode, 0);
+    assert.equal(plant.gridW, -500);
+    assert.equal(phase.gridMode, null);
+  }
+  assert.equal(calls.filter(({ address }) => address === 30005).length, 3);
+});
