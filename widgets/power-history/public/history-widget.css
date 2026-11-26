@@ -38,28 +38,11 @@
 [hidden] {
   display: none !important;
 }
-html,
-body {
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-}
-html[data-widget-fits='true'],
-html[data-widget-fits='true'] body {
-  overflow-y: hidden;
-}
-@supports (overflow: clip) {
-  html[data-widget-fits='true'],
-  html[data-widget-fits='true'] body {
-    overflow-y: clip;
-  }
-}
 body {
   color: var(--ink);
   background: transparent;
 }
 main {
-  display: flow-root;
   padding: 16px;
 }
 h1,
@@ -160,5 +143,5 @@ input:focus-visible {
 canvas {
   display: block;
   width: 100%;
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
 }

@@ -1,0 +1,17 @@
+/* Shared Dashboard viewport rules. Keep the measured wrapper in normal flow. */
+html,
+body {
+  margin: 0;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+/* WebKit can capture a fresh swipe when either viewport axis remains enabled. */
+html[data-widget-fits='true'] {
+  overflow: hidden;
+}
+#widget-content {
+  display: flow-root;
+  box-sizing: border-box;
+}

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const { checkWidgetScroll } = require('./widget-scroll.cjs');
 const { chromium } = require('playwright');
 const { SLOT_MS: Q, dayBounds } = require('../../lib/history-format');
 const widgets = {
@@ -164,7 +165,7 @@ async function run() {
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert.equal(
           await page.locator('canvas').evaluate((canvas) => getComputedStyle(canvas).touchAction),
-          'pan-y',
+          'pan-y pinch-zoom',
         );
         await page.waitForFunction(() => document.documentElement.dataset.widgetFits === 'true');
         await page.waitForFunction(() => {
@@ -268,6 +269,16 @@ async function run() {
         assert.deepEqual(errors, []);
         await page.close();
       }
+    }
+    fail = false;
+    for (const [widget, target] of [
+      ['energy-flow', '#flow-diagram'],
+      ['power-history', '#power-chart'],
+    ]) {
+      const snapshot = await fetch(
+        `http://127.0.0.1:${server.address().port}/${widget}/api/today/day`,
+      );
+      await checkWidgetScroll(browser, widget, await snapshot.json(), target);
     }
     console.log(
       'History widgets passed: local history APIs, dates, gaps, series controls, light/dark and phone width.',

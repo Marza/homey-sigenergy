@@ -9,8 +9,10 @@ for (const [source, name] of [
     fs.copyFileSync(source, `${directory}/${name}`);
 }
 
-for (const widget of ['energy-overview', 'energy-flow', 'power-history', 'battery-plan'])
-  fs.copyFileSync('lib/widget-layout.js', `widgets/${widget}/public/widget-layout.js`);
+for (const widget of Object.keys(require('../app.json').widgets)) {
+  for (const asset of ['widget-layout.js', 'widget-layout.css'])
+    fs.copyFileSync(`lib/${asset}`, `widgets/${widget}/public/${asset}`);
+}
 
 for (const asset of ['history-widget.js', 'history-widget.css'])
   fs.copyFileSync(`widgets/energy-flow/public/${asset}`, `widgets/power-history/public/${asset}`);

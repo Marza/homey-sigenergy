@@ -2,6 +2,7 @@
 <html lang="sv">
   <head>
     <meta charset="utf-8" />
+    <link rel="stylesheet" href="widget-layout.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="/homey.js" data-origin="widget"></script>
     <script src="price-coverage.js"></script>
@@ -12,27 +13,13 @@
       :root {
         color-scheme: light dark;
       }
-      html,
-      body {
-        height: auto;
-        min-height: 0;
-        overflow: visible;
-        overscroll-behavior: auto;
-      }
-      /* Both viewport axes must be off for WebKit to relinquish a fresh pan. */
-      html[data-widget-fits='true'] {
-        overflow: hidden;
-      }
       #widget-content {
-        display: flow-root;
-        box-sizing: border-box;
         padding: 14px;
       }
       body {
         font:
           14px system-ui,
           sans-serif;
-        margin: 0;
         padding: 0;
         color: var(--homey-text-color, #202124);
         background: var(--homey-background-color, #fff);

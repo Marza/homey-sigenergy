@@ -3,6 +3,7 @@ const assert = require('node:assert/strict'),
   fs = require('node:fs'),
   http = require('node:http'),
   path = require('node:path');
+const { checkWidgetScroll } = require('./widget-scroll.cjs');
 const { chromium } = require('playwright');
 const { getOverview } = require('../../widgets/energy-overview/api');
 const { tariffKey, currentMonth } = require('../../lib/tariff-config');
@@ -72,19 +73,6 @@ function values() {
   };
 }
 const server = http.createServer((req, res) => {
-  if (req.url === '/dashboard' || req.url === '/dashboard-small') {
-    res.setHeader('Content-Type', 'text/html');
-    res.end(`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
-      <style>body{margin:0;padding:40px 0 120vh}iframe{display:block;width:100%;height:220px;border:0}</style>
-      <iframe title="Energy overview" src="/"></iframe>
-      <script>addEventListener('message', e => {
-        const frame = document.querySelector('iframe');
-        if (e.source === frame.contentWindow && e.origin === location.origin &&
-            location.pathname === '/dashboard' && Number.isFinite(e.data.height))
-          frame.style.height = e.data.height + 'px';
-      });</script>`);
-    return;
-  }
   if (req.url === '/homey.js') {
     res.setHeader('Content-Type', 'text/javascript');
     res.end(`window.Homey = {
@@ -101,7 +89,6 @@ const server = http.createServer((req, res) => {
       },
       setHeight(height) {
         window.widgetHeight = height;
-        if (parent !== window) parent.postMessage({ height }, location.origin);
       }
     };
     document.addEventListener('DOMContentLoaded', () => onHomeyReady(Homey));`);
@@ -139,68 +126,15 @@ const server = http.createServer((req, res) => {
     return;
   }
   try {
-    res.setHeader('Content-Type', name.endsWith('.js') ? 'text/javascript' : 'text/html');
+    res.setHeader(
+      'Content-Type',
+      name.endsWith('.css') ? 'text/css' : name.endsWith('.js') ? 'text/javascript' : 'text/html',
+    );
     res.end(fs.readFileSync(path.join(directory, name)));
   } catch {
     res.writeHead(404).end();
   }
 });
-async function checkSwipeFromRest(browser, constrained) {
-  const page = await browser.newPage({
-    viewport: { width: 390, height: 844 },
-    isMobile: true,
-    hasTouch: true,
-  });
-  try {
-    await page.goto(
-      `http://127.0.0.1:${server.address().port}/dashboard${constrained ? '-small' : ''}`,
-    );
-    const widget = page.frameLocator('iframe');
-    const root = widget.locator('html');
-    await widget.locator(`html[data-widget-fits="${!constrained}"]`).waitFor();
-    const innerOffset = () => root.evaluate((el) => el.scrollTop);
-    const outerOffset = () => page.evaluate(() => scrollY);
-    assert.equal(await outerOffset(), 0);
-    assert.equal(await innerOffset(), 0);
-    if (!constrained) {
-      // iOS WebKit can rubber-band a viewport with either axis still enabled.
-      assert.deepEqual(
-        await root.evaluate((el) => {
-          const style = getComputedStyle(el);
-          return [style.overflowX, style.overflowY];
-        }),
-        ['hidden', 'hidden'],
-      );
-    }
-    const session = await page.context().newCDPSession(page);
-    // Both gestures start over widget content with the dashboard stationary.
-    await session.send('Input.dispatchTouchEvent', {
-      type: 'touchStart',
-      touchPoints: [{ x: 160, y: 230 }],
-    });
-    for (let y = 215; y >= 80; y -= 15) {
-      await session.send('Input.dispatchTouchEvent', {
-        type: 'touchMove',
-        touchPoints: [{ x: 160, y }],
-      });
-    }
-    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    if (constrained) {
-      await page.waitForFunction(
-        () => document.querySelector('iframe').contentDocument.scrollingElement.scrollTop > 0,
-        undefined,
-        { timeout: 5000 },
-      );
-      assert.ok((await innerOffset()) > 0);
-      assert.equal(await outerOffset(), 0);
-    } else {
-      await page.waitForFunction(() => scrollY > 0, undefined, { timeout: 5000 });
-      assert.equal(await innerOffset(), 0);
-    }
-  } finally {
-    await page.close();
-  }
-}
 (async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   let browser;
@@ -288,8 +222,8 @@ async function checkSwipeFromRest(browser, constrained) {
       await page.addStyleTag({ content: 'body {font-size:20px}' });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     }
-    await checkSwipeFromRest(browser, false);
-    await checkSwipeFromRest(browser, true);
+    const snapshot = await fetch(`http://127.0.0.1:${server.address().port}/snapshot`);
+    await checkWidgetScroll(browser, 'energy-overview', await snapshot.json(), '.tile');
     assert.deepEqual(errors, []);
     console.log(
       'Energy overview browser checks passed: monthly source priority, distinct-day explanation, local fallback, stale/error/absent data, phone/desktop, large text, light/dark and touch scrolling from rest.',

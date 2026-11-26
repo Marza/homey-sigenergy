@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { checkWidgetScroll } = require('./widget-scroll.cjs');
 const { chromium } = require('playwright');
 const { calendar } = require('../../lib/pricing/coverage');
 const { optimize, Q } = require('../../lib/energy/battery-plan');
@@ -95,6 +96,7 @@ async function checkTradeThreshold(page) {
 async function run() {
   const browser = await chromium.launch();
   try {
+    await checkWidgetScroll(browser, 'battery-plan', sample, '#chart');
     for (const theme of ['dark', 'light']) {
       const page = await browser.newPage({
         colorScheme: theme,

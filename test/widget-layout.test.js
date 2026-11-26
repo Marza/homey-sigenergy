@@ -91,14 +91,22 @@ function fixture({
     },
   };
 }
+test('every registered widget loads the shared layout around its content', () => {
+  for (const id of Object.keys(require('../app.json').widgets)) {
+    const directory = path.join(__dirname, '../widgets', id, 'public');
+    const html = fs.readFileSync(path.join(directory, 'index.html'), 'utf8');
+    assert.match(html, /<link\b[^>]*href="widget-layout\.css"/, id);
+    assert.match(html, /<script\b[^>]*src="widget-layout\.js"/, id);
+    assert.match(html, /id="widget-content"/, id);
+    for (const asset of ['widget-layout.js', 'widget-layout.css'])
+      assert.deepEqual(
+        fs.readFileSync(path.join(directory, asset)),
+        fs.readFileSync(path.join(__dirname, '../lib', asset)),
+        id + '/' + asset,
+      );
+  }
+});
 test('intrinsic content, not the old viewport/body, determines initial height with rounding slack', () => {
-  assert.equal(
-    fs.readFileSync(path.join(__dirname, '../lib/widget-layout.js'), 'utf8'),
-    fs.readFileSync(
-      path.join(__dirname, '../widgets/energy-overview/public/widget-layout.js'),
-      'utf8',
-    ),
-  );
   const v = fixture();
   v.layout.refresh();
   assert.deepEqual(v.calls, [['ready', 590]]);
