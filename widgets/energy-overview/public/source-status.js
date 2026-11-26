@@ -162,6 +162,9 @@
         since: nibe.since,
         readAt: nibeMatches ? values.nibeStatus?.readAt : null,
         error: nibeMatches ? values.nibeError : null,
+        errors: nibeMatches ? values.nibeStatus?.errors : {},
+        availableFields: Object.values(values.nibeStatus?.readings || {}).filter(Number.isFinite)
+          .length,
         now,
         maxAgeMs: MAX_AGE_MS.nibe,
       }),

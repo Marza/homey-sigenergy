@@ -470,8 +470,12 @@ test('results from a reader replaced during a poll cannot republish old source d
 
 function appFixture(read) {
   class Reader {
-    snapshot() {
-      return read();
+    async snapshot() {
+      this.errors = {};
+      const values = await read(this);
+      this.firstReadAt = Object.keys(values).length ? Date.now() : null;
+      if (Number.isFinite(values.outdoorC)) this.outdoorReadAt ??= this.firstReadAt;
+      return values;
     }
     close() {}
   }
@@ -925,4 +929,57 @@ test('ten-second gateway and unit 247 polls share a fresh request only on coinci
     }
     await device.onUninit();
   }
+});
+
+test('Nibe partial polls replace failed fields and only a fresh valid BT1 enters history', async () => {
+  let readings = { outdoorC: 0, supplyC: 24 },
+    errors = { hotWaterC: 'unsupported', returnC: 'invalid' },
+    stale = false,
+    offline = false;
+  const { app, settings } = appFixture(async (reader) => {
+    if (offline) throw Error('ECONNREFUSED');
+    reader.errors = errors;
+    if (stale) reader.outdoorReadAt = Date.now() - 100000;
+    return readings;
+  });
+  await app.onInit();
+  await tick();
+  const observe = [];
+  app.history.observeMinute = (...args) => observe.push(args);
+  await app.pollNibe();
+  assert.equal(app.getDiagnostics().nibe.status, 'partial');
+  assert.equal(app.getTemperatureContext().outdoorC, 0);
+  assert.deepEqual(app.getDiagnostics().nibe.fieldErrors, errors);
+  assert.equal(observe.length, 1);
+  assert.equal(observe[0][1], 0);
+
+  readings = { hotWaterC: 40 };
+  errors = { outdoorC: 'read-error' };
+  await app.pollNibe();
+  assert.deepEqual(settings.get('nibeStatus').readings, readings);
+  assert.equal(app.getTemperatureContext().outdoorC, null);
+  readings = { outdoorC: 1 };
+  errors = {};
+  stale = true;
+  await app.pollNibe();
+  assert.equal(observe.length, 1);
+
+  readings = {};
+  errors = { outdoorC: 'invalid', hotWaterC: 'invalid', returnC: 'invalid', supplyC: 'invalid' };
+  await app.pollNibe();
+  assert.equal(app.getDiagnostics().nibe.status, 'error');
+  assert.equal(app.getDiagnostics().nibe.ageSeconds, null);
+  assert.deepEqual(app.getDiagnostics().nibe.fieldErrors, errors);
+  offline = true;
+  await assert.rejects(app.pollNibe(), /ECONNREFUSED/);
+  assert.equal(settings.get('nibeStatus'), null);
+  offline = false;
+  stale = false;
+  readings = { outdoorC: -2, hotWaterC: 45, returnC: 22, supplyC: 25 };
+  errors = {};
+  await app.pollNibe();
+  assert.equal(app.getDiagnostics().nibe.status, 'ok');
+  assert.equal(app.getTemperatureContext().outdoorC, -2);
+  assert.equal(observe.length, 2);
+  await app.onUninit();
 });

@@ -305,6 +305,25 @@
           <div id="gridDayTable"></div>
         </details>
       </details>
+      <h3>Nibes temperaturgivare</h3>
+      <dl class="battery-readings">
+        <div>
+          <dt>Utomhus · BT1</dt>
+          <dd id="nibe-outdoorC">–</dd>
+        </div>
+        <div>
+          <dt>Varmvatten, topp · BT7</dt>
+          <dd id="nibe-hotWaterC">–</dd>
+        </div>
+        <div>
+          <dt>Framledning · BT25</dt>
+          <dd id="nibe-supplyC">–</dd>
+        </div>
+        <div>
+          <dt>Returledning · BT71</dt>
+          <dd id="nibe-returnC">–</dd>
+        </div>
+      </dl>
       <h3>Nibe vid ödrift</h3>
       <p id="nibeIslandDiagnostic" role="status"></p>
       <h3>Temperatur och batterigränser</h3>
@@ -1777,6 +1796,24 @@
                 .join(' · ');
               if (detail.textContent) el.appendChild(detail);
             }
+            if (key === 'nibe') {
+              const sensorErrors = {
+                unsupported: 'Register stöds inte',
+                invalid: 'Ogiltigt mätvärde',
+                'read-error': 'Avläsningen misslyckades',
+              };
+              for (const field of ['outdoorC', 'hotWaterC', 'supplyC', 'returnC']) {
+                const temperature = values.nibeStatus?.readings?.[field];
+                const error = status.fieldErrors[field];
+                document.getElementById('nibe-' + field).textContent =
+                  (status.status === 'partial' || status.status === 'error') && error
+                    ? sensorErrors[error] || 'Avläsningen misslyckades'
+                    : status.usable && Number.isFinite(temperature)
+                      ? temperature.toLocaleString('sv-SE') + ' °C'
+                      : '–';
+              }
+              continue;
+            }
             for (const [field, error] of Object.entries(status.fieldErrors)) {
               const detail = document.createElement('p');
               detail.className = 'sub';
@@ -1788,7 +1825,10 @@
           const b = SourceStatus.batteryValues(values.batteryTelemetry, sources.battery);
           const readings = {
             ...b,
-            outdoorC: sources.nibe.usable && outdoor >= -50 && outdoor <= 100 ? outdoor : null,
+            outdoorC:
+              sources.nibe.usable && Number.isFinite(outdoor) && outdoor >= -50 && outdoor <= 100
+                ? outdoor
+                : null,
           };
           for (const field of document.querySelectorAll('.battery-readings dd')) {
             const value = readings[field.id.slice('battery-'.length)];

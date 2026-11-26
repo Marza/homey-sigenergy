@@ -2,7 +2,14 @@
 const Homey = require('homey');
 const { TibberHistoryPrices } = require('./lib/pricing/tibber-history-prices');
 const { randomUUID, createHash } = require('node:crypto');
-const { diagnostics, nibeKey, batteryValues, backupAdvisory } = require('./lib/diagnostics');
+const {
+  diagnostics,
+  nibeKey,
+  batteryValues,
+  backupAdvisory,
+  isFresh,
+  MAX_AGE_MS,
+} = require('./lib/diagnostics');
 const { temperatureContext } = require('./lib/optimization/temperature');
 const { DEFAULT_OPERATION, resolveOperation } = require('./lib/operation-mode');
 const { getBatteryPlan } = require('./lib/energy/battery-plan-report');
@@ -175,7 +182,8 @@ module.exports = class SigenergyApp extends Homey.App {
       });
       const readings = await reader.snapshot();
       if (!current()) return;
-      this.history.observeMinute('outdoorC', readings.outdoorC, reader.outdoorReadAt ?? Date.now());
+      if (Number.isFinite(readings.outdoorC) && isFresh(reader.outdoorReadAt, MAX_AGE_MS.nibe))
+        this.history.observeMinute('outdoorC', readings.outdoorC, reader.outdoorReadAt);
       const advisory = this.getBackupAdvisory();
       const policy = heatPumpPolicy({
         gridMode: advisory.mode,
@@ -185,13 +193,20 @@ module.exports = class SigenergyApp extends Homey.App {
       });
       this.homey.settings.set('nibeStatus', {
         readings,
+        errors: reader.errors,
         policy,
-        readAt: new Date().toISOString(),
+        readAt: Number.isFinite(reader.firstReadAt)
+          ? new Date(reader.firstReadAt).toISOString()
+          : null,
         controlApplied: false,
       });
-      this.homey.settings.set('nibeError', null);
+      this.homey.settings.set(
+        'nibeError',
+        Object.keys(readings).length ? null : 'Alla temperaturavläsningar misslyckades.',
+      );
     } catch (e) {
       if (!current()) return;
+      this.homey.settings.set('nibeStatus', null);
       this.homey.settings.set('nibeError', String(e.message));
       throw e;
     } finally {

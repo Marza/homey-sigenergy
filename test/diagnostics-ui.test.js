@@ -284,3 +284,19 @@ test('saving Tibber explains actual refresh cadence, disablement and save failur
   v.element('saveTibber').onclick();
   assert.equal(v.text('tibberMessage'), 'Save failed');
 });
+
+test('Nibe Diagnostics names failed sensors and retains zeroes until the poll goes stale', () => {
+  const v = view('settings/index.html');
+  const s = v.values.nibeStatus;
+  s.readings = { outdoorC: 0, returnC: 21.5 };
+  s.errors = { hotWaterC: 'unsupported', supplyC: 'invalid' };
+  v.refresh();
+  assert.equal(v.text('nibe-outdoorC'), '0 °C');
+  assert.equal(v.text('nibe-returnC'), '21,5 °C');
+  assert.equal(v.text('nibe-hotWaterC'), 'Register stöds inte');
+  assert.equal(v.text('nibe-supplyC'), 'Ogiltigt mätvärde');
+  v.advance(100000);
+  v.refresh();
+  assert.equal(v.text('nibe-outdoorC'), '–');
+  assert.equal(v.text('nibe-hotWaterC'), '–');
+});
