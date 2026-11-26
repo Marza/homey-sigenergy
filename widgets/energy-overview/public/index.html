@@ -19,17 +19,9 @@
         overflow: visible;
         overscroll-behavior: auto;
       }
-      /* Remove only empty internal scrollers. Keep a scrolling fallback if
-         Homey's frame is constrained or a zoomed viewport cannot fit the content. */
-      html[data-widget-fits='true'],
-      html[data-widget-fits='true'] body {
-        overflow-y: hidden;
-      }
-      @supports (overflow: clip) {
-        html[data-widget-fits='true'],
-        html[data-widget-fits='true'] body {
-          overflow-y: clip;
-        }
+      /* Both viewport axes must be off for WebKit to relinquish a fresh pan. */
+      html[data-widget-fits='true'] {
+        overflow: hidden;
       }
       #widget-content {
         display: flow-root;

@@ -15,7 +15,14 @@
       const heights = [view.innerHeight, view.visualViewport?.height].filter(
         (v) => Number.isFinite(v) && v > 0,
       );
-      const fits = height !== null && heights.length > 0 && Math.min(...heights) >= height - 2;
+      const viewport = view.visualViewport;
+      const width = Math.min(view.innerWidth, viewport?.width ?? view.innerWidth);
+      const fits =
+        height !== null &&
+        heights.length > 0 &&
+        Math.min(...heights) >= height - 2 &&
+        content.scrollWidth <= Math.round(width) &&
+        (viewport?.scale ?? 1) <= 1;
       document.documentElement?.setAttribute('data-widget-fits', String(fits));
     };
     const measure = () => {
