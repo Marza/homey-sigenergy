@@ -4,6 +4,16 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 function verifyWidget(directory) {
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'app.json')));
+  for (const id of Object.keys(manifest.widgets)) {
+    const publicDir = path.join(directory, 'widgets', id, 'public');
+    for (const asset of ['widget-layout.js', 'widget-layout.css']) {
+      assert.deepEqual(
+        fs.readFileSync(path.join(publicDir, asset)),
+        fs.readFileSync(path.join(__dirname, '..', 'lib', asset)),
+        `Stale shared layout in ${id}: ${asset}`,
+      );
+    }
+  }
   const widget = manifest.widgets?.['energy-overview'];
   assert.ok(widget, 'Energy overview missing from manifest');
   assert.deepEqual(widget.api, { getOverview: { method: 'GET', path: '/' } });

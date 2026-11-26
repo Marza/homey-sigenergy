@@ -33,9 +33,13 @@ Coverage includes every runtime file under `lib/` and `drivers/`, plus `app.js`,
 
 Open `coverage/index.html` for per-file results. CI retains HTML, LCOV and JSON-summary reports in the coverage artifact for 14 days, including reports from failed coverage runs. Keep the thresholds checked in and raise them as useful tests improve coverage. The first adoption formats existing source in one pass; subsequent PRs should contain only formatting needed for their changes.
 
-Widget definitions live in `widgets/energy-overview/widget.compose.json` and are explicitly registered in `app.json` because this repository does not enable Homey Compose. Keep both consistent; tests enforce registration. `node scripts/verify-widget.js` checks `.homeybuild`, and release verification repeats it against the extracted archive.
+### Adding a Dashboard widget
 
-Widget sizing/fit rules live in `lib/widget-layout.js`; the sync command updates `widgets/energy-overview/public/widget-layout.js`. Measure intrinsic content, preserve overflow when constrained, and avoid intercepting global touch/wheel gestures or accessing the Dashboard parent document.
+1. Register the widget in `app.json` and keep its `widgets/<id>/widget.compose.json` definition in sync. Run `node scripts/sync-source-status.js` to copy the shared layout assets into each registered widget.
+2. Load `widget-layout.css` and `widget-layout.js` from the widget's `public/index.html`. Put all visible content, including controls, details, loading and error messages, inside one `<main id="widget-content">`. Apply widget-specific padding to that wrapper.
+3. In `onHomeyReady(Homey)`, create one `WidgetLayout.create(Homey, { document, view: window })` instance. Call its `refresh()` on initial render and after rendering new content or errors. Call `dispose()` on permanent teardown. The helper reports the content height to Homey, watches viewport and content changes, and marks when the whole widget fits.
+4. Keep viewport overflow rules in `lib/widget-layout.css` and fit detection in `lib/widget-layout.js`. Preserve native vertical panning and pinch zoom over charts and native interaction with controls. A fitted widget hands a fresh swipe to Dashboard; a constrained widget keeps its content reachable.
+5. In the widget's browser test call `checkWidgetScroll(browser, widgetId, sampleReport, targetSelector)` from `test/browser/widget-scroll.cjs`. Pick a visible chart or content tile in a populated view. Run `npm run test:settings-ui` and verify the packaged assets with `npm run build:homey && node scripts/verify-widget.js`. On iPhone/iPad, let Dashboard stop, swipe from the middle of the widget, and repeat after expanding details or changing the displayed period.
 
 Cost contract validation is shared by Node and settings through `lib/pricing/cost-model.js`; the sync script generates `settings/cost-model.js`. Preserve explicit component provenance, tax inclusion, directional energy and matching battery boundaries.
 

@@ -3,6 +3,7 @@ const assert = require('node:assert/strict'),
   fs = require('node:fs'),
   http = require('node:http'),
   path = require('node:path');
+const { checkWidgetScroll } = require('./widget-scroll.cjs');
 const { chromium } = require('playwright');
 const { getOverview } = require('../../widgets/energy-overview/api');
 const { tariffKey, currentMonth } = require('../../lib/tariff-config');
@@ -74,9 +75,23 @@ function values() {
 const server = http.createServer((req, res) => {
   if (req.url === '/homey.js') {
     res.setHeader('Content-Type', 'text/javascript');
-    res.end(
-      `window.Homey={api:(method,p)=>{if(method!=='GET'||p!=='/')throw Error('Unexpected API');return fetch('/snapshot').then(r=>{if(!r.ok)throw Error('Read failed');return r.json();});},ready:()=>window.appReady=true,setHeight:h=>window.widgetHeight=h};document.addEventListener('DOMContentLoaded',()=>onHomeyReady(Homey));`,
-    );
+    res.end(`window.Homey = {
+      api(method, path) {
+        if (method !== 'GET' || path !== '/') throw Error('Unexpected API');
+        return fetch('/snapshot').then(response => {
+          if (!response.ok) throw Error('Read failed');
+          return response.json();
+        });
+      },
+      ready(options) {
+        window.appReady = true;
+        this.setHeight(options?.height);
+      },
+      setHeight(height) {
+        window.widgetHeight = height;
+      }
+    };
+    document.addEventListener('DOMContentLoaded', () => onHomeyReady(Homey));`);
     return;
   }
   if (req.url === '/snapshot') {
@@ -111,7 +126,10 @@ const server = http.createServer((req, res) => {
     return;
   }
   try {
-    res.setHeader('Content-Type', name.endsWith('.js') ? 'text/javascript' : 'text/html');
+    res.setHeader(
+      'Content-Type',
+      name.endsWith('.css') ? 'text/css' : name.endsWith('.js') ? 'text/javascript' : 'text/html',
+    );
     res.end(fs.readFileSync(path.join(directory, name)));
   } catch {
     res.writeHead(404).end();
@@ -204,9 +222,11 @@ const server = http.createServer((req, res) => {
       await page.addStyleTag({ content: 'body {font-size:20px}' });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     }
+    const snapshot = await fetch(`http://127.0.0.1:${server.address().port}/snapshot`);
+    await checkWidgetScroll(browser, 'energy-overview', await snapshot.json(), '.tile');
     assert.deepEqual(errors, []);
     console.log(
-      'Energy overview browser checks passed: monthly source priority, distinct-day explanation, local fallback, stale/error/absent data, phone/desktop, large text and light/dark.',
+      'Energy overview browser checks passed: monthly source priority, distinct-day explanation, local fallback, stale/error/absent data, phone/desktop, large text, light/dark and touch scrolling from rest.',
     );
   } finally {
     await browser?.close();

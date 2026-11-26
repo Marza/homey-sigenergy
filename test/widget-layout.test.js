@@ -20,11 +20,14 @@ function fixture({
     observations = 0,
     disconnected = false;
   const box = { height },
-    element = { getBoundingClientRect: () => ({ height: box.height }) };
+    element = { scrollWidth: 390, getBoundingClientRect: () => ({ height: box.height }) };
   const view = {
     innerHeight: viewport,
+    innerWidth: 390,
     visualViewport: {
       height: viewport,
+      width: 390,
+      scale: 1,
       addEventListener: (key, fn) => visualEvents.set(key, fn),
       removeEventListener: (key) => visualEvents.delete(key),
     },
@@ -88,14 +91,22 @@ function fixture({
     },
   };
 }
+test('every registered widget loads the shared layout around its content', () => {
+  for (const id of Object.keys(require('../app.json').widgets)) {
+    const directory = path.join(__dirname, '../widgets', id, 'public');
+    const html = fs.readFileSync(path.join(directory, 'index.html'), 'utf8');
+    assert.match(html, /<link\b[^>]*href="widget-layout\.css"/, id);
+    assert.match(html, /<script\b[^>]*src="widget-layout\.js"/, id);
+    assert.match(html, /id="widget-content"/, id);
+    for (const asset of ['widget-layout.js', 'widget-layout.css'])
+      assert.deepEqual(
+        fs.readFileSync(path.join(directory, asset)),
+        fs.readFileSync(path.join(__dirname, '../lib', asset)),
+        id + '/' + asset,
+      );
+  }
+});
 test('intrinsic content, not the old viewport/body, determines initial height with rounding slack', () => {
-  assert.equal(
-    fs.readFileSync(path.join(__dirname, '../lib/widget-layout.js'), 'utf8'),
-    fs.readFileSync(
-      path.join(__dirname, '../widgets/energy-overview/public/widget-layout.js'),
-      'utf8',
-    ),
-  );
   const v = fixture();
   v.layout.refresh();
   assert.deepEqual(v.calls, [['ready', 590]]);
@@ -186,4 +197,19 @@ test('exactly fitting content is not treated as overflow merely because of the h
   const overflow = fixture({ height: 587.4, viewport: 587 });
   overflow.layout.refresh();
   assert.equal(overflow.attributes['data-widget-fits'], 'false');
+});
+
+test('a narrow visual viewport or active pinch zoom keeps native panning available', () => {
+  const v = fixture();
+  v.view.visualViewport.width = 345;
+  v.layout.refresh();
+  assert.equal(v.attributes['data-widget-fits'], 'false');
+  v.view.visualViewport.width = 390;
+  v.view.visualViewport.scale = 1.2;
+  v.layout.refresh();
+  assert.equal(v.attributes['data-widget-fits'], 'false');
+  v.view.visualViewport.scale = 1;
+  v.layout.refresh();
+  assert.equal(v.attributes['data-widget-fits'], 'true');
+  assert.equal(v.calls.length, 1);
 });
