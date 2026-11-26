@@ -115,7 +115,7 @@ For a Sigen EV AC charger (EVAC), enable EVAC and enter its own Modbus ID in the
 
 ### App settings
 
-- **Nibe:** Enter host, port (502), unit ID (1) and address offset (0). An empty host disables polling. The profile assumes signed 16-bit input registers divided by 10: 1 = BT1/outdoor, 8 = BT7/hot water, 39 = BT25/supply, 88 = BT71/return. Verify all four against your SMO S40 register export; a missing sensor can fail the snapshot. The runtime does not calculate Nibe tariff windows or replace its local schedule.
+- **Nibe:** Enter host, port (502), unit ID (1) and address offset (0). An empty host disables polling. The profile assumes signed 16-bit input registers divided by 10: 1 = BT1/outdoor, 8 = BT7/hot water, 39 = BT25/supply, 88 = BT71/return. Check these addresses against your SMO S40 register export. Diagnostics shows each sensor separately. Unsupported registers, failed reads and invalid temperatures leave that field unavailable until a successful poll. A connection failure clears current temperatures. The app accepts −50 to 100 °C for outdoor history and −50 to 150 °C for the water sensors as plausibility limits. Only a fresh BT1 measurement enters outdoor history. The runtime does not calculate Nibe tariff windows or replace its local schedule.
 - **Household forecast:** Uses the existing general-load history automatically when the V2.9 meter profile supplies complete quarter-hour energy.
 - **Tariff:** Enter confirmed contract values as described below. Saving a form does not verify the tariff.
 

@@ -38,3 +38,55 @@ test('normal mode does not override existing Nibe schedule', () => {
   assert.equal(result.auxiliaryHeatBlockRequested, false);
   assert.equal(result.controlApplied, false);
 });
+
+test('a sensor error preserves other readings and a recovered sensor returns on the next poll', async () => {
+  const responses = new Map([
+    [1, 0],
+    [8, Object.assign(Error('Illegal address'), { modbusCode: 2 })],
+    [39, 318],
+    [88, 65535],
+  ]);
+  const reader = new SmoS40Reader({
+    client: {
+      readInputRegisters: async (address) => {
+        const reply = responses.get(address);
+        if (reply instanceof Error) throw reply;
+        return { data: [reply] };
+      },
+    },
+  });
+  assert.deepEqual(await reader.snapshot(), { outdoorC: 0, supplyC: 31.8, returnC: -0.1 });
+  assert.deepEqual(reader.errors, { hotWaterC: 'unsupported' });
+  assert.ok(Number.isFinite(reader.outdoorReadAt));
+  responses.set(8, 412);
+  for (const invalid of [32768, 32769, 32767, 1001, -1, null]) {
+    responses.set(1, invalid);
+    assert.deepEqual(await reader.snapshot(), { hotWaterC: 41.2, supplyC: 31.8, returnC: -0.1 });
+    assert.deepEqual(reader.errors, { outdoorC: 'invalid' });
+    assert.equal(reader.outdoorReadAt, null);
+  }
+  responses.set(1, 65534);
+  assert.equal((await reader.snapshot()).outdoorC, -0.2);
+  assert.deepEqual(reader.errors, {});
+});
+
+test('distinguishes unreadable registers from invalid responses when all sensors fail', async () => {
+  const reader = new SmoS40Reader({
+    client: {
+      readInputRegisters: async (address) => {
+        if (address === 1) throw Error('ETIMEDOUT');
+        if (address === 8) return { data: [32768] };
+        return { data: [] };
+      },
+    },
+  });
+  assert.deepEqual(await reader.snapshot(), {});
+  assert.deepEqual(reader.errors, {
+    outdoorC: 'read-error',
+    hotWaterC: 'invalid',
+    supplyC: 'invalid',
+    returnC: 'invalid',
+  });
+  assert.equal(reader.firstReadAt, null);
+  assert.equal(reader.outdoorReadAt, null);
+});
