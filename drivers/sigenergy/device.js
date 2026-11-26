@@ -151,15 +151,28 @@ module.exports = class SigenergyDevice extends Homey.Device {
     );
     const generation = this.generation;
     const current = () => !this.stopped && generation === this.generation;
-    const phaseTick = () => {
+    const phaseTick = (sharedGatewayStatus) => {
       for (const [source, entry] of Object.entries(this.phaseReaders))
-        pollPhaseCurrent(this.homey, source, entry, current).catch((error) => this.error(error));
+        pollPhaseCurrent(this.homey, source, entry, current, sharedGatewayStatus).catch((error) =>
+          this.error(error),
+        );
     };
     const tick = () => {
-      this.poll().catch((error) => this.error(error));
+      if (!current()) return;
+      const grid = this.phaseReaders.grid;
+      // Share only this tick and only when both polls target plant unit 247.
+      const shareStatus =
+        seconds === 10 &&
+        Number(settings.unitId ?? 247) === 247 &&
+        grid.profile === 'gateway' &&
+        grid.reader &&
+        !grid.busy &&
+        !this.polling;
+      const sharedGatewayStatus = shareStatus ? grid.reader.readGatewayStatus() : undefined;
+      this.poll(sharedGatewayStatus).catch((error) => this.error(error));
       for (const key of Object.keys(CHARGERS))
         this.pollCharger(key).catch((error) => this.error(error));
-      if (seconds === 10) phaseTick();
+      if (seconds === 10) phaseTick(sharedGatewayStatus);
     };
     this.timer = this.homey.setInterval(tick, seconds * 1000);
     if (seconds !== 10 && this.phaseReaders.grid.reader)
@@ -186,7 +199,7 @@ module.exports = class SigenergyDevice extends Homey.Device {
       ),
     );
   }
-  async poll() {
+  async poll(sharedGatewayStatus) {
     if (this.stopped) return;
     if (this.polling) {
       const now = Date.now();
@@ -209,7 +222,11 @@ module.exports = class SigenergyDevice extends Homey.Device {
         this.batterySocMinute = minute;
         this.batterySoc = null;
       }
-      const data = await reader.snapshot(settings.energySolarSource || 'self', includeSoc);
+      const data = await reader.snapshot(
+        settings.energySolarSource || 'self',
+        includeSoc,
+        sharedGatewayStatus,
+      );
       if (!current()) return;
       snapshotRead = true;
       if (includeSoc && Number.isFinite(data.soc)) {
