@@ -24,7 +24,7 @@
       <div>
         <p class="eyebrow">Hemenergi · Lokalt</p>
         <h1 class="text-3xl font-bold tracking-tight">SigEnergy</h1>
-        <div class="sub">Lokal energiöversikt · Inlärningsläge · ingen styrning</div>
+        <div class="sub">Lokal energiöversikt · Rådgivande energiplan</div>
       </div>
       <span class="pill" id="connectionBadge">Läser status…</span>
     </div>
@@ -305,6 +305,8 @@
           <div id="gridDayTable"></div>
         </details>
       </details>
+      <h3>Nibe vid ödrift</h3>
+      <p id="nibeIslandDiagnostic" role="status"></p>
       <h3>Temperatur och batterigränser</h3>
       <p id="batteryTelemetryStatus" class="sub"></p>
       <dl class="battery-readings">
@@ -440,8 +442,8 @@
             <dd>Andelen energi som blir kvar efter förluster. 0,90 motsvarar 90 %.</dd>
           </dl>
           <p class="note">
-            Appen läser mätdata och beräknar prognoser. Ingen av inställningarna slår på
-            hårdvarustyrning.
+            Appen läser mätdata och beräknar prognoser. Under Anslutningar kan du även aktivera
+            Nibes produktionsspärr vid ödrift.
           </p>
         </div>
       </details>
@@ -585,7 +587,7 @@
               <p id="tibberMessage" role="status"></p>
             </div>
             <div class="settingsGroup">
-              <h3>Nibe SMO S40 – lokal avläsning</h3>
+              <h3>Nibe SMO S40</h3>
               <div class="field-group">
                 <label class="hy-nostyle"
                   >IP-adress / värdnamn
@@ -636,7 +638,20 @@
                   /></label>
                 </div>
               </details>
-              <button type="button" id="saveNibe" class="hy-nostyle">Spara Nibe-anslutning</button>
+              <label class="hy-nostyle"
+                ><input type="checkbox" id="nibeIslandEnabled" class="hy-nostyle" />
+                Pausa värme och varmvatten efter fem minuters sammanhängande ödrift
+              </label>
+              <p class="field-help">
+                För SMO S40 med programvara 2.4.3 eller senare, registeroffset 0 och Modbus-AUX
+                reserverad för Homey. Nibes tariffspärr stoppar även tillsats och eventuell kyla.
+                Homey kontrollerar att värmebärarpumpen GP10 rapporterar drift och släpper spärren
+                vid nätåterkomst eller förlorad nätstatus. Om anslutningen till Nibe bryts kan
+                spärren behöva släppas lokalt.
+              </p>
+              <button type="button" id="saveNibe" class="hy-nostyle">
+                Spara Nibe-inställningar
+              </button>
               <p id="nibeMessage" role="status"></p>
             </div>
             <details class="settings-details">
@@ -649,7 +664,8 @@
                     Inlärningsläge (aktiverat)</label
                   >
                   <p class="note">
-                    Skrivstyrning är spärrad i denna version, även om inställningar ändras.
+                    Energiplanen är rådgivande. Nibes ödriftsspärr aktiveras separat under Nibe SMO
+                    S40.
                   </p>
                 </div>
               </div>
@@ -1623,6 +1639,29 @@
       let diagnosticsRequest = 0;
       function refreshDiagnostics(Homey) {
         const request = ++diagnosticsRequest;
+        Homey.get('nibeIslandStatus', (err, value) => {
+          if (request !== diagnosticsRequest) return;
+          const labels = {
+            disabled: 'Avstängd.',
+            standby: 'I beredskap. Ingen bekräftad ödrift.',
+            waiting: 'Ödrift upptäckt. Väntar på fem sammanhängande minuter.',
+            blocked: 'Nibe bekräftar aktiv tariffspärr och rapporterar GP10 i drift.',
+            busy: 'Modbus-AUX används redan. Kontrollera den befintliga funktionen.',
+            'pump-off': 'Väntar på driftindikering från cirkulationspump GP10.',
+            inhibited: 'Spärrförsöket avbröts. Kontrollera GP10 och AUX i Nibe.',
+            error: 'Kontrollfel. Kontrollera spärren på Nibe.',
+            ready: 'Väntar på nästa kontroll.',
+          };
+          document.getElementById('nibeIslandDiagnostic').textContent =
+            err || !Number.isFinite(value?.at)
+              ? 'Status saknas.'
+              : value.state !== 'disabled' && !SourceStatus.isFresh(value.at, 90000)
+                ? 'Ingen aktuell kontroll. Senast kontrollerad ' +
+                  localTime(new Date(value.at).toISOString())
+                : [labels[value.state], value.detail, localTime(new Date(value.at).toISOString())]
+                    .filter(Boolean)
+                    .join(' · ');
+        });
         Homey.get('gridPhaseCurrent', (error, reading) => {
           if (request !== diagnosticsRequest) return;
           const elapsed = Date.now() - reading?.at;
@@ -2223,11 +2262,34 @@
           document.addEventListener('focusin', () => settingsAssistant.refreshUnits());
         refreshDiagnostics(Homey);
         setInterval(() => refreshDiagnostics(Homey), 15000);
-        for (const k of ['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'])
-          Homey.get(k, (err, v) => {
-            if (!err && v !== null && v !== undefined) document.getElementById(k).value = v;
+        const islandEnabled = document.getElementById('nibeIslandEnabled');
+        const nibeFields = ['nibeHost', 'nibePort', 'nibeUnitId', 'nibeAddressOffset'];
+        const nibeGet = (key) =>
+          new Promise((resolve, reject) => Homey.get(key, (e, v) => (e ? reject(e) : resolve(v))));
+        const nibeSave = document.getElementById('saveNibe');
+        nibeSave.disabled = true;
+        const loadNibeControl = async () => {
+          const [bound, ...values] = await Promise.all(
+            ['nibeIslandEndpoint', ...nibeFields].map(nibeGet),
+          );
+          nibeFields.forEach((key, i) => {
+            if (values[i] !== null && values[i] !== undefined)
+              document.getElementById(key).value = values[i];
           });
-        document.getElementById('saveNibe').onclick = () => {
+          nibeSave.disabled = false;
+          islandEnabled.checked =
+            bound ===
+            SourceStatus.nibeKey(Object.fromEntries(nibeFields.map((k, i) => [k, values[i]])));
+        };
+        loadNibeControl().catch(() => {
+          document.getElementById('nibeMessage').textContent =
+            'Kunde inte läsa Nibe-inställningarna. Öppna sidan igen.';
+        });
+        for (const key of nibeFields)
+          document.getElementById(key).oninput = () => {
+            islandEnabled.checked = false;
+          };
+        nibeSave.onclick = async () => {
           const host = document.getElementById('nibeHost').value.trim();
           const port = Number(document.getElementById('nibePort').value),
             unit = Number(document.getElementById('nibeUnitId').value),
@@ -2251,15 +2313,33 @@
             ['nibeUnitId', unit],
             ['nibeAddressOffset', offset],
           ];
-          let remaining = entries.length;
-          entries.forEach(([k, v]) =>
-            Homey.set(k, v, (err) => {
-              if (err) document.getElementById('nibeMessage').textContent = err.message;
-              else if (--remaining === 0)
-                document.getElementById('nibeMessage').textContent =
-                  'Nibe-anslutning sparad. Endast avläsning.';
-            }),
-          );
+          const enable = islandEnabled.checked;
+          const message = document.getElementById('nibeMessage');
+          if (enable && (!host || offset !== 0)) {
+            message.textContent = 'Styrning kräver en sparad Nibe-adress och registeroffset 0.';
+            return;
+          }
+          const save = (key, value) =>
+            new Promise((resolve, reject) =>
+              Homey.set(key, value, (e) => (e ? reject(e) : resolve())),
+            );
+          nibeSave.disabled = true;
+          try {
+            const target = SourceStatus.nibeKey(Object.fromEntries(entries));
+            const previous = await nibeGet('nibeIslandEndpoint');
+            if (previous && (!enable || previous !== target))
+              await save('nibeIslandEndpoint', null);
+            for (const [key, value] of entries)
+              if ((await nibeGet(key)) !== value) await save(key, value);
+            if (enable) await save('nibeIslandEndpoint', target);
+            message.textContent = enable
+              ? 'Sparat. Ödriftsspärren är aktiverad för denna Nibe.'
+              : 'Sparat. Ödriftsspärren är avstängd.';
+          } catch (error) {
+            message.textContent = 'Kunde inte spara: ' + error.message;
+          } finally {
+            nibeSave.disabled = false;
+          }
         };
 
         loadOverview(Homey);

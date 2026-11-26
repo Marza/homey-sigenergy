@@ -1,8 +1,8 @@
 # Sigenergy Local Monitor for Homey
 
-Experimental Homey SDK v3 app for local, read-only Sigenergy monitoring, optional Nibe SMO S40 temperature readings, and advisory energy planning.
+Experimental Homey SDK v3 app for local, read-only Sigenergy monitoring, Nibe SMO S40 temperature readings and an optional island-mode production block, and advisory energy planning.
 
-**Version 0.17.0 · Learning mode only · MIT licensed**
+**Version 0.17.0 · Advisory energy planning · MIT licensed**
 
 The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic installation, pairing, plant readings and recovery after a Homey reboot were tested on one physical Homey Pro running firmware 13.5.4 on 2026-11-13.** The user confirmed the base readings against mySigen with unit ID 247. **Nibe SMO S40 Modbus reads also worked after Modbus was enabled, and the user confirmed all four temperatures against the Nibe display.** See the [verification record](docs/installation-verification.md) for scope and remaining tests. Exact inverter firmware and the full register profile remain unverified; EVDC, optional battery telemetry and island/safety behavior have not been hardware-validated. Unit tests do not establish hardware compatibility or safe operation.
 
@@ -16,7 +16,7 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 | Phase current | Live L1/L2/L3 readings and quarter-hour averages, peaks and coverage | Configured grid meter at the household connection. |
 | EVAC monitoring | Optional AC charging power and cumulative energy consumption | Disabled by default; read-only Modbus, awaiting hardware verification |
 | Household load | Quarter-hour energy excluding EV charging on a dedicated counter | Requires the V2.9 statistics profile and plant ID 247; separate coverage in diagnostics |
-| Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Four readings verified against the display on one installation; optional local reads once per minute, no separate Homey device or heat-pump control |
+| Nibe monitoring | SMO S40 outdoor, hot-water, supply and return temperatures | Four readings verified against the display on one installation; optional local reads once per minute, optional production block described below |
 | Backup advisory | Grid/island/unknown state and a “Backup mode changed” Flow trigger | EV-stop and Nibe-mode tokens are requests, never confirmation of an action |
 | Native Homey Energy | Optional grid, solar and battery power-reporting companions | W/% plus opt-in V2.9 cumulative kWh profile; physical counter/history verification pending |
 | Local history | Quarter-hour aggregates, daily summaries, backup-mode events and JSON export | Stored in Homey app settings, not a dedicated database |
@@ -28,11 +28,11 @@ The project targets a Homey Pro 2023 and SigenStor EC 17.0 TP setup. **Basic ins
 
 The app settings page is primarily Swedish. It includes **Översikt** (overview), **Elpriser** (prices), **Historik** (history), **Prognos** (household forecast), **Diagnostik** (diagnostics) and **Inställningar** (settings).
 
-## Read-only safety boundary
+## Monitoring and optional Nibe outage control
 
-There are no Modbus write calls or automatic battery, EVDC or Nibe control adapters in this build. Operation mode is forced to learning mode with `allowHardwareWrites: false`; changing settings cannot enable hardware writes.
+Battery, inverter and EV monitoring and energy planning are read-only. The only hardware write is a separately enabled SMO S40 Modbus AUX block. Enable it in **Inställningar → Anslutningar → Nibe SMO S40** after confirming the pump configuration and reserving Modbus AUX for Homey. **Diagnostik → Nibe vid ödrift** shows the latest check. See [configuration, recovery and register sources](docs/backup-advisory.md#nibe-production-block).
 
-Backup logic interprets input register 30009 as 0 = grid, 1/2 = island, anything else = unknown. Grid restoration requires five minutes of successful grid readings, including after app startup. Communication failure returns the advisory state to unknown. Island or unknown state requests EV stop and a restricted Nibe mode; below 25% battery SoC it requests critical mode. **No stop, auxiliary-heat block or restart is executed. See [backup advisory behavior and future-control gate](docs/backup-advisory.md).** Verify the register mapping against your firmware.
+Backup logic interprets input register 30009 as 0 = grid, 1/2 = island, anything else = unknown. Grid restoration requires five minutes of successful grid readings, including after app startup. Communication failure returns the advisory state to unknown. Island or unknown state requests EV stop and a restricted Nibe mode; below 25% battery SoC it requests critical mode. The Flow tokens are advisory. The independent Nibe production block requires five minutes of continuously observed island operation. Verify the register mapping against your firmware.
 
 Homey polling is not fuse protection, load balancing or an outage fail-safe. Keep native inverter/charger protections and Nibe frost protection and existing local schedules active. Do not switch heat-pump mains with a smart relay as a substitute for a validated control interface. Homey and networking must remain powered for monitoring during an outage.
 
@@ -226,7 +226,7 @@ npm run build:homey
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Open an issue, make a focused branch, test changed calculations and open a pull request describing safety implications. Hardware reports should identify firmware, verified register source, widths/scaling and observed results, clearly separated from simulation.
 
-Keep Modbus operations read-only. Any future control work requires documented registers, safety review, explicit opt-in and hardware validation. Never commit API tokens, private network details, credentials or identifiable telemetry. Follow [SECURITY.md](SECURITY.md) for private vulnerability reporting when available.
+Keep general-purpose Modbus operations read-only. Any future control work requires documented registers, safety review, explicit opt-in and hardware validation. Never commit API tokens, private network details, credentials or identifiable telemetry. Follow [SECURITY.md](SECURITY.md) for private vulnerability reporting when available.
 
 ## License
 

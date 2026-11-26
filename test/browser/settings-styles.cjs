@@ -227,6 +227,19 @@ const server = http.createServer((req, res) => {
       }
       assert.deepEqual(await page.evaluate(() => window.syntheticWrites), []);
       assert.deepEqual(await page.evaluate(() => window.syntheticApiWrites), []);
+      await category('connections');
+      assert.equal(await page.locator('#nibeIslandEnabled').isChecked(), false);
+      await page.locator('#nibeHost').fill('pump.test');
+      await page.locator('#nibeIslandEnabled').check();
+      await page.locator('#saveNibe').click();
+      await page.waitForFunction(
+        () =>
+          window.syntheticSettings.nibeIslandEndpoint === JSON.stringify(['pump.test', 502, 1, 0]),
+      );
+      await page.locator('#nibeHost').fill('replacement.test');
+      assert.equal(await page.locator('#nibeIslandEnabled').isChecked(), false);
+      await page.locator('#saveNibe').click();
+      await page.waitForFunction(() => window.syntheticSettings.nibeIslandEndpoint === null);
       await page.locator('#setupGuide > summary').click();
       assert.equal(await page.locator('#setupGuide [data-settings-link]').count(), 5);
       await page.locator('#setupGuide [data-settings-link="tariff"]').click();

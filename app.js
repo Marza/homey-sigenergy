@@ -11,6 +11,7 @@ const { HistoryStore, calculationSlots } = require('./lib/history');
 const { DataDiagnostics } = require('./lib/data-diagnostics');
 const { validateState: validateMeterHistory } = require('./lib/pricing/consumption-history');
 const { calculateDemandCharge, validateTariff } = require('./lib/demand-tariff');
+const { NibeIslandBlock } = require('./lib/nibe/island-block');
 const { SmoS40Reader } = require('./lib/nibe/smo-s40');
 const { heatPumpPolicy } = require('./lib/backup/heat-pump-policy');
 const {
@@ -26,7 +27,7 @@ const { historySettings } = require('./lib/packed-history');
 const { GridDay } = require('./lib/energy/grid-day');
 module.exports = class SigenergyApp extends Homey.App {
   async onInit() {
-    // Read-only is enforced in code, not only through a UI toggle.
+    // Economic planning and all Sigenergy commands remain advisory.
     this.homey.settings.set(
       'operationMode',
       resolveOperation(this.homey.settings.get('operationMode') || DEFAULT_OPERATION),
@@ -82,6 +83,9 @@ module.exports = class SigenergyApp extends Homey.App {
     };
     this.homey.settings.on('set', this.settingsChanged);
     this.homey.settings.on('unset', this.settingsChanged);
+    this.nibeBlock = new NibeIslandBlock(this.homey.settings, () => this.getBackupAdvisory().mode);
+    this.nibeBlockTimer = this.homey.setInterval(() => this.nibeBlock.tick(), 10000);
+    await this.nibeBlock.tick();
     this.nibePolling = false;
     this.nibeTimer = this.homey.setInterval(
       () => this.pollNibe().catch((e) => this.error('Nibe:', e.message)),
@@ -453,6 +457,8 @@ module.exports = class SigenergyApp extends Homey.App {
     if (this.priceTimer) this.homey.clearInterval(this.priceTimer);
     if (this.consumptionTimer) this.homey.clearInterval(this.consumptionTimer);
     if (this.nibeTimer) this.homey.clearInterval(this.nibeTimer);
+    if (this.nibeBlockTimer) this.homey.clearInterval(this.nibeBlockTimer);
+    await this.nibeBlock?.stop();
     this.flushGridDay();
     if (this.history) this.history.flush();
   }
