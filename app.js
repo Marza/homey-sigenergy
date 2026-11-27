@@ -78,9 +78,14 @@ module.exports = class SigenergyApp extends Homey.App {
     }, 60 * 1000);
     this.settingsChanged = (key) => {
       if (
-        ['householdImportLimits', 'costContractTimeline', 'tibberToken', 'tibberHomeId'].includes(
-          key,
-        )
+        [
+          'householdImportLimits',
+          'costContractTimeline',
+          'tibberToken',
+          'tibberHomeId',
+          'solarForecastConfig',
+          'solarMeasurementSource',
+        ].includes(key)
       )
         this.batteryPlan = null;
       if (['backupStatus', 'sigenergyStatus', 'sigenergyError', 'sourceConfig'].includes(key))

@@ -234,3 +234,30 @@ test('background corrections freeze original and adjusted Wh across weather issu
   assert.equal(score.original.maeWh, 675);
   assert.equal(score.corrected.maeWh, 0);
 });
+
+test('planning uses a current whole-roof forecast, today’s active correction and tomorrow’s weather', async () => {
+  const f = setup(),
+    m = f.model;
+  f.now = Date.parse('2026-11-27T22:04Z');
+  const midnight = Date.parse('2026-11-27T23:00Z');
+  m.configure(config);
+  await m.refresh();
+  const issue = m.issues().at(-1);
+  const t = issue.start;
+  const active = { at: f.now, start: t, wh: [0, 0, 10, 10, 10] };
+  m.saveIssues([{ ...issue, adjustments: [active, { at: f.now + Q, wh: null }] }]);
+  const read = (now = f.now) => m.planningQuarters(now, midnight);
+  const p = read();
+  assert.deepEqual(p.get(t), { solarSource: 'adjusted', solarWh: 0 });
+  assert.equal(p.has(t + 2 * Q), false); // Missing weather on the roofs.
+  assert.deepEqual(p.get(midnight), { solarSource: 'weather', solarWh: 900 });
+  assert.equal(p.has(t + 96 * Q), false);
+  assert.deepEqual(read(f.now + Q).get(t + Q), { solarSource: 'weather', solarWh: 0 });
+  assert.equal(read(f.now + 8 * Q).size, 0);
+  f.storage.set('solarMeasurementSource', { key: 'other', since: f.now });
+  assert.deepEqual(read().get(t), { solarSource: 'weather', solarWh: 900 });
+  m.configure({ ...config, loss: 12 });
+  assert.equal(read().size, 0);
+  m.configure({ enabled: false });
+  assert.equal(read().size, 0);
+});
