@@ -228,4 +228,9 @@ test('background corrections freeze original and adjusted Wh across weather issu
   assert.equal(resumed.report().issue.adjustments.at(-1).wh, null);
   assert.deepEqual(resumed.report().issue.roofs, base.roofs);
   assert.deepEqual(f.restart().report().issue.adjustments[0], down);
+  f.rows.at(-1).fieldCoverageMs.pvW = Q;
+  const score = f.restart().report(first.at).accuracy;
+  assert.equal(score.paired, 1);
+  assert.equal(score.original.maeWh, 675);
+  assert.equal(score.corrected.maeWh, 0);
 });

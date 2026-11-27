@@ -75,7 +75,30 @@
     let lastReport;
     const revisionSelect = el('revision');
     revisionSelect.onchange = () => render(lastReport);
+    function renderAccuracy(accuracy) {
+      el('accuracy').hidden = !accuracy;
+      if (!accuracy) return;
+      const { daylight, adjusted, paired } = accuracy;
+      el('coverage').textContent = daylight
+        ? 'Av ' +
+          daylight +
+          ' avslutade dagsljuskvartar hade ' +
+          adjusted +
+          ' en justering. Kvartar med både justering och full mätning: ' +
+          paired +
+          '.'
+        : 'Väntar på den första avslutade dagsljuskvarten med väderprognos.';
+      el('metrics').hidden = !paired;
+      if (!paired) return;
+      for (const key of ['original', 'corrected']) {
+        const { maeWh, over } = accuracy[key];
+        el(key + '-error').textContent = fmt.format(maeWh) + ' Wh';
+        el(key + '-over').textContent =
+          fmt.format((100 * over) / paired) + ' % (' + over + '/' + paired + ')';
+      }
+    }
     function render(r) {
+      renderAccuracy(r.accuracy);
       if (lastReport?.issue?.at !== r.issue?.at) revisionSelect.value = '';
       lastReport = r;
       el('status').textContent = {

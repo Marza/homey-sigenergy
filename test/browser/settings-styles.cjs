@@ -94,7 +94,7 @@ const server = http.createServer((req, res) => {
       get:(key,cb)=>setTimeout(()=>new URLSearchParams(location.search).has('readFail')&&['demandTariff','chargingConfig'].includes(key)?cb(Error('Synthetic read failure')):cb(null,structuredClone(window.syntheticSettings[key]??null)),20),
       set:(key,value,cb)=>{window.syntheticWrites.push(key);window.syntheticSettings[key]=structuredClone(value);setTimeout(()=>cb(null),20);},
       api:(method,url,body,cb)=>{if(method!=='GET')window.syntheticApiWrites.push(url);if(url==='/forecast/solar/config'){window.solarConfig=structuredClone(body);cb(null,body);}
-        else if(url.startsWith('/forecast/solar'))cb(null,{config:window.solarConfig,status:window.solarConfig?.enabled?'ok':'off',issued:window.solarConfig?.enabled?[${solarAt}]:[],issue:window.solarConfig?.enabled?(window.solarTestIssue ?? ${JSON.stringify(solar)}):null});
+        else if(url.startsWith('/forecast/solar'))cb(null,{accuracy:window.solarConfig?.enabled?(window.solarAccuracy??{daylight:0,adjusted:0,paired:0}):null,config:window.solarConfig,status:window.solarConfig?.enabled?'ok':'off',issued:window.solarConfig?.enabled?[${solarAt}]:[],issue:window.solarConfig?.enabled?(window.solarTestIssue ?? ${JSON.stringify(solar)}):null});
         else if(url==='/forecast/household')cb(null,${JSON.stringify(forecast)});else cb(Error('Synthetic unavailable data'));},
       ready:()=>window.appReady=true
     };document.addEventListener('DOMContentLoaded',()=>{
@@ -381,6 +381,8 @@ const server = http.createServer((req, res) => {
       await page.locator('#solar-comparison').innerText(),
       /2 jämförbara kvartar.*0 kWh.*0,12 kWh/,
     );
+    assert.match(await page.locator('#solar-coverage').innerText(), /Väntar på den första/);
+    assert.equal(await page.locator('#solar-metrics').isVisible(), false);
     const solarRows = page.locator('#solar-chart table tr');
     assert.equal(await solarRows.count(), 28);
     const firstInterval = solarRows.nth(1);
@@ -395,6 +397,13 @@ const server = http.createServer((req, res) => {
     await page.evaluate(() => {
       const start = Date.parse('2026-11-27T09:00Z'),
         q = 900000;
+      window.solarAccuracy = {
+        daylight: 8,
+        adjusted: 6,
+        paired: 4,
+        original: { maeWh: 72.5, over: 3 },
+        corrected: { maeWh: 37.5, over: 2 },
+      };
       window.solarTestIssue = {
         at: start - q,
         start,
@@ -417,6 +426,14 @@ const server = http.createServer((req, res) => {
       await page.locator('#solar-adjustment').innerText(),
       /Åter till originalprognosen/,
     );
+    assert.match(
+      await page.locator('#solar-coverage').innerText(),
+      /8 avslutade dagsljuskvartar hade 6.*full mätning: 4/,
+    );
+    assert.equal(await page.locator('#solar-original-error').innerText(), '72,5 Wh');
+    assert.equal(await page.locator('#solar-corrected-error').innerText(), '37,5 Wh');
+    assert.equal(await page.locator('#solar-original-over').innerText(), '75 % (3/4)');
+    assert.equal(await page.locator('#solar-corrected-over').innerText(), '50 % (2/4)');
     await page.locator('#solar-revision').selectOption({ index: 2 });
     assert.match(
       await page.locator('#solar-score').innerText(),

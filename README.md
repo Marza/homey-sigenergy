@@ -212,6 +212,8 @@ Homey also issues an aggregate correction in the background after a quarter clos
 
 The multiplier is the ratio of measured to forecast energy across those quarters, bounded between zero and 1.25. These initial thresholds are engineering assumptions. A sustained measured zero can lower the remaining forecast; improving production can raise it again. Corrections cover future complete quarters through Stockholm midnight and retain missing weather values. Each issued adjustment is stored alongside its original for the archive retention window. The Prognos tab lets you select the issue and adjustment time and compare both against subsequent Sigenergy production over the same quarters. The correction estimates aggregate production and does not identify the cause of a shortfall.
 
+The accuracy table in Prognos evaluates the current roof configuration and selected solar source over the rolling seven-day issue archive. Each completed daylight quarter counts once, using the original and the latest applicable adjustment available when the quarter started. Daylight uses the same 2% threshold as calibration. The table shows the number with an adjustment and the number with a full observation, followed by the mean absolute error in Wh per paired quarter and the fraction of paired quarters for which each forecast exceeded the measured energy. An observed zero is valid. A missing reading, partial coverage or counter-based estimate cannot be scored. These scores describe the forecast that was in effect at the start of each quarter.
+
 ## Development and testing
 
 ```sh
