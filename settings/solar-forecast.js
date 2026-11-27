@@ -86,8 +86,11 @@
         select.add(new Option(clock.format(at), String(at)));
       select.value = r.issued.includes(Number(latest)) ? latest : '';
       el('result').hidden = !r.issue && !r.issued.length;
-      for (const id of ['range', 'totals', 'chart', 'comparison']) el(id).replaceChildren();
-      if (!r.issue) return;
+      for (const id of ['range', 'totals', 'comparison']) el(id).replaceChildren();
+      if (!r.issue) {
+        el('chart').replaceChildren();
+        return;
+      }
       const { at, start, roofs, actualWh } = r.issue;
       el('range').textContent =
         'Utfärdad ' +
@@ -123,10 +126,15 @@
           ' kWh.'
         : 'Väntar på avslutade kvartar med komplett solmätning från samma källa.';
       const kw = (arr) => arr.map((n) => (Number.isFinite(n) ? n / 250 : null));
-      root.HouseholdForecastView.chart(el('chart'), start, [
-        { name: 'Solprognos', values: kw(expected), dash: '5 3', color: '#187d76' },
-        { name: 'Sigenergy', values: kw(actualWh), color: '#ae601c' },
-      ]);
+      root.HouseholdForecastView.chart(
+        el('chart'),
+        start,
+        [
+          { name: 'Solprognos', values: kw(expected), dash: '5 3', color: '#187d76' },
+          { name: 'Sigenergy', values: kw(actualWh), color: '#ae601c' },
+        ],
+        { groupZeroForecast: true },
+      );
     }
     function load() {
       const seq = ++generation;
