@@ -9,7 +9,36 @@
     minute: '2-digit',
   });
   const Q = 900000;
-  function chart(container, start, series) {
+  const formatValue = (value) => (Number.isFinite(value) ? fmt.format(value) : '–');
+  function intervalCell(cell, values, start) {
+    if (values.every((value) => value === values[0])) {
+      cell.textContent = formatValue(values[0]);
+      return;
+    }
+    // Preserve individual readings when actual production varies or coverage is partial.
+    const details = document.createElement('details'),
+      summary = document.createElement('summary');
+    const known = values.filter(Number.isFinite);
+    const min = Math.min(...known),
+      max = Math.max(...known);
+    summary.textContent =
+      (min === max ? formatValue(min) : formatValue(min) + '–' + formatValue(max)) +
+      ' (' +
+      known.length +
+      '/' +
+      values.length +
+      ' kvartar)';
+    details.append(summary);
+    const list = document.createElement('ul');
+    values.forEach((value, i) => {
+      const item = document.createElement('li');
+      item.textContent = clock.format(start + i * Q) + ' · ' + formatValue(value) + ' kW';
+      list.append(item);
+    });
+    details.append(list);
+    cell.append(details);
+  }
+  function chart(container, start, series, { groupZeroForecast = false } = {}) {
     const expanded = container.querySelector('details')?.open ?? false;
     container.replaceChildren();
     const max = Math.max(1, ...series.flatMap((s) => s.values.filter(Number.isFinite)));
@@ -76,18 +105,22 @@
     summary.textContent = 'Visa kvartsvärden';
     details.append(summary);
     const table = document.createElement('table');
-    for (let i = -1; i < 96; i++) {
+    const header = table.insertRow();
+    for (const title of ['Kvart', ...series.map((s) => s.name + ' (kW)')]) {
+      const cell = document.createElement('th');
+      cell.textContent = title;
+      header.append(cell);
+    }
+    for (let i = 0; i < 96;) {
+      let end = i + 1;
+      if (groupZeroForecast && series[0].values[i] === 0)
+        while (end < 96 && series[0].values[end] === 0) end++;
       const row = table.insertRow();
-      for (const text of i === -1
-        ? ['Kvart', ...series.map((s) => s.name + ' (kW)')]
-        : [
-            clock.format(start + i * Q),
-            ...series.map((s) => (Number.isFinite(s.values[i]) ? fmt.format(s.values[i]) : '–')),
-          ]) {
-        const cell = document.createElement(i === -1 ? 'th' : 'td');
-        cell.textContent = text;
-        row.append(cell);
-      }
+      const from = start + i * Q;
+      row.insertCell().textContent =
+        end === i + 1 ? clock.format(from) : clock.formatRange(from, start + end * Q);
+      for (const s of series) intervalCell(row.insertCell(), s.values.slice(i, end), from);
+      i = end;
     }
     details.open = expanded;
     details.append(table);

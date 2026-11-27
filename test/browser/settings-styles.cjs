@@ -71,11 +71,22 @@ const server = http.createServer((req, res) => {
     // The earlier issued forecast lacked a quarter that later received a complete measurement.
     map.get('householdForecastV1').issues.at(-1).wh[12] = null;
     const forecast = model.report(start + q * 96 * 15 + q);
-    const solarAt = start - q,
+    const solarStart = Date.parse('2026-11-27T15:15Z');
+    const solarAt = solarStart - q,
       solar = {
         at: solarAt,
-        start,
-        roofs: [{ name: 'Söder', kwp: 4, tilt: 30, bearing: 180, wh: Array(96).fill(100) }],
+        start: solarStart,
+        roofs: [
+          {
+            name: 'Söder',
+            kwp: 4,
+            tilt: 30,
+            bearing: 180,
+            wh: Array.from({ length: 96 }, (_, i) =>
+              i < 65 || i >= 90 ? 0 : i === 66 ? null : 100,
+            ),
+          },
+        ],
         loss: 14,
         actualWh: [0, 120, null, ...Array(93).fill(null)],
       };
@@ -362,12 +373,24 @@ const server = http.createServer((req, res) => {
     await page.locator('#solar-roofs fieldset').last().getByRole('button').click();
     await page.locator('#solar-save').click();
     await page.locator('#solar-chart svg').waitFor();
-    assert.match(await page.locator('#solar-totals').innerText(), /Söder · 9,6 kWh/);
+    assert.match(
+      await page.locator('#solar-totals').innerText(),
+      /Söder · Ofullständig prognos \(95\/96 kvartar\)/,
+    );
     assert.match(
       await page.locator('#solar-comparison').innerText(),
-      /2 jämförbara kvartar.*0,2 kWh.*0,12 kWh/,
+      /2 jämförbara kvartar.*0 kWh.*0,12 kWh/,
     );
-    assert.equal(await page.locator('#solar-chart table tr').count(), 97);
+    const solarRows = page.locator('#solar-chart table tr');
+    assert.equal(await solarRows.count(), 28);
+    const firstInterval = solarRows.nth(1);
+    assert.match(await firstInterval.locator('td').first().textContent(), /27.*16:15.*28.*08:30/);
+    assert.equal(await firstInterval.locator('td').nth(1).textContent(), '0');
+    assert.match(await firstInterval.locator('summary').textContent(), /0–0,48 \(2\/65 kvartar\)/);
+    assert.match(await firstInterval.locator('li').nth(1).textContent(), /0,48 kW/);
+    assert.match(await firstInterval.locator('li').nth(2).textContent(), /– kW/);
+    assert.equal(await solarRows.nth(3).locator('td').nth(1).textContent(), '–');
+    assert.match(await solarRows.last().locator('td').first().textContent(), /14:45.*16:15/);
     assert.deepEqual(await page.evaluate(() => window.solarConfig.roofs), [
       { name: 'Söder', kwp: 4, tilt: 30, bearing: 180 },
     ]);
