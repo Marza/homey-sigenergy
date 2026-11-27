@@ -284,6 +284,45 @@
             <p id="solar-message" role="status"></p>
           </form>
         </details>
+        <section id="solar-accuracy" hidden>
+          <h3>Solprognosens träffsäkerhet de senaste sju dygnen</h3>
+          <p id="solar-coverage"></p>
+          <table id="solar-metrics" aria-label="Träffsäkerhet på samma uppmätta kvartar" hidden>
+            <thead>
+              <tr>
+                <th scope="col">Mått per kvart</th>
+                <th scope="col">Original</th>
+                <th scope="col">Justerad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Medelabsolutfel</th>
+                <td id="solar-original-error"></td>
+                <td id="solar-corrected-error"></td>
+              </tr>
+              <tr>
+                <th scope="row">Överskattad produktion</th>
+                <td id="solar-original-over"></td>
+                <td id="solar-corrected-over"></td>
+              </tr>
+            </tbody>
+          </table>
+          <details>
+            <summary>Hur jämförs prognoserna?</summary>
+            <p>
+              Varje avslutad kvart räknas en gång, med den prognos och justering som gällde vid
+              kvartens start. Dagsljus avser kvartar där originalet förutsåg minst 2 % av
+              installerad effekt. Jämförelsen kräver full mätning från den valda solkällan och
+              använder nuvarande takinställningar.
+            </p>
+            <p>
+              Medelabsolutfelet visar hur många Wh prognosen i genomsnitt avvek från mätningen,
+              oavsett riktning. En överskattning betyder att Sigenergy mätte mindre solel än
+              prognosen angav.
+            </p>
+          </details>
+        </section>
         <div id="solar-result" hidden>
           <label for="solar-issued">Prognos utfärdad (svensk tid)</label>
           <select class="hy-nostyle" id="solar-issued"></select>
