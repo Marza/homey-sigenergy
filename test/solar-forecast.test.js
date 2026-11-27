@@ -31,7 +31,8 @@ function setup() {
     if (f.wait) await f.wait;
     if (f.fail) return { ok: false };
     const start = Math.floor(f.now / Q) * Q;
-    const times = Array.from({ length: 110 }, (_, i) => (start + i * Q) / 1000);
+    const count = Number(url.searchParams.get('forecast_minutely_15'));
+    const times = Array.from({ length: count }, (_, i) => (start + i * Q) / 1000);
     const values = times.map((_, i) =>
       i === 3 ? 0 : i === 4 ? null : url.searchParams.get('azimuth') === '-90' ? 800 : 400,
     );
@@ -251,7 +252,7 @@ test('planning uses a current whole-roof forecast, today’s active correction a
   assert.deepEqual(p.get(t), { solarSource: 'adjusted', solarWh: 0 });
   assert.equal(p.has(t + 2 * Q), false); // Missing weather on the roofs.
   assert.deepEqual(p.get(midnight), { solarSource: 'weather', solarWh: 900 });
-  assert.equal(p.has(t + 96 * Q), false);
+  assert.deepEqual(p.get(t + 96 * Q), { solarSource: 'weather', solarWh: 900 });
   assert.deepEqual(read(f.now + Q).get(t + Q), { solarSource: 'weather', solarWh: 0 });
   assert.equal(read(f.now + 8 * Q).size, 0);
   f.storage.set('solarMeasurementSource', { key: 'other', since: f.now });
@@ -260,4 +261,82 @@ test('planning uses a current whole-roof forecast, today’s active correction a
   assert.equal(read().size, 0);
   m.configure({ enabled: false });
   assert.equal(read().size, 0);
+});
+
+test('a late UTC weather request covers 192 future quarters even across a midnight rollover', async () => {
+  const f = setup(),
+    m = f.model;
+  f.now = Date.parse('2026-11-27T23:59:59Z');
+  m.configure(config);
+  const originalRequest = m.request;
+  m.request = async (url, options) => {
+    const response = await originalRequest(url, options);
+    const data = await response.json();
+    // Last quarter of the first UTC day. The request finishes on the next day.
+    assert.equal(data.minutely_15.time[0] * 1000, Date.parse('2026-11-27T23:45Z'));
+    return {
+      ...response,
+      json: async () => {
+        f.now = Date.parse('2026-11-28T00:00:01Z');
+        return data;
+      },
+    };
+  };
+  await m.refresh();
+  assert.equal(f.calls.length, 2);
+  const archived = m.report().issue;
+  const start = archived.start;
+  assert.equal(start, Date.parse('2026-11-28T00:15Z'));
+  const midnight = Date.parse('2026-11-28T23:00Z');
+  const restored = f.restart();
+  const weather = restored.planningQuarters(f.now, midnight);
+  assert.deepEqual(weather.get(start + 191 * Q), { solarSource: 'weather', solarWh: 900 });
+  assert.equal(weather.has(start + 192 * Q), false);
+  assert.deepEqual(
+    archived.roofs.map((r) => r.wh.length),
+    [96, 96],
+  );
+  assert.equal(archived.actualWh.length, 96);
+  // The next 96-slot battery window has advanced three quarters since the weather update.
+  const moved = restored.planningQuarters(f.now + 3 * Q, midnight);
+  for (let i = 3; i < 99; i++) assert.equal(moved.get(start + i * Q)?.solarSource, 'weather');
+  f.now += H;
+  await restored.refresh();
+  const reloaded = f.restart();
+  assert.deepEqual(reloaded.report(archived.at).issue, archived);
+  assert.deepEqual(
+    reloaded.issues().map((i) => i.roofs[0].wh.length),
+    [96, 192],
+  );
+});
+
+test('second-day gaps and old 24-hour archives never become zero forecasts or extra evaluation quarters', async () => {
+  const f = setup(),
+    m = f.model;
+  m.configure(config);
+  await m.refresh();
+  const issued = m.issues().at(-1),
+    t = issued.start;
+  issued.roofs[0].wh[96] = null;
+  issued.roofs.forEach((r) => {
+    r.wh[97] = 0;
+  });
+  m.saveIssues([issued]);
+  const weather = f.restart().planningQuarters(f.now, t + 12 * Q);
+  assert.equal(weather.has(t + 96 * Q), false);
+  assert.deepEqual(weather.get(t + 97 * Q), { solarSource: 'weather', solarWh: 0 });
+  f.now = t + 192 * Q;
+  f.rows.push({ t: t + 98 * Q, pvWh: 23, fieldCoverageMs: { pvW: Q } });
+  const report = m.report();
+  assert.equal(report.accuracy.daylight, 94); // First day contains one zero and one gap.
+  assert.ok(report.issue.actualWh.every((wh) => wh === null));
+  const legacy = { ...issued, roofs: issued.roofs.map((r) => ({ ...r, wh: r.wh.slice(0, 96) })) };
+  m.saveIssues([legacy]);
+  f.now = issued.at;
+  const old = f.restart();
+  assert.deepEqual(old.report().issue.roofs, legacy.roofs);
+  assert.equal(old.planningQuarters(f.now, t + 12 * Q).has(t + 96 * Q), false);
+  f.now += H;
+  await old.refresh();
+  assert.equal(old.planningQuarters(f.now, t + 12 * Q).get(t + 100 * Q)?.solarSource, 'weather');
 });
