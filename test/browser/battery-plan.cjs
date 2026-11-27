@@ -63,6 +63,8 @@ async function checkTradeThreshold(page) {
       t: quarters[i].t,
       action,
       peakWindow: i === 0,
+      solarWh: i * 50,
+      solarSource: ['adjusted', 'weather', 'history'][i % 3],
       gridImportKW: 3.4,
       chargeKW: action === 'buy' ? 2 : 0,
       soc: 70,
@@ -77,6 +79,11 @@ async function checkTradeThreshold(page) {
   assert.match(await page.locator('#status').innerText(), /3,4 kW.*överskrider effektmålet/);
   assert.match(await page.locator('#status').innerText(), /aktuella laddgräns 2,66 kW/);
   assert.match(await page.locator('#detail').innerText(), /Nätimport 3,4 kW/);
+  assert.match(await page.locator('#detail').innerText(), /Solel 0 kWh \(justerad solprognos\)/);
+  await render(1);
+  assert.match(await page.locator('#detail').innerText(), /Solel 0,05 kWh \(väderprognos\)/);
+  await render(2);
+  assert.match(await page.locator('#detail').innerText(), /Solel 0,1 kWh \(historik\)/);
   await render(3);
   assert.match(await page.locator('#detail').innerText(), /Batteriladdning 2 kW/);
   await render(0);

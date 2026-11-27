@@ -17,6 +17,11 @@ const actions = {
   solar: 'Lagra solel',
   house: 'Använd i huset',
 };
+const solarLabels = {
+  adjusted: 'justerad solprognos',
+  weather: 'väderprognos',
+  history: 'historik',
+};
 const reasons = {
   prices: 'Fler publicerade priser behövs.',
   load: 'Komplett last- och solunderlag saknas för nästa kvart i planen.',
@@ -150,7 +155,10 @@ function draw(data, day, index) {
       ? 'Prognos ' + value(p.soc, '%') + ' → ' + value(p.endSoc, '%') + ' · ' + actions[action]
       : 'Uppmätt ' + value(m?.soc, '%')) +
     (Number.isFinite(p?.gridImportKW) ? ' · Nätimport ' + value(p.gridImportKW, 'kW') : '') +
-    (p?.chargeKW > 0 ? ' · Batteriladdning ' + value(p.chargeKW, 'kW') : '');
+    (p?.chargeKW > 0 ? ' · Batteriladdning ' + value(p.chargeKW, 'kW') : '') +
+    (p && solarLabels[p.solarSource]
+      ? ' · Solel ' + value(p.solarWh / 1000, 'kWh') + ' (' + solarLabels[p.solarSource] + ')'
+      : '');
   by('actions').replaceChildren();
   for (const w of windows) {
     const div = document.createElement('div'),

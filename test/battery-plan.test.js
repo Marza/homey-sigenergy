@@ -138,9 +138,13 @@ function fixture(now = Date.parse('2026-11-22T10:01:00Z')) {
     data,
     now,
     first,
-    report: () =>
+    slots,
+    report: (solarForecast) =>
       getBatteryPlan(
-        { settings: { get: (k) => data[k] }, app: { history: { getSlots: () => slots } } },
+        {
+          settings: { get: (k) => data[k] },
+          app: { history: { getSlots: () => slots }, solarForecast },
+        },
         now,
       ),
   };
@@ -267,4 +271,68 @@ test('concentrates equal-price grid charging within remaining import and BMS cap
   assert.ok(q.chargeKW > 12 && q.chargeKW <= 14.3 + 1e-9 && q.gridImportKW <= 17.3 + 1e-9);
   const netLimited = optimize([slot(1, 0, 2), slot(4, 0, 3)], s);
   assert.ok(netLimited[0].chargeKW > 8 && netLimited[0].chargeKW <= 9.3 + 1e-9);
+});
+
+test('planning combines EV demand and solar exactly once and identifies each quarter’s source', () => {
+  const { data, slots, first, report } = fixture();
+  data.householdForecastV1.issues[0].wh.fill(400);
+  data.batteryTelemetry.values.chargePowerLimitKW = 0;
+  data.batteryTelemetry.values.dischargePowerLimitKW = 0;
+  data.sourceConfig.evdc = { enabled: true };
+  data.sourceConfig.evac = { enabled: true };
+  for (const r of slots.slice(0, 2)) {
+    r.pvWh = 500;
+    r.evWh = 100;
+    r.evacWh = 200;
+    Object.assign(r.fieldCoverageMs, { evW: Q, evacW: Q });
+  }
+  // Morning PV history is incomplete, but both chargers have a complete reading.
+  slots[0].fieldCoverageMs.pvW = Q - 1;
+  const firstQuarter = new Map([[first, { solarSource: 'adjusted', solarWh: 0 }]]);
+  const solar = { planningQuarters: () => firstQuarter };
+  const result = report(solar);
+  assert.deepEqual(
+    result.plan.map((q) => [q.solarSource, q.solarWh]),
+    [
+      ['adjusted', 0],
+      ['history', 500],
+    ],
+  );
+  assert.ok(Math.abs(result.plan[0].gridImportKW - 2.8) < 1e-8);
+  assert.ok(Math.abs(result.plan[1].gridImportKW - 0.8) < 1e-8);
+  firstQuarter.set(first, { solarSource: 'weather', solarWh: 600 });
+  assert.ok(Math.abs(report(solar).plan[0].gridImportKW - 0.4) < 1e-8);
+  slots[0].fieldCoverageMs.evacW = 10;
+  assert.equal(report(solar).reason, 'load');
+  assert.deepEqual(report(solar).plan, []);
+  data.sourceConfig.evdc.enabled = data.sourceConfig.evac.enabled = false;
+  slots.length = 0;
+  assert.equal(report(solar).plan.length, 1);
+  assert.equal(report(solar).reason, 'load');
+});
+
+test('historical fallback excludes PV from before a solar source change', () => {
+  const { data, first, report } = fixture();
+  data.solarMeasurementSource = { key: 'changed', since: first - Q };
+  assert.equal(report().reason, 'load');
+  assert.deepEqual(report().plan, []);
+});
+
+test('the advisory SoC plan stores forecast surplus for later household demand within fuse restrictions', () => {
+  const { data, first, report } = fixture();
+  data.householdForecastV1.issues[0].wh.fill(500);
+  data.householdImportLimits.mainFuseA = 25;
+  const forecast = new Map([[first, { solarSource: 'weather', solarWh: 1250 }]]);
+  const weather = report({ planningQuarters: () => forecast });
+  assert.deepEqual(
+    weather.plan.map((q) => q.action),
+    ['solar', 'house'],
+  );
+  assert.ok(weather.plan[0].endSoc > weather.plan[0].soc);
+  assert.ok(weather.plan.every((q) => q.buyKWh === 0 && q.sellKWh === 0));
+  forecast.set(first, { solarSource: 'adjusted', solarWh: 0 });
+  assert.deepEqual(
+    report({ planningQuarters: () => forecast }).plan.map((q) => q.action),
+    ['hold', 'hold'],
+  );
 });
