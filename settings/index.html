@@ -11,6 +11,7 @@
     <script src="cost-model.js"></script>
     <script src="tibber-history-prices.js"></script>
     <script src="household-forecast.js"></script>
+    <script src="solar-forecast.js"></script>
     <script src="contract-versions.js"></script>
     <script src="household-settings.js"></script>
     <script src="grid-day.js"></script>
@@ -223,6 +224,81 @@
       aria-labelledby="tab-forecast"
       hidden
     >
+      <h2>Solprognos</h2>
+      <div class="section">
+        <p id="solar-status" role="status"></p>
+        <details id="solar-setup">
+          <summary>Plats och takytor</summary>
+          <form id="solar-form">
+            <label
+              ><input class="hy-nostyle" id="solar-enabled" type="checkbox" /> Hämta väder från
+              Open-Meteo</label
+            >
+            <p>
+              Vid aktivering skickas plats, taklutning och riktning till Open-Meteo ungefär en gång
+              i timmen. Välj en plats nära anläggningen.
+            </p>
+            <fieldset id="solar-fields" disabled>
+              <legend>Anläggning</legend>
+              <label
+                >Latitud (°)<input
+                  class="hy-nostyle"
+                  id="solar-lat"
+                  type="number"
+                  min="-90"
+                  max="90"
+                  step="any"
+                  required
+              /></label>
+              <label
+                >Longitud (°)<input
+                  class="hy-nostyle"
+                  id="solar-lon"
+                  type="number"
+                  min="-180"
+                  max="180"
+                  step="any"
+                  required
+              /></label>
+              <label
+                >Antagen systemförlust (%)<input
+                  class="hy-nostyle"
+                  id="solar-loss"
+                  type="number"
+                  min="0"
+                  max="99"
+                  step="any"
+                  value="14"
+                  required
+              /></label>
+              <p>
+                Ange panelernas installerade kWp för varje takyta som ingår i Sigenergys valda
+                solkälla. Kompassriktning i grader: norr 0, öster 90, söder 180, väster 270.
+              </p>
+              <div id="solar-roofs"></div>
+              <button class="hy-nostyle" type="button" id="solar-add">Lägg till takyta</button>
+            </fieldset>
+            <button class="hy-nostyle" type="submit" id="solar-save" disabled>
+              Spara solprognos
+            </button>
+            <p id="solar-message" role="status"></p>
+          </form>
+        </details>
+        <div id="solar-result" hidden>
+          <label for="solar-issued">Prognos utfärdad (svensk tid)</label>
+          <select class="hy-nostyle" id="solar-issued"></select>
+          <p id="solar-range"></p>
+          <ul id="solar-totals"></ul>
+          <p id="solar-comparison"></p>
+          <div id="solar-chart"></div>
+        </div>
+        <p class="sub">
+          Väderdata från
+          <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>.
+          Kvartsvärden kan bygga på interpolerat timväder. Modellen antar fasta systemförluster och
+          fria paneler.
+        </p>
+      </div>
       <h2>Hushållsprognos</h2>
       <p>
         Husets förbrukning utan billaddning. Prognosen utgår från hushållsräknarens kompletta
@@ -2395,6 +2471,7 @@
         TibberHistoryPricesSettings.bind(Homey);
         ContractVersions.bind(Homey);
         HouseholdForecastView.bind(Homey);
+        globalThis.SolarForecastView?.bind(Homey);
         HouseholdSettings.bind(Homey);
         globalThis.GridDayView?.bind(Homey);
         DataDiagnosticsSettings.bind(Homey);

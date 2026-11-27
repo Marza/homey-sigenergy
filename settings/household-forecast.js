@@ -210,5 +210,5 @@
     }, 60000);
     document.getElementById('tab-forecast').addEventListener('click', load);
   }
-  root.HouseholdForecastView = { bind };
+  root.HouseholdForecastView = { bind, chart };
 })(globalThis);

@@ -25,6 +25,14 @@ module.exports = {
       profile: source?.profile ?? null,
     };
   },
+  getSolarForecast({ homey, query }) {
+    return homey.app.solarForecast.report(query?.issued);
+  },
+  configureSolarForecast({ homey, body }) {
+    const config = homey.app.solarForecast.configure(body);
+    homey.app.refreshSolarForecast();
+    return config;
+  },
   async getHouseholdForecast({ homey }) {
     return homey.app.forecast.report();
   },

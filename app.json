@@ -88,6 +88,12 @@
       "path": "/diagnostics/data-gaps",
       "public": false
     },
+    "getSolarForecast": { "method": "GET", "path": "/forecast/solar", "public": false },
+    "configureSolarForecast": {
+      "method": "POST",
+      "path": "/forecast/solar/config",
+      "public": false
+    },
     "getHouseholdForecast": {
       "method": "GET",
       "path": "/forecast/household",

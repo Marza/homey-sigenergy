@@ -13,6 +13,7 @@ const {
 const { temperatureContext } = require('./lib/optimization/temperature');
 const { DEFAULT_OPERATION, resolveOperation } = require('./lib/operation-mode');
 const { getBatteryPlan } = require('./lib/energy/battery-plan-report');
+const { SolarForecast } = require('./lib/energy/solar-forecast');
 const { HouseholdForecast } = require('./lib/energy/household-forecast');
 const { HistoryStore, calculationSlots } = require('./lib/history');
 const { DataDiagnostics } = require('./lib/data-diagnostics');
@@ -54,6 +55,8 @@ module.exports = class SigenergyApp extends Homey.App {
     );
     this.gridDay = new GridDay(this.homey.settings);
     this.forecast = new HouseholdForecast(this.homey.settings, this.history);
+    this.solarForecast = new SolarForecast(this.homey.settings, this.history);
+    this.refreshSolarForecast();
     this.refreshDemandEstimate();
     this.demandTimer = this.homey.setInterval(() => this.refreshDemandEstimate(), 15 * 60 * 1000);
     this.stopping = false;
@@ -62,6 +65,7 @@ module.exports = class SigenergyApp extends Homey.App {
     this.historyTimer = this.homey.setInterval(() => {
       try {
         this.history.flush();
+        this.refreshSolarForecast();
         this.refreshForecast();
         this.syncBackupAdvisories();
       } catch (e) {
@@ -316,6 +320,9 @@ module.exports = class SigenergyApp extends Homey.App {
       throw new Error('Aktuell batteriplan saknas.');
     return report;
   }
+  refreshSolarForecast() {
+    this.solarForecast.refresh().catch(() => this.error('Solar forecast refresh failed'));
+  }
   refreshForecast() {
     try {
       this.forecast.refresh();
@@ -460,6 +467,7 @@ module.exports = class SigenergyApp extends Homey.App {
   async onUninit() {
     this.dataDiagnostics?.record('app', 'app-stopped');
     this.stopping = true;
+    this.solarForecast?.stop();
     this.batteryPlan = null;
     this.tibberHistoryPrices?.stop();
     if (this.tibberHistoryPricesTimer) this.homey.clearInterval(this.tibberHistoryPricesTimer);
