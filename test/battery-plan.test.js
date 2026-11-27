@@ -2,6 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { optimize, Q } = require('../lib/energy/battery-plan');
+const { SolarForecast } = require('../lib/energy/solar-forecast');
 const { getBatteryPlan } = require('../lib/energy/battery-plan-report');
 const { normalizePrices } = require('../lib/pricing/tibber');
 const { timelineStatus, publishContract } = require('../lib/pricing/contract-timeline');
@@ -335,4 +336,52 @@ test('the advisory SoC plan stores forecast surplus for later household demand w
     report({ planningQuarters: () => forecast }).plan.map((q) => q.action),
     ['hold', 'hold'],
   );
+});
+
+test('a plan issued 45 minutes after weather still gets all 96 quarters without solar history', async () => {
+  const { data, now, first, slots, report } = fixture();
+  slots.length = 0;
+  data.priceCache.prices = Array.from({ length: 96 }, (_, i) => ({
+    ...data.priceCache.prices[0],
+    start: new Date(first + i * Q).toISOString(),
+    end: new Date(first + (i + 1) * Q).toISOString(),
+  }));
+  const issuedAt = now - 3 * Q;
+  const settings = {
+    get: (key) => data[key],
+    set: (key, value) => {
+      data[key] = value;
+    },
+  };
+  const request = async (url) => {
+    const count = Number(url.searchParams.get('forecast_minutely_15'));
+    const stamp = Math.floor(issuedAt / Q) * Q;
+    return {
+      ok: true,
+      json: async () => ({
+        minutely_15_units: { global_tilted_irradiance: 'W/m²' },
+        minutely_15: {
+          time: Array.from({ length: count }, (_, i) => (stamp + i * Q) / 1000),
+          global_tilted_irradiance: Array(count).fill(0),
+        },
+      }),
+    };
+  };
+  const solar = new SolarForecast(
+    settings,
+    { getSlots: () => slots },
+    { request, clock: () => issuedAt },
+  );
+  solar.configure({
+    enabled: true,
+    latitude: 59,
+    longitude: 18,
+    loss: 14,
+    roofs: [{ name: 'Test', kwp: 4, tilt: 30, bearing: 180 }],
+  });
+  await solar.refresh();
+  const { plan } = report(solar);
+  assert.equal(plan.length, 96);
+  assert.ok(plan.every((q) => q.solarSource === 'weather' && q.solarWh === 0));
+  assert.equal(plan.at(-1).t, first + 95 * Q);
 });
