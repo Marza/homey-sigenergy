@@ -94,7 +94,7 @@ const server = http.createServer((req, res) => {
       get:(key,cb)=>setTimeout(()=>new URLSearchParams(location.search).has('readFail')&&['demandTariff','chargingConfig'].includes(key)?cb(Error('Synthetic read failure')):cb(null,structuredClone(window.syntheticSettings[key]??null)),20),
       set:(key,value,cb)=>{window.syntheticWrites.push(key);window.syntheticSettings[key]=structuredClone(value);setTimeout(()=>cb(null),20);},
       api:(method,url,body,cb)=>{if(method!=='GET')window.syntheticApiWrites.push(url);if(url==='/forecast/solar/config'){window.solarConfig=structuredClone(body);cb(null,body);}
-        else if(url.startsWith('/forecast/solar'))cb(null,{config:window.solarConfig,status:window.solarConfig?.enabled?'ok':'off',issued:window.solarConfig?.enabled?[${solarAt}]:[],issue:window.solarConfig?.enabled?${JSON.stringify(solar)}:null});
+        else if(url.startsWith('/forecast/solar'))cb(null,{config:window.solarConfig,status:window.solarConfig?.enabled?'ok':'off',issued:window.solarConfig?.enabled?[${solarAt}]:[],issue:window.solarConfig?.enabled?(window.solarTestIssue ?? ${JSON.stringify(solar)}):null});
         else if(url==='/forecast/household')cb(null,${JSON.stringify(forecast)});else cb(Error('Synthetic unavailable data'));},
       ready:()=>window.appReady=true
     };document.addEventListener('DOMContentLoaded',()=>{
@@ -391,6 +391,43 @@ const server = http.createServer((req, res) => {
     assert.match(await firstInterval.locator('li').nth(2).textContent(), /– kW/);
     assert.equal(await solarRows.nth(3).locator('td').nth(1).textContent(), '–');
     assert.match(await solarRows.last().locator('td').first().textContent(), /14:45.*16:15/);
+    // Reopen an issued revision: score only intervals subsequent to its issuance.
+    await page.evaluate(() => {
+      const start = Date.parse('2026-11-27T09:00Z'),
+        q = 900000;
+      window.solarTestIssue = {
+        at: start - q,
+        start,
+        roofs: [{ name: 'Söder', wh: Array(96).fill(100) }],
+        actualWh: [800, 800, 800, 800, 40, null, 0, ...Array(89).fill(null)],
+        adjustments: [
+          {
+            at: start + 3 * q + 60000,
+            start: start + 4 * q,
+            samples: 3,
+            factor: 0.5,
+            wh: [50, 50, 50],
+          },
+          { at: start + 4 * q + 60000, wh: null },
+        ],
+      };
+    });
+    await page.locator('#tab-forecast').click();
+    assert.match(
+      await page.locator('#solar-adjustment').innerText(),
+      /Åter till originalprognosen/,
+    );
+    await page.locator('#solar-revision').selectOption({ index: 2 });
+    assert.match(
+      await page.locator('#solar-score').innerText(),
+      /2 gemensamma kvartar: original 0,2 kWh, justerat 0,1 kWh, Sigenergy 0,04 kWh/,
+    );
+    assert.equal(await page.locator('#solar-chart svg path').count(), 3);
+    await page.locator('#solar-chart details > summary').first().click();
+    assert.match(
+      await page.locator('#solar-chart tr').first().innerText(),
+      /Originalprognos.*Justerad prognos.*Sigenergy/s,
+    );
     assert.deepEqual(await page.evaluate(() => window.solarConfig.roofs), [
       { name: 'Söder', kwp: 4, tilt: 30, bearing: 180 },
     ]);
