@@ -206,6 +206,12 @@ Homey requests mean tilted irradiance for each roof approximately hourly. Only c
 
 Each successful issue stores the next 96 complete quarters per roof, starting after issuance in UTC. Local storage keeps up to 168 issues for seven days, including across app restarts. Select an issue in Prognos to compare its original total with the selected Sigenergy solar source. The comparison uses matching completed quarters with full solar coverage, including eligible counter recovery. Missing values remain gaps. Sigenergy supplies the aggregate, so roof-level production is forecast only. The battery planner continues to use its existing historical profile.
 
+### Same-day solar adjustment
+
+Homey also issues an aggregate correction in the background after a quarter closes. It matches recent Sigenergy PV energy with the most recent original weather forecast issued before each corresponding interval, for the same roof configuration and solar source. At least three of the last four quarters must have full observed PV coverage, including the latest closed quarter. Each qualifying original must predict at least 2% of the installed peak power on average. Missing, partially measured and counter-estimated intervals cannot supply evidence for this correction.
+
+The multiplier is the ratio of measured to forecast energy across those quarters, bounded between zero and 1.25. These initial thresholds are engineering assumptions. A sustained measured zero can lower the remaining forecast; improving production can raise it again. Corrections cover future complete quarters through Stockholm midnight and retain missing weather values. Each issued adjustment is stored alongside its original for the archive retention window. The Prognos tab lets you select the issue and adjustment time and compare both against subsequent Sigenergy production over the same quarters. The correction estimates aggregate production and does not identify the cause of a shortfall.
+
 ## Development and testing
 
 ```sh

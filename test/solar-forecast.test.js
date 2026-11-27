@@ -168,3 +168,64 @@ test('invalid timestamps and absent weather never publish a bogus zero-productio
     f.now += Q;
   }
 });
+
+test('background corrections freeze original and adjusted Wh across weather issues, gaps and restarts', async () => {
+  const f = setup();
+  const day = Date.parse('2026-11-27T11:00Z');
+  f.now = day + 60001;
+  const m = f.model;
+  let irradiance = 1000;
+  m.request = async () => {
+    const t = Math.floor(f.now / Q) * Q;
+    return {
+      ok: true,
+      json: async () => ({
+        minutely_15_units: { global_tilted_irradiance: 'W/m²' },
+        minutely_15: {
+          time: Array.from({ length: 110 }, (_, i) => (t + i * Q) / 1000),
+          global_tilted_irradiance: Array.from({ length: 110 }, (_, i) =>
+            i === 10 ? null : irradiance,
+          ),
+        },
+      }),
+    };
+  };
+  m.configure(config);
+  await m.refresh();
+  const first = m.report().issue;
+  assert.deepEqual(first.adjustments, []);
+  const row = (t, pvWh, coverage = Q) => ({ t, pvWh, fieldCoverageMs: { pvW: coverage } });
+  f.rows.push(...[1, 2, 3].map((i) => row(day + i * Q, 0)));
+  // The later weather issue changes; its own predictions cannot be used for the earlier evidence.
+  f.now += H;
+  irradiance = 500;
+  await m.refresh();
+  const base = m.report().issue;
+  const down = base.adjustments[0];
+  assert.equal(down.factor, 0);
+  assert.equal(down.samples, 3);
+  assert.equal(down.start, day + H + Q);
+  assert.equal(down.start + down.wh.length * Q, Date.parse('2026-11-27T23:00Z'));
+  assert.deepEqual(down.wh.slice(0, 2), [0, 0]);
+  assert.equal(down.wh[8], null);
+  assert.equal(base.roofs[0].wh[0], 450);
+  assert.deepEqual(m.report(first.at).issue.roofs, first.roofs);
+  const resumed = f.restart();
+  await resumed.refresh();
+  assert.deepEqual(resumed.report().issue.adjustments, [down]);
+  f.now += Q;
+  f.rows.push(row(day + H, 1350));
+  await resumed.refresh();
+  const revisions = resumed.report().issue.adjustments;
+  assert.equal(revisions.length, 2);
+  assert.deepEqual(revisions[0], down);
+  assert.equal(revisions[1].factor, 0.25);
+  assert.equal(revisions[1].wh[0], 169);
+  // A missing/partially observed latest quarter restores the weather baseline.
+  f.now += Q;
+  f.rows.push(row(day + H + Q, 0, Q - 1));
+  await resumed.refresh();
+  assert.equal(resumed.report().issue.adjustments.at(-1).wh, null);
+  assert.deepEqual(resumed.report().issue.roofs, base.roofs);
+  assert.deepEqual(f.restart().report().issue.adjustments[0], down);
+});

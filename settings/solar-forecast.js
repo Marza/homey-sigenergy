@@ -72,7 +72,12 @@
       el('save').disabled = false;
       initialized = true;
     }
+    let lastReport;
+    const revisionSelect = el('revision');
+    revisionSelect.onchange = () => render(lastReport);
     function render(r) {
+      if (lastReport?.issue?.at !== r.issue?.at) revisionSelect.value = '';
+      lastReport = r;
       el('status').textContent = {
         off: 'Solprognosen är avstängd.',
         pending: 'Väntar på den första väderprognosen för dina takytor.',
@@ -125,12 +130,76 @@
           fmt.format(sum(pairs.map((p) => p[1])) / 1000) +
           ' kWh.'
         : 'Väntar på avslutade kvartar med komplett solmätning från samma källa.';
+      const revisions = r.issue.adjustments ?? [];
+      const revision =
+        revisions.find((v) => String(v.at) === revisionSelect.value) ?? revisions.at(-1);
+      const selection = revisionSelect.value;
+      revisionSelect.replaceChildren(new Option('Senaste justering', ''));
+      for (const item of [...revisions].reverse())
+        revisionSelect.add(new Option(clock.format(item.at), String(item.at)));
+      revisionSelect.value = revisions.some((item) => String(item.at) === selection)
+        ? selection
+        : '';
+      el('revision-label').hidden = revisionSelect.hidden = !revisions.length;
+      const adjusted = Array(96).fill(null);
+      el('score').textContent = '';
+      el('adjustment').textContent =
+        'Originalprognos från väderunderlaget. En justering kräver minst tre kompletta produktionskvartar den senaste timmen.';
+      if (revision?.wh) {
+        const offset = (revision.start - start) / 900000;
+        revision.wh.forEach((value, i) => {
+          adjusted[offset + i] = value;
+        });
+        const original = expected.slice(offset, offset + revision.wh.length);
+        const valid = revision.wh.filter(Number.isFinite);
+        el('adjustment').textContent =
+          'Justerad ' +
+          clock.format(revision.at) +
+          ' utifrån ' +
+          revision.samples +
+          ' kvartar. Från ' +
+          clock.format(revision.start) +
+          ' till ' +
+          clock.format(revision.start + revision.wh.length * 900000) +
+          ': original ' +
+          fmt.format(sum(original.filter(Number.isFinite)) / 1000) +
+          ' kWh, justerat ' +
+          fmt.format(sum(valid) / 1000) +
+          ' kWh (' +
+          valid.length +
+          '/' +
+          original.length +
+          ' kvartar).';
+        const indices = adjusted
+          .map((v, i) => (Number.isFinite(v) && Number.isFinite(actualWh[i]) ? i : -1))
+          .filter((i) => i >= 0);
+        const kWh = (values) => fmt.format(sum(indices.map((i) => values[i])) / 1000);
+        el('score').textContent = indices.length
+          ? 'Utfall efter justeringen, ' +
+            indices.length +
+            ' gemensamma kvartar: original ' +
+            kWh(expected) +
+            ' kWh, justerat ' +
+            kWh(adjusted) +
+            ' kWh, Sigenergy ' +
+            kWh(actualWh) +
+            ' kWh.'
+          : 'Väntar på mätningar för perioden efter justeringen.';
+      } else if (revision) {
+        el('adjustment').textContent =
+          'Åter till originalprognosen ' +
+          clock.format(revision.at) +
+          '. Tillräckligt aktuellt mätunderlag saknades.';
+      }
       const kw = (arr) => arr.map((n) => (Number.isFinite(n) ? n / 250 : null));
       root.HouseholdForecastView.chart(
         el('chart'),
         start,
         [
-          { name: 'Solprognos', values: kw(expected), dash: '5 3', color: '#187d76' },
+          { name: 'Originalprognos', values: kw(expected), dash: '5 3', color: '#187d76' },
+          ...(revision?.wh
+            ? [{ name: 'Justerad prognos', values: kw(adjusted), dash: '2 2', color: '#7859ab' }]
+            : []),
           { name: 'Sigenergy', values: kw(actualWh), color: '#ae601c' },
         ],
         { groupZeroForecast: true },
