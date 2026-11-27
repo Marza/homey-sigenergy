@@ -75,6 +75,9 @@ module.exports = class SigenergyDevice extends Homey.Device {
     this.homey.settings.set('backupStatus', null);
     const since = new Date().toISOString();
     const configured = !!String(settings.host || '').trim();
+    const solarKey = configured ? solarSourceKey(settings) : null;
+    if (this.homey.settings.get('solarMeasurementSource')?.key !== solarKey)
+      this.homey.settings.set('solarMeasurementSource', { key: solarKey, since: Date.now() });
     this.chargers = {};
     const sources = {
       sigenergy: {

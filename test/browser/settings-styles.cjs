@@ -71,10 +71,20 @@ const server = http.createServer((req, res) => {
     // The earlier issued forecast lacked a quarter that later received a complete measurement.
     map.get('householdForecastV1').issues.at(-1).wh[12] = null;
     const forecast = model.report(start + q * 96 * 15 + q);
+    const solarAt = start - q,
+      solar = {
+        at: solarAt,
+        start,
+        roofs: [{ name: 'Söder', kwp: 4, tilt: 30, bearing: 180, wh: Array(96).fill(100) }],
+        loss: 14,
+        actualWh: [0, 120, null, ...Array(93).fill(null)],
+      };
     res.end(`window.syntheticSettings=${JSON.stringify(initial)};window.syntheticWrites=[];window.syntheticApiWrites=[];window.Homey={
       get:(key,cb)=>setTimeout(()=>new URLSearchParams(location.search).has('readFail')&&['demandTariff','chargingConfig'].includes(key)?cb(Error('Synthetic read failure')):cb(null,structuredClone(window.syntheticSettings[key]??null)),20),
       set:(key,value,cb)=>{window.syntheticWrites.push(key);window.syntheticSettings[key]=structuredClone(value);setTimeout(()=>cb(null),20);},
-      api:(method,url,body,cb)=>{if(method!=='GET')window.syntheticApiWrites.push(url);if(url==='/forecast/household')cb(null,${JSON.stringify(forecast)});else cb(Error('Synthetic unavailable data'));},
+      api:(method,url,body,cb)=>{if(method!=='GET')window.syntheticApiWrites.push(url);if(url==='/forecast/solar/config'){window.solarConfig=structuredClone(body);cb(null,body);}
+        else if(url.startsWith('/forecast/solar'))cb(null,{config:window.solarConfig,status:window.solarConfig?.enabled?'ok':'off',issued:window.solarConfig?.enabled?[${solarAt}]:[],issue:window.solarConfig?.enabled?${JSON.stringify(solar)}:null});
+        else if(url==='/forecast/household')cb(null,${JSON.stringify(forecast)});else cb(Error('Synthetic unavailable data'));},
       ready:()=>window.appReady=true
     };document.addEventListener('DOMContentLoaded',()=>{
       const link=document.createElement('link');link.rel='stylesheet';link.href='/host.css';
@@ -338,6 +348,29 @@ const server = http.createServer((req, res) => {
       assert.equal(await page.locator('#tariffDay' + day).isDisabled(), true);
     assert.deepEqual(await page.evaluate(() => window.syntheticWrites), []);
     assert.deepEqual(await page.evaluate(() => window.syntheticApiWrites), []);
+    await page.locator('#tab-forecast').click();
+    await page.locator('#solar-setup summary').click();
+    await page.locator('#solar-enabled').check();
+    await page.locator('#solar-lat').fill('59');
+    await page.locator('#solar-lon').fill('18');
+    const roof = page.locator('#solar-roofs fieldset').first();
+    await roof.getByLabel('Namn').fill('Söder');
+    await roof.getByLabel('Paneleffekt (kWp)').fill('4');
+    await roof.getByLabel('Lutning från horisontalplanet (°)').fill('30');
+    await roof.getByLabel('Kompassriktning (°)').fill('180');
+    await page.locator('#solar-add').click();
+    await page.locator('#solar-roofs fieldset').last().getByRole('button').click();
+    await page.locator('#solar-save').click();
+    await page.locator('#solar-chart svg').waitFor();
+    assert.match(await page.locator('#solar-totals').innerText(), /Söder · 9,6 kWh/);
+    assert.match(
+      await page.locator('#solar-comparison').innerText(),
+      /2 jämförbara kvartar.*0,2 kWh.*0,12 kWh/,
+    );
+    assert.equal(await page.locator('#solar-chart table tr').count(), 97);
+    assert.deepEqual(await page.evaluate(() => window.solarConfig.roofs), [
+      { name: 'Söder', kwp: 4, tilt: 30, bearing: 180 },
+    ]);
     assert.deepEqual(errors, []);
     console.log(
       'Settings styling and setup interactions passed: late host CSS, all categories, light/dark, phone/desktop, borders, contrast, spacing and focus.',

@@ -198,6 +198,14 @@ Day errors compare measured energy with predictions issued before the period. Me
 
 The private forecast endpoint is `GET /forecast/household`. Existing monitoring data, meter references and tariff calculations continue to use their original settings and history. Earlier simulation endpoints have been removed.
 
+## Weather-based solar forecast
+
+In **Settings → Prognos → Solprognos → Plats och takytor**, enable weather access and enter an approximate site and one to four roof planes. For each plane enter installed DC capacity (kWp), tilt from horizontal and compass bearing (north 0°, east 90°, south 180°, west 270°). Include the panels represented by the plant device’s selected solar source, including third-party PV where applicable. The suggested system loss is 14% and can be adjusted.
+
+Homey requests mean tilted irradiance for each roof approximately hourly. Only coordinates, tilt, orientation and weather query parameters are sent. For each quarter, estimated Wh = irradiance in W/m² × installed kWp × 0.25 h × (1 − loss fraction). Some weather models interpolate hourly inputs. Fixed losses approximate AC output. Snow cover, local shade and inverter clipping can materially reduce actual production. Weather data and attribution: [Open-Meteo](https://open-meteo.com/en/docs), [terms for non-commercial use](https://open-meteo.com/en/terms).
+
+Each successful issue stores the next 96 complete quarters per roof, starting after issuance in UTC. Local storage keeps up to 168 issues for seven days, including across app restarts. Select an issue in Prognos to compare its original total with the selected Sigenergy solar source. The comparison uses matching completed quarters with full solar coverage, including eligible counter recovery. Missing values remain gaps. Sigenergy supplies the aggregate, so roof-level production is forecast only. The battery planner continues to use its existing historical profile.
+
 ## Development and testing
 
 ```sh
@@ -231,4 +239,3 @@ Keep general-purpose Modbus operations read-only. Any future control work requir
 ## License
 
 Released under the [MIT License](LICENSE). This is a community project; no vendor certification or affiliation is claimed.
-

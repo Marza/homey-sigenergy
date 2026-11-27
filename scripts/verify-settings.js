@@ -16,7 +16,12 @@ function verifySettings(directory) {
   assert.match(html, /<script src="household-settings.js"/);
   assert.ok(fs.statSync(path.join(folder, 'household-settings.js')).isFile());
   assert.match(html, /household-forecast.js/);
-  assert.doesNotMatch(html, /(?:src|href)="https?:/, 'Settings assets must be local');
+  assert.ok(fs.statSync(path.join(folder, 'solar-forecast.js')).isFile());
+  assert.doesNotMatch(
+    html,
+    /<(?:script|link|img)\b[^>]*\b(?:src|href)="https?:/i,
+    'Settings assets must be local',
+  );
 }
 if (require.main === module) verifySettings(process.argv[2] || '.homeybuild');
 module.exports = { verifySettings };

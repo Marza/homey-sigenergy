@@ -40,6 +40,7 @@ module.exports = [
       'settings/tibber-history-prices.js',
       'settings/contract-versions.js',
       'settings/household-forecast.js',
+      'settings/solar-forecast.js',
 
       'settings/household-settings.js',
       'settings/data-diagnostics.js',
