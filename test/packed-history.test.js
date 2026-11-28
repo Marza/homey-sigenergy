@@ -63,3 +63,47 @@ test('invalid encoding and oversized decoded lengths are rejected before use', (
   ])
     assert.throws(() => unpack({ ...value, ...changes }));
 });
+
+test('a committed snapshot is detached and a later settings replacement remains visible', () => {
+  const now = Date.now();
+  const raw = new Map();
+  const store = new HistoryStore(historySettings(raw), () => now);
+  store.append({ gridW: 111 }, now);
+  const next = store.flush();
+  const saved = raw.get('historyState');
+  const expected = next.slots[0].sum.gridW;
+  next.slots[0].sum.gridW = -1;
+  assert.equal(store.getSlots()[0].sum.gridW, expected);
+  const legacy = unpack(saved);
+  legacy.slots[0].sum.gridW = 456;
+  raw.set('historyState', legacy);
+  const slots = store.getSlots();
+  assert.equal(slots[0].sum.gridW, 456);
+  slots[0].sum.gridW = 0;
+  assert.equal(raw.get('historyState').slots[0].sum.gridW, 456);
+});
+
+test('grid event order and extrema survive a wrapped hour and repeated reports', () => {
+  const hour = 3600000;
+  const end = Date.UTC(2026, 10, 28, 12, 20);
+  const times = [end - 24 * hour + 10000, end - 3600000, end - 10000, end];
+  const raw = new Map();
+  let now = times[0];
+  const store = new GridDay(raw, () => now);
+  for (const [i, at] of times.entries()) {
+    now = at;
+    store.append('site', { amps: [i, 0, 0], gridMode: i % 2 }, at);
+    store.flush();
+  }
+  for (const grid of [store, new GridDay(raw, () => now)]) {
+    const first = grid.report('site');
+    assert.deepEqual(
+      first.events.map((e) => e.at),
+      times,
+    );
+    assert.equal(first.phaseCurrentSamples, 4);
+    assert.equal(Math.max(...first.bins.map((b) => b.max)), 3);
+    assert.deepEqual(grid.report('site'), first);
+    assert.ok(grid.hours.filter((h) => h.rows?.length).length <= 1);
+  }
+});
