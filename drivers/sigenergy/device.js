@@ -256,7 +256,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
         readAt: new Date().toISOString(),
         gridMode: data.gridMode,
       });
-      this.homey.settings.set('sigenergyError', null);
+      if (this.homey.settings.get('sigenergyError') !== null)
+        this.homey.settings.set('sigenergyError', null);
       await this.publishBackup(backup);
       if (!current()) return;
       // Optional telemetry is deliberately decoupled from the fast polling loop.
@@ -266,7 +267,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
         try {
           const optional = await reader.batteryTelemetry();
           if (!current()) return;
-          this.homey.settings.set('batteryTelemetryError', null);
+          if (this.homey.settings.get('batteryTelemetryError') !== null)
+            this.homey.settings.set('batteryTelemetryError', null);
           this.homey.settings.set('batteryTelemetry', {
             ...optional,
             values: { ...optional.values, capacityKWh: data.capacityKWh, soc: this.batterySoc },
@@ -278,7 +280,11 @@ module.exports = class SigenergyDevice extends Homey.Device {
         }
       } else {
         const previous = this.homey.settings.get('batteryTelemetry');
-        if (previous)
+        if (
+          previous &&
+          (previous.values?.capacityKWh !== data.capacityKWh ||
+            previous.values?.soc !== this.batterySoc)
+        )
           this.homey.settings.set('batteryTelemetry', {
             ...previous,
             values: { ...previous.values, capacityKWh: data.capacityKWh, soc: this.batterySoc },
@@ -435,7 +441,8 @@ module.exports = class SigenergyDevice extends Homey.Device {
         averageKW,
         readAt: new Date(at).toISOString(),
       });
-      this.homey.settings.set('householdCounterError', null);
+      if (this.homey.settings.get('householdCounterError') !== null)
+        this.homey.settings.set('householdCounterError', null);
     } catch (error) {
       if (current()) this.noteHouseholdFailure(readFailureReason(error));
     }

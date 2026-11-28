@@ -63,15 +63,16 @@ module.exports = class SigenergyApp extends Homey.App {
     this.refreshForecast();
     this.refreshBatteryPlan();
     this.historyTimer = this.homey.setInterval(() => {
+      let slots;
       try {
-        this.history.flush();
+        slots = this.history.flush()?.slots;
         this.refreshSolarForecast();
-        this.refreshForecast();
+        this.refreshForecast(slots);
         this.syncBackupAdvisories();
       } catch (e) {
         this.error('History flush:', e.message);
       } finally {
-        this.refreshBatteryPlan();
+        this.refreshBatteryPlan(slots);
         this.flushGridDay();
         this.dataDiagnostics.flush();
       }
@@ -310,10 +311,14 @@ module.exports = class SigenergyApp extends Homey.App {
         }),
       });
   }
-  refreshBatteryPlan() {
+  refreshBatteryPlan(slots) {
     if (this.stopping) return;
     try {
-      this.batteryPlan = getBatteryPlan({ settings: this.homey.settings, app: this });
+      this.batteryPlan = getBatteryPlan(
+        { settings: this.homey.settings, app: this },
+        Date.now(),
+        slots,
+      );
     } catch (error) {
       this.batteryPlan = null;
       this.error('Battery plan:', error.message);
@@ -328,9 +333,9 @@ module.exports = class SigenergyApp extends Homey.App {
   refreshSolarForecast() {
     this.solarForecast.refresh().catch(() => this.error('Solar forecast refresh failed'));
   }
-  refreshForecast() {
+  refreshForecast(slots) {
     try {
-      this.forecast.refresh();
+      this.forecast.refresh(undefined, slots);
     } catch (error) {
       this.error('Household forecast:', error.message);
     }
