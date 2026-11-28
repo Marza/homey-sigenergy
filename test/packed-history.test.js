@@ -17,18 +17,18 @@ test('first commit packs a legacy snapshot atomically and keeps all committed qu
   const migrated = new HistoryStore(settings, () => now);
   migrated.event('test');
   const stored = raw.get('historyState');
-  assert.equal(stored.encoding, 'gzip-json-v1');
+  assert.equal(stored.encoding, 'quarter-days-v1');
   assert.equal(stored.slots, undefined);
-  assert.equal(stored.bytes, Buffer.byteLength(JSON.stringify(settings.get('historyState'))));
+  assert.equal(settings.get('historyState').slots.length, 1);
   const restart = new HistoryStore(settings, () => now);
   assert.deepEqual(restart.export().slots, before.slots);
   assert.equal(
     getHistoryOverview({ homey: { app: { history: restart } } }).slotCount,
     before.slots.length,
   );
-  raw.set('historyState', { ...stored, data: 'broken' });
+  raw.set('quarterMeta-' + stored.meta.bank, { ...pack({}), data: 'broken' });
   assert.throws(() => new HistoryStore(settings));
-  assert.equal(raw.get('historyState').data, 'broken');
+  assert.equal(raw.get('quarterMeta-' + stored.meta.bank).data, 'broken');
 });
 test('old grid hours are packed on checkpoint, including inactive hours, and a failed write retries', () => {
   const now = Date.UTC(2026, 10, 21, 12);
@@ -70,11 +70,11 @@ test('a committed snapshot is detached and a later settings replacement remains 
   const store = new HistoryStore(historySettings(raw), () => now);
   store.append({ gridW: 111 }, now);
   const next = store.flush();
-  const saved = raw.get('historyState');
+  const saved = historySettings(raw).get('historyState');
   const expected = next.slots[0].sum.gridW;
   next.slots[0].sum.gridW = -1;
   assert.equal(store.getSlots()[0].sum.gridW, expected);
-  const legacy = unpack(saved);
+  const legacy = saved;
   legacy.slots[0].sum.gridW = 456;
   raw.set('historyState', legacy);
   const slots = store.getSlots();

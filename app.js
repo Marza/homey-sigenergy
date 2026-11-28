@@ -63,16 +63,15 @@ module.exports = class SigenergyApp extends Homey.App {
     this.refreshForecast();
     this.refreshBatteryPlan();
     this.historyTimer = this.homey.setInterval(() => {
-      let slots;
       try {
-        slots = this.history.flush()?.slots;
+        this.history.flush({ snapshot: false });
         this.refreshSolarForecast();
-        this.refreshForecast(slots);
+        this.refreshForecast();
         this.syncBackupAdvisories();
       } catch (e) {
         this.error('History flush:', e.message);
       } finally {
-        this.refreshBatteryPlan(slots);
+        this.refreshBatteryPlan();
         this.flushGridDay();
         this.dataDiagnostics.flush();
       }
@@ -493,6 +492,6 @@ module.exports = class SigenergyApp extends Homey.App {
     if (this.nibeBlockTimer) this.homey.clearInterval(this.nibeBlockTimer);
     await this.nibeBlock?.stop();
     this.flushGridDay();
-    if (this.history) this.history.flush();
+    if (this.history) this.history.flush({ snapshot: false });
   }
 };
