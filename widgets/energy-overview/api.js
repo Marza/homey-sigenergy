@@ -1,5 +1,6 @@
 'use strict';
-const { unpack } = require('../../lib/packed-history');
+const { FORMAT: QUARTER_DAYS } = require('../../lib/quarter-archive');
+const { unpack, historySettings } = require('../../lib/packed-history');
 const { currentMonth } = require('../../lib/tariff-config');
 const { diagnostics } = require('../../lib/source-status');
 const pick = (value, keys) =>
@@ -82,7 +83,13 @@ function getOverview({ homey }, now) {
   const read = (key) => {
     try {
       const value = homey.settings.get(key);
-      return key === 'historyState' ? unpack(value) : value;
+      if (key !== 'historyState') return value;
+      if (value?.encoding === QUARTER_DAYS) {
+        const latest = Math.max(value.open?.t ?? -Infinity, value.days.at(-1)?.last ?? -Infinity);
+        const { archive } = historySettings(homey.settings);
+        return { schema: 3, slots: archive.rows(value, value.days, latest) };
+      }
+      return unpack(value);
     } catch {
       errors.push(key);
       return null;

@@ -1,10 +1,10 @@
 # History format and sampling
 
-Quarter-hour records introduced by issue #5 retain `schema: 2`. Issue #6 stores them with daily summaries and events in a single `historyState` setting with schema 3. History remains bounded app-settings storage, not a billing meter or a database.
+Quarter-hour records introduced by issue #5 retain `schema: 2`. The history API assembles a schema 3 snapshot from the open quarter, closed days, summaries and events. History remains bounded app-settings storage, not a billing meter or a database.
 
 ### Storage on Homey
 
-The app stores the quarter-history snapshot and each nonempty hour of raw grid measurements as gzip-compressed JSON in Homey app settings. Homey serializes the settings collection when a live status value changes. Packing the archives keeps the SDK from traversing every historical sample on each poll. The quarter snapshot is replaced in one write. Existing snapshots convert on their next successful commit, and existing grid hours convert at the next checkpoint. The 4 MiB quarter-history budget applies to the uncompressed snapshot.
+The app stores closed quarters as gzip-compressed JSON by Stockholm calendar day. Each nonempty hour of raw grid measurements uses its own compressed setting. The quarter-history size limit applies to the assembled snapshot. Existing compressed and plain snapshots migrate at the first successful checkpoint. Export before downgrading: older app versions cannot read the partitioned format.
 
 Manual exports still contain ordinary JSON. App versions through v0.17.49 from GitHub cannot read the packed settings. Keep a JSON export before downgrading.
 
@@ -45,9 +45,11 @@ Older records have no reliable per-field counts, so settings and widget views do
 This does not retroactively repair older energy integrals or daily totals. Older, non-overlapping records continue to be retained/exported and existing calculation modules may still use their recorded energy/coverage. The storage, daily aggregation and restore rules below implement the next stage of issue #6. The fix does not validate tariffs, financial accuracy, hardware register profiles or the Dashboard runtime.
 
 
-## Single snapshot and retention
+## Checkpoints and retention
 
-`historyState` contains schema 3, timezone, revision, updatedAt, slots, daily, events and legacyDaily. A normal flush performs one settings write for the whole snapshot, instead of independently saving quarters and daily totals. Pending samples are cleared only after success. A failed write leaves the previous committed snapshot available and pending samples retryable within the running process. An app restart retains committed data; it cannot recover samples that were never successfully saved. This is a single-key application commit, not a claim of power-loss-safe filesystem transactions.
+`historyState` holds the current quarter, meter checkpoints, revision, timestamp and references to the published daily blocks and summary metadata. A normal minute writes this single small setting. A quarter rollover or historical repair stages changed blocks in their inactive storage locations, then publishes their references in one settings write. Pending measurements are cleared after publication. If a write fails, readers can still use the previous committed revision and the running process can retry. Restart recovers the published revision. Samples lost before publication require fresh counter evidence for recovery.
+
+Date-range requests decode overlapping days. The battery planner shares a compact profile of closed quarters between minute runs and reads current state of charge separately. A new quarter, a closed-history revision or a change in the relevant sources refreshes the profile. Import, export and storage-budget compaction can read the full retained history. When a checkpoint approaches the 4 MiB limit, compaction targets 16 KiB of headroom using the existing oldest-first order for optional detail. Quarter energy totals are retained.
 
 Detailed retention is 32 days, capped at 3,072 UTC-aligned quarters. This accommodates a full 31-day Stockholm calendar month, including the extra autumn DST hour. It does not retain all prior billing months indefinitely or manufacture missing intervals. Export completed periods if you need their raw detail later.
 
@@ -80,7 +82,7 @@ Canonical schema-3 history exports remain accepted without directional fields. E
 
 Legacy schema 1/2 exports are accepted in either the slots/daily/events form or the old settings-page historySlots/historyDaily/historyEvents form. All three collections are required. Unknown versions/fields, credential-bearing fields, malformed dates, future records, unaligned/duplicate quarters, inconsistent counts, impossible coverage, excessive counts and invalid nested legacy data are rejected before any write. UTC daily summaries from legacy files go to legacyDaily. Unknown fields are rejected rather than silently applied as settings.
 
-Restore only merges history; it never restores hosts, API tokens, charging configuration, operation mode or hardware controls. Inverter state writes use the same single-key commit; the combined meter backup has the separate-commit boundary below. A failed apply can be retried without adding overlapping energy twice. The format records observed aggregates, not authenticity or meter calibration; an externally edited but structurally valid file is not verified hardware evidence.
+Restore only merges history; it never restores hosts, API tokens, charging configuration, operation mode or hardware controls. Inverter state writes publish the same checkpoint index; the combined meter backup has the separate-commit boundary below. A failed apply can be retried without adding overlapping energy twice. The format records observed aggregates, not authenticity or meter calibration; an externally edited but structurally valid file is not verified hardware evidence.
 
 Routes in api.js are authenticated (`public: false`): GET /history/export, POST /history/import/preview and POST /history/import. They follow the [Homey App Web API](https://apps.developer.homey.app/advanced/web-api) and [settings-view API](https://apps.developer.homey.app/advanced/custom-views/app-settings) contracts.
 
@@ -139,7 +141,7 @@ Optional meter-flow aggregates require export version 12. Each quarter retains s
 
 ### Acquisition and reuse
 
-The plant and enabled charger power readers run on the configured poll interval (10 seconds by default). Native Energy devices and Dashboard consumers use their existing readings. The same poll reads the shared V2.9 plant counter block. Optional battery telemetry runs every five minutes. The history writer flushes pending changes every minute and on shutdown. The persistent history consists of quarter records in `historyState`.
+The plant and enabled charger power readers run on the configured poll interval (10 seconds by default). Native Energy devices and Dashboard consumers use their existing readings. The same poll reads the shared V2.9 plant counter block. Optional battery telemetry runs every five minutes. The history writer flushes pending changes every minute and on shutdown. The current quarter and the index of closed days are stored in `historyState`.
 
 A successful wide read supplies every available native counter, the household meter and the flow calculation. An unavailable field stays missing for dependent consumers. A reader receiving Modbus illegal-address for the whole block uses individual register reads thereafter, until the reader is recreated. The charger-unit registers supply device-level readings, including session energy. They can have a different measurement boundary from plant totals.
 
